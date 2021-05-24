@@ -193,7 +193,7 @@ impl LineArity {
 }
 
 #[cfg(test)]
-mod tests {
+mod test_impl {
     use std::{fs::create_dir, process::Command};
 
     use tempfile::{tempdir, TempDir};
@@ -201,24 +201,23 @@ mod tests {
     use super::{check_output, GitBinary};
     use anyhow::Result;
 
-    impl<'a> GitBinary<'a> {
-        fn init() -> Result<(String, TempDir)> {
-            let name = "git".to_owned();
-            let tmpdir = tempdir()?;
+    fn git_init() -> Result<(String, TempDir)> {
+        let name = "git".to_owned();
+        let tmpdir = tempdir()?;
 
-            check_output(
-                Command::new(&name)
-                    .current_dir(tmpdir.path())
-                    .args(&["init"]),
-            )?;
+        check_output(
+            Command::new(&name)
+                .current_dir(tmpdir.path())
+                .args(&["init"]),
+        )?;
 
-            Ok((name, tmpdir))
-        }
+        Ok((name, tmpdir))
     }
 
+    /// Find the `.git` directory when run from the root of the repo.
     #[test]
     fn toplevel_at_root() -> Result<()> {
-        let (name, tmpdir) = GitBinary::init()?;
+        let (name, tmpdir) = git_init()?;
 
         let git = GitBinary::new(&name, tmpdir.path())?;
         assert_eq!(
@@ -229,9 +228,10 @@ mod tests {
         Ok(())
     }
 
+    /// Find the `.git` directory when run from a subdirectory of the repo.
     #[test]
     fn toplevel_in_subdir() -> Result<()> {
-        let (name, tmpdir) = GitBinary::init()?;
+        let (name, tmpdir) = git_init()?;
         let subdir = tmpdir.path().join("subdir");
         create_dir(&subdir)?;
 
@@ -244,9 +244,10 @@ mod tests {
         Ok(())
     }
 
+    /// `get_config` should handle missing configuration.
     #[test]
     fn read_empty_config() -> Result<()> {
-        let (name, tmpdir) = GitBinary::init()?;
+        let (name, tmpdir) = git_init()?;
         let git = GitBinary::new(&name, tmpdir.path())?;
 
         let got = git.get_config("test.key")?;
@@ -255,9 +256,10 @@ mod tests {
         Ok(())
     }
 
+    /// Verify read-your-writes.
     #[test]
     fn write_then_read_config() -> Result<()> {
-        let (name, tmpdir) = GitBinary::init()?;
+        let (name, tmpdir) = git_init()?;
         let git = GitBinary::new(&name, tmpdir.path())?;
 
         git.set_config("test.key", "testvalue")?;

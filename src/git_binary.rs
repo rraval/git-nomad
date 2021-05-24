@@ -5,7 +5,7 @@ use std::{
     process::{Command, Output},
 };
 
-use crate::backend::{Backend, Config};
+use crate::backend::{Backend, Config, Remote};
 
 pub struct GitBinary<'a> {
     name: &'a OsStr,
@@ -78,15 +78,14 @@ impl<'a> Backend for GitBinary<'a> {
     fn read_config(&self) -> Result<Option<Config>> {
         let get = |k: &str| self.get_config(&namespace::config_key(k));
 
-        let remote = get("remote")?;
         let user = get("user")?;
         let host = get("host")?;
 
-        match (remote, user, host) {
-            (Some(remote), Some(user), Some(host)) => Ok(Some(Config { remote, user, host })),
-            (None, None, None) => Ok(None),
-            (remote, user, host) => {
-                bail!("Partial configuration {:?} {:?} {:?}", remote, user, host)
+        match (user, host) {
+            (Some(user), Some(host)) => Ok(Some(Config { user, host })),
+            (None, None) => Ok(None),
+            (user, host) => {
+                bail!("Partial configuration {:?} {:?}", user, host)
             }
         }
     }
@@ -94,15 +93,14 @@ impl<'a> Backend for GitBinary<'a> {
     fn write_config(&self, config: &Config) -> Result<()> {
         let set = |k: &str, v: &str| self.set_config(&namespace::config_key(k), v);
 
-        set("remote", &config.remote)?;
         set("user", &config.user)?;
         set("host", &config.host)?;
 
         Ok(())
     }
 
-    fn fetch_remote_refs(&self, config: &Config) -> Result<()> {
-        self.fetch(&config.remote, &namespace::fetch_refspec())
+    fn fetch_remote_refs(&self, _config: &Config, remote: &Remote) -> Result<()> {
+        self.fetch(&remote.0, &namespace::fetch_refspec())
     }
 }
 

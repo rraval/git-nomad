@@ -6,7 +6,7 @@ use clap::{
 };
 
 use crate::{
-    backend::{Backend, Config},
+    backend::{Backend, Config, Remote},
     git_binary::GitBinary,
 };
 
@@ -37,12 +37,6 @@ fn main() -> Result<()> {
             SubCommand::with_name("init")
                 .about("One time initialization for nomad in this repository")
                 .arg(
-                    Arg::with_name("remote")
-                        .long("remote")
-                        .default_value("origin")
-                        .help("Git remote to sync against"),
-                )
-                .arg(
                     Arg::with_name("user")
                         .long("user")
                         .default_value(&default_user)
@@ -55,7 +49,15 @@ fn main() -> Result<()> {
                         .help("Host name to sync with (unique per clone)"),
                 ),
         )
-        .subcommand(SubCommand::with_name("sync").about("Sync local branches to remote"))
+        .subcommand(
+            SubCommand::with_name("sync")
+                .about("Sync local branches to remote")
+                .arg(
+                    Arg::with_name("remote")
+                        .default_value("origin")
+                        .help("Git remote to sync against"),
+                ),
+        )
         .get_matches();
 
     let git = GitBinary::new(
@@ -64,19 +66,21 @@ fn main() -> Result<()> {
     )?;
 
     if let Some(matches) = matches.subcommand_matches("init") {
-        let remote = string_value(matches, "remote")?;
         let user = string_value(matches, "user")?;
         let host = string_value(matches, "host")?;
 
-        let config = Config { remote, user, host };
+        let config = Config { user, host };
         command::init(git, &config)?;
         return Ok(());
     }
 
-    if matches.subcommand_matches("sync").is_some() {
+    if let Some(matches) = matches.subcommand_matches("sync") {
         return match git.read_config()? {
             None => bail!("No configuration found, try `init` first"),
-            Some(config) => command::sync(git, &config),
+            Some(config) => {
+                let remote = Remote(string_value(matches, "remote")?);
+                command::sync(git, &config, &remote)
+            }
         };
     }
 

@@ -12,8 +12,16 @@ pub struct GitBinary<'a> {
     git_dir: String,
 }
 
-fn config_key(key: &str) -> String {
-    format!("nomad.{}", key)
+mod namespace {
+    const PREFIX: &str = "nomad";
+
+    pub fn config_key(key: &str) -> String {
+        format!("{}.{}", PREFIX, key)
+    }
+
+    pub fn fetch_refspec() -> String {
+        format!("+refs/{prefix}/*:refs/{prefix}/*", prefix = PREFIX)
+    }
 }
 
 impl<'a> GitBinary<'a> {
@@ -41,7 +49,7 @@ impl<'a> GitBinary<'a> {
             "--default",
             "",
             "--get",
-            &config_key(key),
+            key,
         ]))
         .map(LineArity::of)
         .and_then(LineArity::zero_or_one)
@@ -54,18 +62,25 @@ impl<'a> GitBinary<'a> {
             "config",
             "--local",
             "--replace-all",
-            &config_key(key),
+            key,
             value,
         ]))?;
+        Ok(())
+    }
+
+    fn fetch(&self, remote: &str, refspec: &str) -> Result<()> {
+        check_run(Command::new(self.name).args(&["fetch", remote, refspec]))?;
         Ok(())
     }
 }
 
 impl<'a> Backend for GitBinary<'a> {
     fn read_config(&self) -> Result<Option<Config>> {
-        let remote = self.get_config("remote")?;
-        let user = self.get_config("user")?;
-        let host = self.get_config("host")?;
+        let get = |k: &str| self.get_config(&namespace::config_key(k));
+
+        let remote = get("remote")?;
+        let user = get("user")?;
+        let host = get("host")?;
 
         match (remote, user, host) {
             (Some(remote), Some(user), Some(host)) => Ok(Some(Config { remote, user, host })),
@@ -77,10 +92,17 @@ impl<'a> Backend for GitBinary<'a> {
     }
 
     fn write_config(&self, config: &Config) -> Result<()> {
-        self.set_config("remote", &config.remote)?;
-        self.set_config("user", &config.user)?;
-        self.set_config("host", &config.host)?;
+        let set = |k: &str, v: &str| self.set_config(&namespace::config_key(k), v);
+
+        set("remote", &config.remote)?;
+        set("user", &config.user)?;
+        set("host", &config.host)?;
+
         Ok(())
+    }
+
+    fn fetch_remote_refs(&self, config: &Config) -> Result<()> {
+        self.fetch(&config.remote, &namespace::fetch_refspec())
     }
 }
 
@@ -90,7 +112,7 @@ fn check_run(command: &mut Command) -> Result<Output> {
         .with_context(|| format!("Running {:?}", command))?;
 
     if !output.status.success() {
-        bail!("command failure {:?}", output);
+        bail!("command failure {:#?}", output);
     }
 
     Ok(output)
@@ -203,7 +225,7 @@ mod tests {
         let (name, tmpdir) = GitBinary::init()?;
         let git = GitBinary::new(&name, tmpdir.path())?;
 
-        let got = git.get_config("testkey")?;
+        let got = git.get_config("test.key")?;
         assert_eq!(got, None);
 
         Ok(())
@@ -214,8 +236,8 @@ mod tests {
         let (name, tmpdir) = GitBinary::init()?;
         let git = GitBinary::new(&name, tmpdir.path())?;
 
-        git.set_config("testkey", "testvalue")?;
-        let got = git.get_config("testkey")?;
+        git.set_config("test.key", "testvalue")?;
+        let got = git.get_config("test.key")?;
 
         assert_eq!(got, Some("testvalue".to_string()));
 

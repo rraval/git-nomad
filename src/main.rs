@@ -1,13 +1,18 @@
 use std::env::current_dir;
 
-use anyhow::{Context, Result};
-use clap::{crate_authors, crate_description, crate_name, App, Arg, ArgMatches, SubCommand};
+use anyhow::{bail, Context, Result};
+use clap::{
+    crate_authors, crate_description, crate_name, App, AppSettings, Arg, ArgMatches, SubCommand,
+};
 
-use crate::{backend::Config, git_binary::GitBinary};
+use crate::{
+    backend::{Backend, Config},
+    git_binary::GitBinary,
+};
 
 mod backend;
-mod git_binary;
 mod command;
+mod git_binary;
 
 fn string_value(matches: &ArgMatches, name: &'static str) -> Result<String> {
     matches.value_of(name).context(name).map(String::from)
@@ -18,6 +23,7 @@ fn main() -> Result<()> {
     let default_host = whoami::hostname();
 
     let matches = App::new("git nomad")
+        .settings(&[AppSettings::SubcommandRequiredElseHelp])
         .name(crate_name!())
         .author(crate_authors!())
         .about(crate_description!())
@@ -49,6 +55,7 @@ fn main() -> Result<()> {
                         .help("Host name to sync with (unique per clone)"),
                 ),
         )
+        .subcommand(SubCommand::with_name("sync").about("Sync local branches to remote"))
         .get_matches();
 
     let git = GitBinary::new(
@@ -62,7 +69,15 @@ fn main() -> Result<()> {
         let host = string_value(matches, "host")?;
 
         let config = Config { remote, user, host };
-        command::init(git, config)?;
+        command::init(git, &config)?;
+        return Ok(());
+    }
+
+    if matches.subcommand_matches("sync").is_some() {
+        return match git.read_config()? {
+            None => bail!("No configuration found, try `init` first"),
+            Some(config) => command::sync(git, &config),
+        };
     }
 
     Ok(())

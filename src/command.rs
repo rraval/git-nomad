@@ -17,6 +17,7 @@ pub fn init<B: Backend>(backend: B, new_config: &Config) -> Result<()> {
 }
 
 pub fn sync<B: Backend>(backend: B, config: &Config, remote: &Remote) -> Result<()> {
-    backend.fetch_remote_refs(config, remote)?;
+    backend.fetch(config, remote)?;
+    backend.push(config, remote)?;
     Ok(())
 }

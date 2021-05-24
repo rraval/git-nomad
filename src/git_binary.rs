@@ -28,6 +28,15 @@ mod namespace {
             user = config.user
         )
     }
+
+    pub fn push_refspec(config: &Config) -> String {
+        format!(
+            "+refs/heads/*:refs/{prefix}/{user}/{host}/*",
+            prefix = PREFIX,
+            user = config.user,
+            host = config.host,
+        )
+    }
 }
 
 impl<'a> GitBinary<'a> {
@@ -80,6 +89,11 @@ impl<'a> GitBinary<'a> {
         check_run(self.command().args(&["fetch", remote, refspec]))?;
         Ok(())
     }
+
+    fn push(&self, remote: &str, refspecs: &[&str]) -> Result<()> {
+        check_run(self.command().args(&["push", remote]).args(refspecs))?;
+        Ok(())
+    }
 }
 
 impl<'a> Backend for GitBinary<'a> {
@@ -107,8 +121,12 @@ impl<'a> Backend for GitBinary<'a> {
         Ok(())
     }
 
-    fn fetch_remote_refs(&self, config: &Config, remote: &Remote) -> Result<()> {
+    fn fetch(&self, config: &Config, remote: &Remote) -> Result<()> {
         self.fetch(&remote.0, &namespace::fetch_refspec(config))
+    }
+
+    fn push(&self, config: &Config, remote: &Remote) -> Result<()> {
+        self.push(&remote.0, &[&namespace::push_refspec(config)])
     }
 }
 

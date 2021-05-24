@@ -13,14 +13,20 @@ pub struct GitBinary<'a> {
 }
 
 mod namespace {
+    use crate::backend::Config;
+
     const PREFIX: &str = "nomad";
 
     pub fn config_key(key: &str) -> String {
         format!("{}.{}", PREFIX, key)
     }
 
-    pub fn fetch_refspec() -> String {
-        format!("+refs/{prefix}/*:refs/{prefix}/*", prefix = PREFIX)
+    pub fn fetch_refspec(config: &Config) -> String {
+        format!(
+            "+refs/{prefix}/{user}/*:refs/{prefix}/*",
+            prefix = PREFIX,
+            user = config.user
+        )
     }
 }
 
@@ -99,8 +105,8 @@ impl<'a> Backend for GitBinary<'a> {
         Ok(())
     }
 
-    fn fetch_remote_refs(&self, _config: &Config, remote: &Remote) -> Result<()> {
-        self.fetch(&remote.0, &namespace::fetch_refspec())
+    fn fetch_remote_refs(&self, config: &Config, remote: &Remote) -> Result<()> {
+        self.fetch(&remote.0, &namespace::fetch_refspec(config))
     }
 }
 

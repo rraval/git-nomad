@@ -44,10 +44,14 @@ impl<'a> GitBinary<'a> {
         Ok(GitBinary { name, git_dir })
     }
 
+    fn command(&self) -> Command {
+        let mut command = Command::new(self.name);
+        command.args(&["--git-dir", &self.git_dir]);
+        command
+    }
+
     fn get_config(&self, key: &str) -> Result<Option<String>> {
-        check_output(Command::new(self.name).args(&[
-            "--git-dir",
-            &self.git_dir,
+        check_output(self.command().args(&[
             "config",
             "--local",
             // Use a default to prevent git from returning a non-zero exit code when the value does
@@ -62,9 +66,7 @@ impl<'a> GitBinary<'a> {
     }
 
     fn set_config(&self, key: &str, value: &str) -> Result<()> {
-        check_run(Command::new(self.name).args(&[
-            "--git-dir",
-            &self.git_dir,
+        check_run(self.command().args(&[
             "config",
             "--local",
             "--replace-all",
@@ -75,7 +77,7 @@ impl<'a> GitBinary<'a> {
     }
 
     fn fetch(&self, remote: &str, refspec: &str) -> Result<()> {
-        check_run(Command::new(self.name).args(&["fetch", remote, refspec]))?;
+        check_run(self.command().args(&["fetch", remote, refspec]))?;
         Ok(())
     }
 }

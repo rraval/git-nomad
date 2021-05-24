@@ -1,9 +1,12 @@
 [package]
 name = "git-nomad"
+description = "Synchronize work-in-progress git branches in a light weight fashion"
 version = "0.1.0"
 authors = ["Ronuk Raval <ronuk.raval@gmail.com>"]
 edition = "2018"
 
 [dependencies]
 anyhow = "1"
+clap = "2"
 tempfile = "3"
+whoami = "1"

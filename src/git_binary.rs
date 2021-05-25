@@ -5,7 +5,7 @@ use std::{
     process::{Command, Output},
 };
 
-use crate::backend::{Backend, Config, Remote};
+use crate::backend::{Backend, Config, HostBranch, LocalBranch, Remote};
 
 mod namespace {
     use crate::backend::Config;
@@ -150,8 +150,28 @@ impl<'a> Backend for GitBinary<'a> {
         Ok(())
     }
 
-    fn fetch(&self, config: &Config, remote: &Remote) -> Result<()> {
-        self.fetch_refspecs(&remote.0, &[&namespace::fetch_refspec(config)])
+    fn fetch(
+        &self,
+        config: &Config,
+        remote: &Remote,
+    ) -> Result<(Vec<LocalBranch>, Vec<HostBranch>)> {
+        self.fetch_refspecs(&remote.0, &[&namespace::fetch_refspec(config)])?;
+        let refs = self.list_refs()?;
+
+        let mut local_branches = Vec::<LocalBranch>::new();
+        let mut host_branches = Vec::<HostBranch>::new();
+
+        for r in refs {
+            if let Some(name) = r.name.strip_prefix("refs/heads/") {
+                local_branches.push(LocalBranch(name.to_string()));
+            }
+
+            if let Some(name) = r.name.strip_prefix(&namespace::local_ref(&config, "")) {
+                host_branches.push(HostBranch(name.to_string()));
+            }
+        }
+
+        Ok((local_branches, host_branches))
     }
 
     fn push(&self, config: &Config, remote: &Remote) -> Result<()> {
@@ -312,7 +332,7 @@ mod test_backend {
     use tempfile::{tempdir, TempDir};
 
     use crate::{
-        backend::{Backend, Config, Remote},
+        backend::{Backend, Config, HostBranch, LocalBranch, Remote},
         git_binary::namespace,
     };
 
@@ -406,10 +426,10 @@ mod test_backend {
                 .unwrap();
         }
 
-        fn fetch(&self) {
+        fn fetch(&self) -> (Vec<LocalBranch>, Vec<HostBranch>) {
             self.git
                 .fetch(&self.config, &Remote(ORIGIN.to_owned()))
-                .unwrap();
+                .unwrap()
         }
     }
 
@@ -443,7 +463,7 @@ mod test_backend {
         assert_eq!(ref_commit_ids(&refs).len(), 1);
     }
 
-    /// Fetch should pull refs for all hosts under the configured user under
+    /// Fetch should pull refs for all hosts that have pushed under the configured user under
     /// `refs/nomad/{host}/{branch}`
     #[test]
     fn fetch() {
@@ -473,7 +493,10 @@ mod test_backend {
             assert_eq!(ref_names(&refs), pre_fetch_refs());
         }
 
-        host1.fetch();
+        // host branches ought to be empty here since host1 has not pushed
+        let (local_branches, host_branches) = host1.fetch();
+        assert_eq!(local_branches, vec![LocalBranch(BRANCH.to_string())]);
+        assert_eq!(host_branches, vec![]);
 
         // After fetch, we should have the additional ref
         {

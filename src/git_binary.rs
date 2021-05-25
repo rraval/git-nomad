@@ -43,8 +43,9 @@ mod namespace {
     }
 }
 
-struct GitRef {
-    commit_id: String,
+#[derive(PartialEq, Eq, Hash, Debug, Clone)]
+pub struct GitRef {
+    commit_id: Option<String>,
     name: String,
 }
 
@@ -58,7 +59,10 @@ impl GitRef {
             "Unexpected show-ref line format: {}",
             line
         );
-        GitRef { commit_id, name }
+        GitRef {
+            commit_id: Some(commit_id),
+            name,
+        }
     }
 }
 
@@ -124,9 +128,22 @@ impl<'a> GitBinary<'a> {
         let output = check_output(self.command().arg("show-ref"))?;
         Ok(output.lines().map(GitRef::parse_show_ref_line).collect())
     }
+
+    fn delete_ref(&self, git_ref: &GitRef) -> Result<()> {
+        let mut command = self.command();
+        command.args(&["update-ref", "-d", &git_ref.name]);
+        if let Some(ref commit_id) = git_ref.commit_id {
+            command.arg(commit_id);
+        }
+
+        check_run(&mut command)?;
+        Ok(())
+    }
 }
 
 impl<'a> Backend for GitBinary<'a> {
+    type Ref = GitRef;
+
     fn read_config(&self) -> Result<Option<Config>> {
         let get = |k: &str| self.get_config(&namespace::config_key(k));
 
@@ -155,12 +172,12 @@ impl<'a> Backend for GitBinary<'a> {
         &self,
         config: &Config,
         remote: &Remote,
-    ) -> Result<(HashSet<LocalBranch>, HashSet<HostBranch>)> {
+    ) -> Result<(HashSet<LocalBranch>, HashSet<HostBranch<GitRef>>)> {
         self.fetch_refspecs(&remote.0, &[&namespace::fetch_refspec(config)])?;
         let refs = self.list_refs()?;
 
         let mut local_branches = HashSet::<LocalBranch>::new();
-        let mut host_branches = HashSet::<HostBranch>::new();
+        let mut host_branches = HashSet::<HostBranch<GitRef>>::new();
 
         for r in refs {
             if let Some(name) = r.name.strip_prefix("refs/heads/") {
@@ -168,7 +185,8 @@ impl<'a> Backend for GitBinary<'a> {
             }
 
             if let Some(name) = r.name.strip_prefix(&namespace::local_ref(&config, "")) {
-                host_branches.insert(HostBranch(name.to_string()));
+                let name = name.to_string();
+                host_branches.insert(HostBranch { name, ref_: r });
             }
         }
 
@@ -181,18 +199,33 @@ impl<'a> Backend for GitBinary<'a> {
 
     fn prune<'b, Prune>(&self, config: &Config, remote: &Remote, prune: Prune) -> Result<()>
     where
-        Prune: Iterator<Item = &'b HostBranch>,
+        Prune: Iterator<Item = &'b HostBranch<GitRef>>,
     {
         let mut refspecs = Vec::<String>::new();
+        let mut refs = Vec::<GitRef>::new();
 
         for host_branch in prune {
             refspecs.push(format!(
                 ":{}",
-                namespace::remote_ref(config, &host_branch.0)
+                namespace::remote_ref(config, &host_branch.name)
             ));
+
+            refs.push(host_branch.ref_.clone());
         }
 
+        // Delete from the remote first
         self.push_refspecs(&remote.0, &refspecs)?;
+
+        // ... then delete locally. This order means that interruptions leave the local ref around
+        // to be picked up and pruned again.
+        //
+        // In practice, we do a fetch from the remote first anyways, which would recreate the local
+        // ref if this code deleted local refs first and then was interrupted.
+        //
+        // But that is non-local reasoning and this ordering is theoretically correct.
+        for r in refs {
+            self.delete_ref(&r)?;
+        }
 
         Ok(())
     }
@@ -448,7 +481,7 @@ mod test_backend {
             self.git.push(&self.config, &self.remote()).unwrap();
         }
 
-        fn fetch(&self) -> (HashSet<LocalBranch>, HashSet<HostBranch>) {
+        fn fetch(&self) -> (HashSet<LocalBranch>, HashSet<HostBranch<GitRef>>) {
             self.git.fetch(&self.config, &self.remote()).unwrap()
         }
 
@@ -457,7 +490,13 @@ mod test_backend {
                 .prune(
                     &self.config,
                     &self.remote(),
-                    iter::once(&HostBranch(BRANCH.to_string())),
+                    iter::once(&HostBranch {
+                        name: BRANCH.to_string(),
+                        ref_: GitRef {
+                            commit_id: None,
+                            name: namespace::local_ref(&self.config, BRANCH),
+                        },
+                    }),
                 )
                 .unwrap();
         }
@@ -469,7 +508,7 @@ mod test_backend {
 
     fn ref_commit_ids(refs: &[GitRef]) -> HashSet<String> {
         refs.iter()
-            .map(|r| r.commit_id.clone())
+            .filter_map(|r| r.commit_id.clone())
             .collect::<HashSet<_>>()
     }
 
@@ -604,7 +643,6 @@ mod test_backend {
         // Pruning removes the ref remotely and locally
         local.prune();
         assert_eq!(remote_nomad_refs(), empty_set);
-        // FIXME: need to do local ref pruning
-        // assert_eq!(local_nomad_refs(), empty_set);
+        assert_eq!(local_nomad_refs(), empty_set);
     }
 }

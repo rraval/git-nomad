@@ -21,7 +21,7 @@ pub fn sync<B: Backend>(backend: B, config: &Config, remote: &Remote) -> Result<
     let (local_branches, host_branches) = backend.fetch(config, remote)?;
     let prune = host_branches
         .iter()
-        .filter(|b| !local_branches.contains(&LocalBranch(b.0.clone())));
+        .filter(|b| !local_branches.contains(&LocalBranch(b.name.clone())));
     backend.prune(config, remote, prune)?;
     Ok(())
 }

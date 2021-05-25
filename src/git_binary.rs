@@ -33,6 +33,10 @@ mod namespace {
         )
     }
 
+    pub fn local_ref(config: &Config, branch: &str) -> String {
+        format!("refs/{}/{}/{}", PREFIX, config.host, branch)
+    }
+
     pub fn remote_ref(config: &Config, branch: &str) -> String {
         format!("refs/{}/{}/{}/{}", PREFIX, config.user, config.host, branch)
     }
@@ -312,7 +316,7 @@ mod test_backend {
         git_binary::namespace,
     };
 
-    use super::{check_run, GitBinary};
+    use super::{check_run, GitBinary, GitRef};
 
     const GIT: &str = "git";
     const ORIGIN: &str = "origin";
@@ -401,6 +405,22 @@ mod test_backend {
                 .push(&self.config, &Remote(ORIGIN.to_owned()))
                 .unwrap();
         }
+
+        fn fetch(&self) {
+            self.git
+                .fetch(&self.config, &Remote(ORIGIN.to_owned()))
+                .unwrap();
+        }
+    }
+
+    fn ref_names(refs: &[GitRef]) -> HashSet<String> {
+        refs.iter().map(|r| r.name.clone()).collect::<HashSet<_>>()
+    }
+
+    fn ref_commit_ids(refs: &[GitRef]) -> HashSet<String> {
+        refs.iter()
+            .map(|r| r.commit_id.clone())
+            .collect::<HashSet<_>>()
     }
 
     /// Push should put local branches to remote `refs/nomad/{user}/{host}/{branch}`
@@ -412,20 +432,58 @@ mod test_backend {
 
         let refs = origin.git.list_refs().unwrap();
 
-        let names = refs.iter().map(|r| r.name.clone()).collect::<HashSet<_>>();
-        let expected_names = {
+        assert_eq!(ref_names(&refs), {
             let mut set: HashSet<String> = HashSet::new();
             set.insert(format!("refs/heads/{}", BRANCH));
             set.insert(namespace::remote_ref(&host0.config, BRANCH));
             set
-        };
-        assert_eq!(names, expected_names);
+        });
 
         // even though there are 2 refs above, both should be pointing to the same commit
-        let commit_ids = refs
-            .iter()
-            .map(|r| r.commit_id.clone())
-            .collect::<HashSet<_>>();
-        assert_eq!(commit_ids.len(), 1);
+        assert_eq!(ref_commit_ids(&refs).len(), 1);
+    }
+
+    /// Fetch should pull refs for all hosts under the configured user under
+    /// `refs/nomad/{host}/{branch}`
+    #[test]
+    fn fetch() {
+        let origin = GitRemote::init();
+
+        let host0 = origin.clone("host0");
+        host0.push();
+
+        let host1 = origin.clone("host1");
+
+        // Before fetch, the host1 clone should only have the local and remote branch
+        let pre_fetch_refs = || {
+            let mut set: HashSet<String> = HashSet::new();
+
+            // the local branch
+            set.insert(format!("refs/heads/{}", BRANCH));
+
+            // the remote branch and what's checked out
+            set.insert(format!("refs/remotes/{}/{}", ORIGIN, BRANCH));
+            set.insert(format!("refs/remotes/{}/HEAD", ORIGIN));
+
+            set
+        };
+
+        {
+            let refs = host1.git.list_refs().unwrap();
+            assert_eq!(ref_names(&refs), pre_fetch_refs());
+        }
+
+        host1.fetch();
+
+        // After fetch, we should have the additional ref
+        {
+            let refs = host1.git.list_refs().unwrap();
+            assert_eq!(ref_names(&refs), {
+                let mut set = pre_fetch_refs();
+                // the additional ref from the host0 push
+                set.insert(namespace::local_ref(&host0.config, BRANCH));
+                set
+            });
+        }
     }
 }

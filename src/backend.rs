@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use anyhow::Result;
 
 #[derive(Debug)]
@@ -9,12 +11,12 @@ pub struct Config {
 pub struct Remote(pub String);
 
 /// A user managed ref representing a local branch, like `refs/heads/master`.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct LocalBranch(pub String);
 
 /// A nomad managed ref representing a branch for the current host, where "current" is relative to
 /// whatever [`Config.host`] was passed in.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct HostBranch(pub String);
 
 pub trait Backend {
@@ -24,6 +26,6 @@ pub trait Backend {
         &self,
         config: &Config,
         remote: &Remote,
-    ) -> Result<(Vec<LocalBranch>, Vec<HostBranch>)>;
+    ) -> Result<(HashSet<LocalBranch>, HashSet<HostBranch>)>;
     fn push(&self, config: &Config, remote: &Remote) -> Result<()>;
 }

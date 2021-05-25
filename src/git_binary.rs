@@ -1,5 +1,6 @@
 use anyhow::{bail, Context, Result};
 use std::{
+    collections::HashSet,
     ffi::OsStr,
     path::Path,
     process::{Command, Output},
@@ -154,20 +155,20 @@ impl<'a> Backend for GitBinary<'a> {
         &self,
         config: &Config,
         remote: &Remote,
-    ) -> Result<(Vec<LocalBranch>, Vec<HostBranch>)> {
+    ) -> Result<(HashSet<LocalBranch>, HashSet<HostBranch>)> {
         self.fetch_refspecs(&remote.0, &[&namespace::fetch_refspec(config)])?;
         let refs = self.list_refs()?;
 
-        let mut local_branches = Vec::<LocalBranch>::new();
-        let mut host_branches = Vec::<HostBranch>::new();
+        let mut local_branches = HashSet::<LocalBranch>::new();
+        let mut host_branches = HashSet::<HostBranch>::new();
 
         for r in refs {
             if let Some(name) = r.name.strip_prefix("refs/heads/") {
-                local_branches.push(LocalBranch(name.to_string()));
+                local_branches.insert(LocalBranch(name.to_string()));
             }
 
             if let Some(name) = r.name.strip_prefix(&namespace::local_ref(&config, "")) {
-                host_branches.push(HostBranch(name.to_string()));
+                host_branches.insert(HostBranch(name.to_string()));
             }
         }
 
@@ -426,7 +427,7 @@ mod test_backend {
                 .unwrap();
         }
 
-        fn fetch(&self) -> (Vec<LocalBranch>, Vec<HostBranch>) {
+        fn fetch(&self) -> (HashSet<LocalBranch>, HashSet<HostBranch>) {
             self.git
                 .fetch(&self.config, &Remote(ORIGIN.to_owned()))
                 .unwrap()
@@ -495,8 +496,12 @@ mod test_backend {
 
         // host branches ought to be empty here since host1 has not pushed
         let (local_branches, host_branches) = host1.fetch();
-        assert_eq!(local_branches, vec![LocalBranch(BRANCH.to_string())]);
-        assert_eq!(host_branches, vec![]);
+        assert_eq!(local_branches, {
+            let mut set = HashSet::<LocalBranch>::new();
+            set.insert(LocalBranch(BRANCH.to_string()));
+            set
+        });
+        assert_eq!(host_branches, HashSet::new());
 
         // After fetch, we should have the additional ref
         {

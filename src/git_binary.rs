@@ -7,11 +7,6 @@ use std::{
 
 use crate::backend::{Backend, Config, Remote};
 
-pub struct GitBinary<'a> {
-    name: &'a OsStr,
-    git_dir: String,
-}
-
 mod namespace {
     use crate::backend::Config;
 
@@ -37,6 +32,34 @@ mod namespace {
             host = config.host,
         )
     }
+
+    pub fn remote_ref(config: &Config, branch: &str) -> String {
+        format!("refs/{}/{}/{}/{}", PREFIX, config.user, config.host, branch)
+    }
+}
+
+struct GitRef {
+    commit_id: String,
+    name: String,
+}
+
+impl GitRef {
+    fn parse_show_ref_line(line: &str) -> GitRef {
+        let mut parts = line.split(' ').map(String::from).collect::<Vec<_>>();
+        let name = parts.pop().expect("Missing ref name");
+        let commit_id = parts.pop().expect("Missing ref commit ID");
+        assert!(
+            parts.is_empty(),
+            "Unexpected show-ref line format: {}",
+            line
+        );
+        GitRef { commit_id, name }
+    }
+}
+
+pub struct GitBinary<'a> {
+    name: &'a OsStr,
+    git_dir: String,
 }
 
 impl<'a> GitBinary<'a> {
@@ -75,24 +98,26 @@ impl<'a> GitBinary<'a> {
     }
 
     fn set_config(&self, key: &str, value: &str) -> Result<()> {
-        check_run(self.command().args(&[
-            "config",
-            "--local",
-            "--replace-all",
-            key,
-            value,
-        ]))?;
+        check_run(
+            self.command()
+                .args(&["config", "--local", "--replace-all", key, value]),
+        )?;
         Ok(())
     }
 
-    fn fetch(&self, remote: &str, refspec: &str) -> Result<()> {
-        check_run(self.command().args(&["fetch", remote, refspec]))?;
+    fn fetch_refspecs(&self, remote: &str, refspecs: &[&str]) -> Result<()> {
+        check_run(self.command().args(&["fetch", remote]).args(refspecs))?;
         Ok(())
     }
 
-    fn push(&self, remote: &str, refspecs: &[&str]) -> Result<()> {
+    fn push_refspecs(&self, remote: &str, refspecs: &[&str]) -> Result<()> {
         check_run(self.command().args(&["push", remote]).args(refspecs))?;
         Ok(())
+    }
+
+    fn list_refs(&self) -> Result<Vec<GitRef>> {
+        let output = check_output(self.command().arg("show-ref"))?;
+        Ok(output.lines().map(GitRef::parse_show_ref_line).collect())
     }
 }
 
@@ -122,11 +147,11 @@ impl<'a> Backend for GitBinary<'a> {
     }
 
     fn fetch(&self, config: &Config, remote: &Remote) -> Result<()> {
-        self.fetch(&remote.0, &namespace::fetch_refspec(config))
+        self.fetch_refspecs(&remote.0, &[&namespace::fetch_refspec(config)])
     }
 
     fn push(&self, config: &Config, remote: &Remote) -> Result<()> {
-        self.push(&remote.0, &[&namespace::push_refspec(config)])
+        self.push_refspecs(&remote.0, &[&namespace::push_refspec(config)])
     }
 }
 
@@ -268,5 +293,139 @@ mod test_impl {
         assert_eq!(got, Some("testvalue".to_string()));
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod test_backend {
+    use std::{
+        collections::HashSet,
+        fs::{create_dir, write},
+        path::PathBuf,
+        process::Command,
+    };
+
+    use tempfile::{tempdir, TempDir};
+
+    use crate::{
+        backend::{Backend, Config, Remote},
+        git_binary::namespace,
+    };
+
+    use super::{check_run, GitBinary};
+
+    const GIT: &str = "git";
+    const ORIGIN: &str = "origin";
+    const BRANCH: &str = "branch0";
+    const USER: &str = "user0";
+
+    struct GitRemote {
+        root_dir: TempDir,
+        remote_dir: PathBuf,
+        git: GitBinary<'static>,
+    }
+
+    impl GitRemote {
+        fn init() -> GitRemote {
+            let root_dir = tempdir().unwrap();
+            let remote_dir = root_dir.path().join("remote");
+
+            {
+                let remote_dir = remote_dir.as_path();
+
+                let git = |args: &[&str]| {
+                    check_run(Command::new(GIT).current_dir(remote_dir).args(args)).unwrap();
+                };
+
+                create_dir(remote_dir).unwrap();
+                git(&["init", "--initial-branch", BRANCH]);
+
+                let file0 = remote_dir.join("file0");
+                write(file0, "line0\nline1\n").unwrap();
+
+                git(&["add", "."]);
+                git(&["commit", "-m", "commit0"]);
+            }
+
+            let git = GitBinary::new(GIT, &remote_dir).unwrap();
+
+            GitRemote {
+                root_dir,
+                remote_dir,
+                git,
+            }
+        }
+
+        fn clone<'a>(&'a self, host: &str) -> GitClone<'a> {
+            let clone_dir = {
+                let mut dir = PathBuf::from(self.root_dir.path());
+                dir.push("clones");
+                dir.push(host);
+                dir
+            };
+
+            check_run(
+                Command::new(GIT)
+                    .current_dir(&self.root_dir)
+                    .arg("clone")
+                    .args(&["--origin", ORIGIN])
+                    .arg(&self.remote_dir)
+                    .arg(&clone_dir),
+            )
+            .unwrap();
+
+            let git = GitBinary::new(GIT, &clone_dir).unwrap();
+
+            GitClone {
+                _remote: self,
+                _clone_dir: clone_dir,
+                config: Config {
+                    user: USER.to_owned(),
+                    host: host.to_owned(),
+                },
+                git,
+            }
+        }
+    }
+
+    struct GitClone<'a> {
+        _remote: &'a GitRemote,
+        _clone_dir: PathBuf,
+        config: Config,
+        git: GitBinary<'static>,
+    }
+
+    impl<'a> GitClone<'a> {
+        fn push(&self) {
+            self.git
+                .push(&self.config, &Remote(ORIGIN.to_owned()))
+                .unwrap();
+        }
+    }
+
+    /// Push should put local branches to remote `refs/nomad/{user}/{host}/{branch}`
+    #[test]
+    fn push() {
+        let origin = GitRemote::init();
+        let host0 = origin.clone("host0");
+        host0.push();
+
+        let refs = origin.git.list_refs().unwrap();
+
+        let names = refs.iter().map(|r| r.name.clone()).collect::<HashSet<_>>();
+        let expected_names = {
+            let mut set: HashSet<String> = HashSet::new();
+            set.insert(format!("refs/heads/{}", BRANCH));
+            set.insert(namespace::remote_ref(&host0.config, BRANCH));
+            set
+        };
+        assert_eq!(names, expected_names);
+
+        // even though there are 2 refs above, both should be pointing to the same commit
+        let commit_ids = refs
+            .iter()
+            .map(|r| r.commit_id.clone())
+            .collect::<HashSet<_>>();
+        assert_eq!(commit_ids.len(), 1);
     }
 }

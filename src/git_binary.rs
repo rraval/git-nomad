@@ -110,12 +110,12 @@ impl<'a> GitBinary<'a> {
         Ok(())
     }
 
-    fn fetch_refspecs(&self, remote: &str, refspecs: &[&str]) -> Result<()> {
+    fn fetch_refspecs<S: AsRef<OsStr>>(&self, remote: &str, refspecs: &[S]) -> Result<()> {
         check_run(self.command().args(&["fetch", remote]).args(refspecs))?;
         Ok(())
     }
 
-    fn push_refspecs(&self, remote: &str, refspecs: &[&str]) -> Result<()> {
+    fn push_refspecs<S: AsRef<OsStr>>(&self, remote: &str, refspecs: &[S]) -> Result<()> {
         check_run(self.command().args(&["push", remote]).args(refspecs))?;
         Ok(())
     }
@@ -177,6 +177,24 @@ impl<'a> Backend for GitBinary<'a> {
 
     fn push(&self, config: &Config, remote: &Remote) -> Result<()> {
         self.push_refspecs(&remote.0, &[&namespace::push_refspec(config)])
+    }
+
+    fn prune<'b, Prune>(&self, config: &Config, remote: &Remote, prune: Prune) -> Result<()>
+    where
+        Prune: Iterator<Item = &'b HostBranch>,
+    {
+        let mut refspecs = Vec::<String>::new();
+
+        for host_branch in prune {
+            refspecs.push(format!(
+                ":{}",
+                namespace::remote_ref(config, &host_branch.0)
+            ));
+        }
+
+        self.push_refspecs(&remote.0, &refspecs)?;
+
+        Ok(())
     }
 }
 
@@ -326,6 +344,7 @@ mod test_backend {
     use std::{
         collections::HashSet,
         fs::{create_dir, write},
+        iter,
         path::PathBuf,
         process::Command,
     };
@@ -421,16 +440,26 @@ mod test_backend {
     }
 
     impl<'a> GitClone<'a> {
+        fn remote(&self) -> Remote {
+            Remote(ORIGIN.to_owned())
+        }
+
         fn push(&self) {
-            self.git
-                .push(&self.config, &Remote(ORIGIN.to_owned()))
-                .unwrap();
+            self.git.push(&self.config, &self.remote()).unwrap();
         }
 
         fn fetch(&self) -> (HashSet<LocalBranch>, HashSet<HostBranch>) {
+            self.git.fetch(&self.config, &self.remote()).unwrap()
+        }
+
+        fn prune(&self) {
             self.git
-                .fetch(&self.config, &Remote(ORIGIN.to_owned()))
-                .unwrap()
+                .prune(
+                    &self.config,
+                    &self.remote(),
+                    iter::once(&HostBranch(BRANCH.to_string())),
+                )
+                .unwrap();
         }
     }
 
@@ -513,5 +542,69 @@ mod test_backend {
                 set
             });
         }
+    }
+
+    /// Pushing should create nomad refs in the remote.
+    /// Fetching should create nomad refs locally.
+    /// Pruning should delete refs in the local and remote.
+    #[test]
+    fn push_fetch_prune() {
+        let remote = GitRemote::init();
+        let local = remote.clone("local");
+
+        let remote_nomad_refs = || {
+            remote
+                .git
+                .list_refs()
+                .unwrap()
+                .into_iter()
+                .filter_map(|r| {
+                    r.name
+                        .strip_prefix(&namespace::remote_ref(&local.config, ""))
+                        .map(String::from)
+                })
+                .collect::<HashSet<_>>()
+        };
+
+        let local_nomad_refs = || {
+            local
+                .git
+                .list_refs()
+                .unwrap()
+                .into_iter()
+                .filter_map(|r| {
+                    r.name
+                        .strip_prefix(&namespace::local_ref(&local.config, ""))
+                        .map(String::from)
+                })
+                .collect::<HashSet<_>>()
+        };
+
+        let empty_set = HashSet::new();
+        let branch_set = {
+            let mut set = HashSet::new();
+            set.insert(BRANCH.to_string());
+            set
+        };
+
+        // In the beginning, there are no nomad refs
+        assert_eq!(remote_nomad_refs(), empty_set);
+        assert_eq!(local_nomad_refs(), empty_set);
+
+        // Pushing creates a remote nomad ref, but local remains empty
+        local.push();
+        assert_eq!(remote_nomad_refs(), branch_set);
+        assert_eq!(local_nomad_refs(), empty_set);
+
+        // Fetching creates a local nomad ref
+        local.fetch();
+        assert_eq!(remote_nomad_refs(), branch_set);
+        assert_eq!(local_nomad_refs(), branch_set);
+
+        // Pruning removes the ref remotely and locally
+        local.prune();
+        assert_eq!(remote_nomad_refs(), empty_set);
+        // FIXME: need to do local ref pruning
+        // assert_eq!(local_nomad_refs(), empty_set);
     }
 }

@@ -22,10 +22,16 @@ pub struct HostBranch(pub String);
 pub trait Backend {
     fn read_config(&self) -> Result<Option<Config>>;
     fn write_config(&self, config: &Config) -> Result<()>;
+
     fn fetch(
         &self,
         config: &Config,
         remote: &Remote,
     ) -> Result<(HashSet<LocalBranch>, HashSet<HostBranch>)>;
+
     fn push(&self, config: &Config, remote: &Remote) -> Result<()>;
+
+    fn prune<'a, Prune>(&self, config: &Config, remote: &Remote, prune: Prune) -> Result<()>
+    where
+        Prune: Iterator<Item = &'a HostBranch>;
 }

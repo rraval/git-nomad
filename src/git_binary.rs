@@ -115,11 +115,13 @@ impl<'a> GitBinary<'a> {
     }
 
     fn fetch_refspecs<S: AsRef<OsStr>>(&self, remote: &str, refspecs: &[S]) -> Result<()> {
+        assert!(!refspecs.is_empty());
         check_run(self.command().args(&["fetch", remote]).args(refspecs))?;
         Ok(())
     }
 
     fn push_refspecs<S: AsRef<OsStr>>(&self, remote: &str, refspecs: &[S]) -> Result<()> {
+        assert!(!refspecs.is_empty());
         check_run(self.command().args(&["push", remote]).args(refspecs))?;
         Ok(())
     }
@@ -214,7 +216,9 @@ impl<'a> Backend for GitBinary<'a> {
         }
 
         // Delete from the remote first
-        self.push_refspecs(&remote.0, &refspecs)?;
+        if !refspecs.is_empty() {
+            self.push_refspecs(&remote.0, &refspecs)?;
+        }
 
         // ... then delete locally. This order means that interruptions leave the local ref around
         // to be picked up and pruned again.

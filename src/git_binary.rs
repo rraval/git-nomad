@@ -6,7 +6,7 @@ use std::{
     process::{Command, Output},
 };
 
-use crate::backend::{Backend, Config, HostBranch, LocalBranch, Remote};
+use crate::backend::{Backend, Branch, Config, HostBranch, Remote, Snapshot};
 
 mod namespace {
     use crate::backend::Config;
@@ -170,29 +170,31 @@ impl<'a> Backend for GitBinary<'a> {
         Ok(())
     }
 
-    fn fetch(
-        &self,
-        config: &Config,
-        remote: &Remote,
-    ) -> Result<(HashSet<LocalBranch>, HashSet<HostBranch<GitRef>>)> {
+    fn fetch(&self, config: &Config, remote: &Remote) -> Result<Snapshot<Self::Ref>> {
         self.fetch_refspecs(&remote.0, &[&namespace::fetch_refspec(config)])?;
         let refs = self.list_refs()?;
 
-        let mut local_branches = HashSet::<LocalBranch>::new();
+        let mut local_branches = HashSet::<Branch>::new();
         let mut host_branches = HashSet::<HostBranch<GitRef>>::new();
 
         for r in refs {
             if let Some(name) = r.name.strip_prefix("refs/heads/") {
-                local_branches.insert(LocalBranch(name.to_string()));
+                local_branches.insert(Branch::str(name));
             }
 
             if let Some(name) = r.name.strip_prefix(&namespace::local_ref(&config, "")) {
                 let name = name.to_string();
-                host_branches.insert(HostBranch { name, ref_: r });
+                host_branches.insert(HostBranch {
+                    branch: Branch::str(name),
+                    ref_: r,
+                });
             }
         }
 
-        Ok((local_branches, host_branches))
+        Ok(Snapshot {
+            local_branches,
+            host_branches,
+        })
     }
 
     fn push(&self, config: &Config, remote: &Remote) -> Result<()> {
@@ -209,7 +211,7 @@ impl<'a> Backend for GitBinary<'a> {
         for host_branch in prune {
             refspecs.push(format!(
                 ":{}",
-                namespace::remote_ref(config, &host_branch.name)
+                namespace::remote_ref(config, &host_branch.branch.0)
             ));
 
             refs.push(host_branch.ref_.clone());
@@ -389,7 +391,7 @@ mod test_backend {
     use tempfile::{tempdir, TempDir};
 
     use crate::{
-        backend::{Backend, Config, HostBranch, LocalBranch, Remote},
+        backend::{Backend, Branch, Config, HostBranch, Remote, Snapshot},
         git_binary::namespace,
     };
 
@@ -485,7 +487,7 @@ mod test_backend {
             self.git.push(&self.config, &self.remote()).unwrap();
         }
 
-        fn fetch(&self) -> (HashSet<LocalBranch>, HashSet<HostBranch<GitRef>>) {
+        fn fetch(&self) -> Snapshot<GitRef> {
             self.git.fetch(&self.config, &self.remote()).unwrap()
         }
 
@@ -495,7 +497,7 @@ mod test_backend {
                     &self.config,
                     &self.remote(),
                     iter::once(&HostBranch {
-                        name: BRANCH.to_string(),
+                        branch: Branch::str(BRANCH),
                         ref_: GitRef {
                             commit_id: None,
                             name: namespace::local_ref(&self.config, BRANCH),
@@ -567,13 +569,13 @@ mod test_backend {
         }
 
         // host branches ought to be empty here since host1 has not pushed
-        let (local_branches, host_branches) = host1.fetch();
-        assert_eq!(local_branches, {
-            let mut set = HashSet::<LocalBranch>::new();
-            set.insert(LocalBranch(BRANCH.to_string()));
+        let prune_against = host1.fetch();
+        assert_eq!(prune_against.local_branches, {
+            let mut set = HashSet::<Branch>::new();
+            set.insert(Branch::str(BRANCH));
             set
         });
-        assert_eq!(host_branches, HashSet::new());
+        assert_eq!(prune_against.host_branches, HashSet::new());
 
         // After fetch, we should have the additional ref
         {

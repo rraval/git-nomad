@@ -29,7 +29,8 @@ pub fn init<B: Backend>(progress: &Progress, backend: B, new_config: &Config) ->
 /// Synchronize current local branches with nomad managed refs in the given remote.
 pub fn sync<B: Backend>(backend: B, config: &Config, remote: &Remote) -> Result<()> {
     backend.push(config, remote)?;
-    let snapshot = backend.fetch(config, remote)?;
-    backend.prune(config, remote, snapshot.prune())?;
+    backend.fetch(config, remote)?;
+    let snapshot = backend.snapshot()?;
+    backend.prune(config, remote, snapshot.prune(config).iter())?;
     Ok(())
 }

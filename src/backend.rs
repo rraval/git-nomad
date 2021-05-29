@@ -28,7 +28,7 @@ pub struct Config {
 pub struct Remote(pub String);
 
 /// The branch name part of a ref. `refs/head/master` would be `Branch("master".to_string())`.
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct Branch(pub String);
 
 impl Branch {
@@ -37,29 +37,45 @@ impl Branch {
     }
 }
 
-/// A nomad managed ref representing a branch for the current host, where "current" is relative to
-/// whatever [`Config`] was passed in.
+/// A nomad managed ref for the current user.
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct HostBranch<Ref> {
+    /// The host this branch comes from.
+    pub host: String,
+    /// The branch name.
     pub branch: Branch,
+    /// Any additional data the [`Backend`] would like to carry around.
     pub ref_: Ref,
 }
 
-/// A point in time view of branches we care about.
+/// A point in time view of refs we care about.
 pub struct Snapshot<Ref> {
     /// The active branches in this clone that the user manipulates directly with `git branch` etc.
     pub local_branches: HashSet<Branch>,
     /// The refs that nomad manages to follow the local branches.
-    pub host_branches: HashSet<HostBranch<Ref>>,
+    pub host_branches: Vec<HostBranch<Ref>>,
 }
 
 impl<Ref> Snapshot<Ref> {
     /// Find nomad host branches that can be pruned because the local branch they were based on no
     /// longer exists.
-    pub fn prune(&self) -> impl Iterator<Item = &HostBranch<Ref>> {
+    pub fn prune(self, config: &Config) -> Vec<HostBranch<Ref>> {
+        let Self {
+            mut host_branches,
+            local_branches,
+        } = self;
+        host_branches.retain(|hb| hb.host == config.host && !local_branches.contains(&hb.branch));
+        host_branches
+    }
+
+    /// Return only the nomad managed branch names for a given host.
+    #[cfg(test)]
+    pub fn branches_for_host(&self, config: &Config) -> Vec<Branch> {
         self.host_branches
             .iter()
-            .filter(move |hb| !self.local_branches.contains(&hb.branch))
+            .filter(|hb| hb.host == config.host)
+            .map(|hb| hb.branch.clone())
+            .collect()
     }
 }
 
@@ -75,8 +91,11 @@ pub trait Backend {
     /// Persist a new [`Config`] for this git clone.
     fn write_config(&self, config: &Config) -> Result<()>;
 
-    /// Fetch refs from a git remote and produce a point in time [`Snapshot`].
-    fn fetch(&self, config: &Config, remote: &Remote) -> Result<Snapshot<Self::Ref>>;
+    /// Build a point in time snapshot for all refs that nomad cares about.
+    fn snapshot(&self) -> Result<Snapshot<Self::Ref>>;
+
+    /// Fetch all nomad managed refs from a given remote.
+    fn fetch(&self, config: &Config, remote: &Remote) -> Result<()>;
 
     /// Push local branches to nomad managed refs in the remote.
     fn push(&self, config: &Config, remote: &Remote) -> Result<()>;
@@ -86,4 +105,52 @@ pub trait Backend {
     where
         Self::Ref: 'a,
         Prune: Iterator<Item = &'a HostBranch<Self::Ref>>;
+}
+
+#[cfg(test)]
+mod tests {
+    use std::iter;
+
+    use crate::backend::{Config, HostBranch};
+
+    use super::{Branch, Snapshot};
+
+    /// [`Snapshot::prune`] should only remote branches for the current host.
+    #[test]
+    fn snapshot_prune_removes_branches() {
+        let snapshot = Snapshot {
+            local_branches: iter::once(Branch::str("branch0")).collect(),
+            host_branches: vec![
+                HostBranch {
+                    host: "host0".to_string(),
+                    branch: Branch::str("branch0"),
+                    ref_: (),
+                },
+                HostBranch {
+                    host: "host0".to_string(),
+                    branch: Branch::str("branch1"),
+                    ref_: (),
+                },
+                HostBranch {
+                    host: "host1".to_string(),
+                    branch: Branch::str("branch1"),
+                    ref_: (),
+                },
+            ],
+        };
+
+        let prune = snapshot.prune(&Config {
+            user: "user0".to_string(),
+            host: "host0".to_string(),
+        });
+
+        assert_eq!(
+            prune,
+            vec![HostBranch {
+                host: "host0".to_string(),
+                branch: Branch::str("branch1"),
+                ref_: (),
+            }]
+        );
+    }
 }

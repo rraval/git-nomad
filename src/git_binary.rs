@@ -12,7 +12,10 @@ use crate::{
 /// Containerizes all the naming schemes used by nomad from the wild west of all other git tools,
 /// both built-in and third party.
 mod namespace {
-    use crate::backend::Config;
+    use crate::{
+        backend::{Branch, Config, HostBranch},
+        git_ref::GitRef,
+    };
 
     /// The main name that we declare to be ours and nobody elses. This lays claim to the section
     /// in `git config` and the `refs/{PREFIX}` hierarchy in all git repos!
@@ -53,6 +56,7 @@ mod namespace {
     ///
     /// Note that `branch` can be the empty string which conveniently acts as a prefix for parsing
     /// `git show-ref` output.
+    #[cfg(test)]
     pub fn local_ref(config: &Config, branch: &str) -> String {
         format!("refs/{}/{}/{}", PREFIX, config.host, branch)
     }
@@ -63,6 +67,59 @@ mod namespace {
     /// `git show-ref` output.
     pub fn remote_ref(config: &Config, branch: &str) -> String {
         format!("refs/{}/{}/{}/{}", PREFIX, config.user, config.host, branch)
+    }
+
+    pub fn as_host_branch(git_ref: GitRef) -> Result<HostBranch<GitRef>, GitRef> {
+        let parts = git_ref.name.split('/').collect::<Vec<_>>();
+        match parts.as_slice() {
+            ["refs", prefix, host, branch_name] => {
+                if prefix != &PREFIX {
+                    return Err(git_ref);
+                }
+
+                Ok(HostBranch {
+                    host: host.to_string(),
+                    branch: Branch::str(branch_name),
+                    ref_: git_ref,
+                })
+            }
+            _ => Err(git_ref),
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use crate::{
+            backend::{Branch, Config, HostBranch},
+            git_ref::GitRef,
+        };
+
+        use super::{as_host_branch, local_ref};
+
+        /// [`as_host_branch`] should be able to parse ref names produced by [`local_ref`] (they
+        /// are duals).
+        #[test]
+        fn test_create_and_parse() {
+            let git_ref = GitRef {
+                commit_id: "some_commit_id".to_string(),
+                name: local_ref(
+                    &Config {
+                        user: "user0".to_string(),
+                        host: "host0".to_string(),
+                    },
+                    "branch0",
+                ),
+            };
+
+            assert_eq!(
+                as_host_branch(git_ref.clone()),
+                Ok(HostBranch {
+                    host: "host0".to_string(),
+                    branch: Branch::str("branch0"),
+                    ref_: git_ref,
+                })
+            );
+        }
     }
 }
 
@@ -282,28 +339,19 @@ impl<'progress, 'name> Backend for GitBinary<'progress, 'name> {
         Ok(())
     }
 
-    fn fetch(&self, config: &Config, remote: &Remote) -> Result<Snapshot<Self::Ref>> {
-        self.fetch_refspecs(
-            format!("Fetching branches from {}", remote.0),
-            &remote.0,
-            &[&namespace::fetch_refspec(config)],
-        )?;
+    fn snapshot(&self) -> Result<Snapshot<Self::Ref>> {
         let refs = self.list_refs("Fetching all refs")?;
 
         let mut local_branches = HashSet::<Branch>::new();
-        let mut host_branches = HashSet::<HostBranch<GitRef>>::new();
+        let mut host_branches = Vec::<HostBranch<GitRef>>::new();
 
         for r in refs {
             if let Some(name) = r.name.strip_prefix("refs/heads/") {
                 local_branches.insert(Branch::str(name));
             }
 
-            if let Some(name) = r.name.strip_prefix(&namespace::local_ref(&config, "")) {
-                let name = name.to_string();
-                host_branches.insert(HostBranch {
-                    branch: Branch::str(name),
-                    ref_: r,
-                });
+            if let Ok(host_branch) = namespace::as_host_branch(r) {
+                host_branches.push(host_branch);
             }
         }
 
@@ -311,6 +359,14 @@ impl<'progress, 'name> Backend for GitBinary<'progress, 'name> {
             local_branches,
             host_branches,
         })
+    }
+
+    fn fetch(&self, config: &Config, remote: &Remote) -> Result<()> {
+        self.fetch_refspecs(
+            format!("Fetching branches from {}", remote.0),
+            &remote.0,
+            &[&namespace::fetch_refspec(config)],
+        )
     }
 
     fn push(&self, config: &Config, remote: &Remote) -> Result<()> {
@@ -435,9 +491,11 @@ mod test_impl {
         PROGRESS.run(
             Run::Notable,
             "",
-            Command::new(&name)
-                .current_dir(tmpdir.path())
-                .args(&["init", "--initial-branch", "branch0"]),
+            Command::new(&name).current_dir(tmpdir.path()).args(&[
+                "init",
+                "--initial-branch",
+                "branch0",
+            ]),
         )?;
 
         Ok((name, tmpdir))
@@ -513,7 +571,7 @@ mod test_backend {
     use tempfile::{tempdir, TempDir};
 
     use crate::{
-        backend::{Backend, Branch, Config, HostBranch, Remote, Snapshot},
+        backend::{Backend, Branch, Config, HostBranch, Remote},
         git_binary::namespace,
         progress::{Progress, Run, Verbosity},
     };
@@ -621,7 +679,7 @@ mod test_backend {
             self.git.push(&self.config, &self.remote()).unwrap();
         }
 
-        fn fetch(&self) -> Snapshot<GitRef> {
+        fn fetch(&self) {
             self.git.fetch(&self.config, &self.remote()).unwrap()
         }
 
@@ -634,6 +692,7 @@ mod test_backend {
                     &self.config,
                     &self.remote(),
                     iter::once(&HostBranch {
+                        host: self.config.host.clone(),
                         branch: Branch::str(BRANCH),
                         ref_: git_ref,
                     }),
@@ -706,13 +765,15 @@ mod test_backend {
         }
 
         // host branches ought to be empty here since host1 has not pushed
-        let prune_against = host1.fetch();
-        assert_eq!(prune_against.local_branches, {
-            let mut set = HashSet::<Branch>::new();
-            set.insert(Branch::str(BRANCH));
-            set
-        });
-        assert_eq!(prune_against.host_branches, HashSet::new());
+        assert_eq!(
+            host1
+                .git
+                .snapshot()
+                .unwrap()
+                .branches_for_host(&host0.config),
+            vec![]
+        );
+        host1.fetch();
 
         // After fetch, we should have the additional ref
         {
@@ -723,6 +784,14 @@ mod test_backend {
                 set.insert(namespace::local_ref(&host0.config, BRANCH));
                 set
             });
+            assert_eq!(
+                host1
+                    .git
+                    .snapshot()
+                    .unwrap()
+                    .branches_for_host(&host0.config),
+                vec![Branch::str(BRANCH)]
+            );
         }
     }
 

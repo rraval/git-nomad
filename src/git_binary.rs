@@ -187,7 +187,8 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
             .run(
                 Run::Trivial,
                 description,
-                self.command().args(&["show-ref", ref_name.as_ref()]),
+                self.command()
+                    .args(&["show-ref", "--verify", ref_name.as_ref()]),
             )
             .and_then(output_stdout)
             .map(LineArity::of)

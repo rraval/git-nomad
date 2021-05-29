@@ -1,26 +1,45 @@
+//! See [`Progress`] for the primary entry point.
+
 use std::process::{Command, Output};
 
 use anyhow::{bail, Context, Result};
 use indicatif::{ProgressBar, ProgressStyle};
 
+/// Significance of the command being run to the overall workflow.
 #[derive(PartialOrd, PartialEq, Eq, Ord)]
 pub enum Run {
+    /// An insignificant command that requires additional `--verbose` flags to be visible.
     Trivial,
+    /// A slow or otherwise important command to communicate to the user.
     Notable,
 }
 
+/// How verbose should `--verbose` be?
 pub enum Verbosity {
+    /// Prints the command and arguments as it executes them.
     CommandOnly,
+    /// Prints what [`Self::CommandOnly`] would print and also any `stdout`/`stderr` produced.
     CommandAndOutput,
 }
 
+/// Responsible for timely communication of program state to the user.
 pub enum Progress {
+    /// No progress messages whatsoever, the user only cares about the exit code.
     Silent,
-    Standard { significance_at_least: Run },
+    /// Every day usage of this program.
+    ///
+    /// When run interactively, this presents pretty spinners with durations powered by
+    /// [`indicatif`].
+    Standard {
+        /// Skips printing commands with [`Run`] values below what is specified.
+        significance_at_least: Run,
+    },
+    /// Debug usage of this program. Prints increasing amounts of information about subcommands.
     Verbose(Verbosity),
 }
 
 impl Progress {
+    /// Should the workflow print completion messages?
     pub fn is_output_allowed(&self) -> bool {
         match self {
             Self::Silent => false,
@@ -29,6 +48,7 @@ impl Progress {
         }
     }
 
+    /// Run a [`Command`] for its [`Output`], while reporting progress to the user appropriately.
     pub fn run<S: AsRef<str>>(
         &self,
         significance: Run,
@@ -94,10 +114,16 @@ impl Progress {
     }
 }
 
+/// Extract the printed `stdout` from the [`Output`] of a [`Command`].
+///
+/// Best used in an `and_then` chain.
 pub fn output_stdout(output: Output) -> Result<String> {
     Ok(String::from_utf8(output.stdout)?)
 }
 
+/// Invoke a [`Command`] and check its exit code for success.
+///
+/// Makes effort to build a decent error message on failure.
 fn check_run<S: AsRef<str>>(description: S, command: &mut Command) -> Result<Output> {
     let output = command
         .output()

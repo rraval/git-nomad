@@ -5,6 +5,7 @@ use std::{collections::HashSet, ffi::OsStr, path::Path, process::Command};
 
 use crate::{
     backend::{Backend, Branch, Config, HostBranch, Remote, Snapshot},
+    git_ref::GitRef,
     progress::{output_stdout, Progress, Run},
 };
 
@@ -62,28 +63,6 @@ mod namespace {
     /// `git show-ref` output.
     pub fn remote_ref(config: &Config, branch: &str) -> String {
         format!("refs/{}/{}/{}/{}", PREFIX, config.user, config.host, branch)
-    }
-}
-
-/// Information about a specific ref in the local repository, analogous to the information
-/// that `git show-ref` produces.
-#[derive(PartialEq, Eq, Hash, Debug, Clone)]
-pub struct GitRef {
-    commit_id: String,
-    name: String,
-}
-
-impl GitRef {
-    fn parse_show_ref_line(line: &str) -> GitRef {
-        let mut parts = line.split(' ').map(String::from).collect::<Vec<_>>();
-        let name = parts.pop().expect("Missing ref name");
-        let commit_id = parts.pop().expect("Missing ref commit ID");
-        assert!(
-            parts.is_empty(),
-            "Unexpected show-ref line format: {}",
-            line
-        );
-        GitRef { commit_id, name }
     }
 }
 
@@ -213,7 +192,7 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
             .and_then(output_stdout)
             .map(LineArity::of)
             .and_then(LineArity::one)
-            .map(|line| GitRef::parse_show_ref_line(&line))
+            .and_then(|line| GitRef::parse_show_ref_line(&line).map_err(Into::into))
     }
 
     fn list_refs<Description>(&self, description: Description) -> Result<Vec<GitRef>>
@@ -224,7 +203,10 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
             .progress
             .run(Run::Trivial, description, self.command().arg("show-ref"))
             .and_then(output_stdout)?;
-        Ok(output.lines().map(GitRef::parse_show_ref_line).collect())
+        output
+            .lines()
+            .map(|line| GitRef::parse_show_ref_line(line).map_err(Into::into))
+            .collect()
     }
 
     fn delete_ref<Description>(&self, description: Description, git_ref: &GitRef) -> Result<()>

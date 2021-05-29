@@ -14,6 +14,7 @@ use crate::{
 mod backend;
 mod command;
 mod git_binary;
+mod git_ref;
 mod progress;
 
 fn string_value(matches: &ArgMatches, name: &'static str) -> Result<String> {

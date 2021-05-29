@@ -1,6 +1,9 @@
 use anyhow::{bail, Result};
 
-use crate::{backend::{Backend, Config, Remote}, progress::Progress};
+use crate::{
+    backend::{Backend, Config, Remote},
+    progress::Progress,
+};
 
 pub fn init<B: Backend>(progress: &Progress, backend: B, new_config: &Config) -> Result<()> {
     if let Some(existing_config) = backend.read_config()? {

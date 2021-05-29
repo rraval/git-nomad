@@ -86,7 +86,25 @@ fn check_run<S: AsRef<str>>(description: S, command: &mut Command) -> Result<Out
         .with_context(|| format!("{}: {:?}", description.as_ref(), command))?;
 
     if !output.status.success() {
-        bail!("command failure {:#?}", output);
+        let forward = |name: &str, stream: &[u8]| {
+            if stream.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    "\n# ---- {} ----\n{}",
+                    name,
+                    String::from_utf8_lossy(stream)
+                )
+            }
+        };
+
+        bail!(
+            "command failure\n$ {:?}\n# Exit code: {:?}{}{}",
+            command,
+            output.status.code(),
+            forward("STDOUT", &output.stdout),
+            forward("STDERR", &output.stderr)
+        );
     }
 
     Ok(output)

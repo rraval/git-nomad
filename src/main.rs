@@ -38,11 +38,13 @@ fn main() -> Result<()> {
         .arg(
             Arg::with_name("silent")
                 .short("s")
+                .long("silent")
                 .help("Silence all output"),
         )
         .arg(
             Arg::with_name("verbose")
                 .short("v")
+                .long("verbose")
                 .multiple(true)
                 .help("Verbose output, repeat up to 3 times for increasing verbosity"),
         )
@@ -51,12 +53,14 @@ fn main() -> Result<()> {
                 .about("One time initialization for nomad in this repository")
                 .arg(
                     Arg::with_name("user")
+                        .short("U")
                         .long("user")
                         .default_value(&default_user)
                         .help("User name to sync with (shared by multiple clones)"),
                 )
                 .arg(
                     Arg::with_name("host")
+                        .short("H")
                         .long("host")
                         .default_value(&default_host)
                         .help("Host name to sync with (unique per clone)"),

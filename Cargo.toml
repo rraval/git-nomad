@@ -8,5 +8,6 @@ edition = "2018"
 [dependencies]
 anyhow = "1"
 clap = "2"
+indicatif = "^0.16.2"
 tempfile = "3"
 whoami = "1"

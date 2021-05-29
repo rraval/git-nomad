@@ -296,7 +296,7 @@ impl<'progress, 'name> Backend for GitBinary<'progress, 'name> {
         //
         // But that is non-local reasoning and this ordering is theoretically correct.
         for r in refs {
-            self.delete_ref(format!("Pruning local tracking ref: {}", r.name), &r)?;
+            self.delete_ref(format!("  Prune {}", r.name), &r)?;
         }
 
         Ok(())

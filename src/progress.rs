@@ -1,6 +1,7 @@
 use std::process::{Command, Output};
 
 use anyhow::{bail, Context, Result};
+use indicatif::{ProgressBar, ProgressStyle};
 
 #[derive(PartialOrd, PartialEq, Eq, Ord)]
 pub enum Run {
@@ -39,10 +40,27 @@ impl Progress {
             Self::Standard {
                 significance_at_least,
             } => {
-                if significance >= *significance_at_least {
-                    eprintln!("{}...", description.as_ref());
+                let spinner = if significance >= *significance_at_least {
+                    let spinner = ProgressBar::new_spinner();
+                    spinner.set_style(
+                        ProgressStyle::default_spinner()
+                            .tick_strings(&[" ..", ". .", ".. ", "..."])
+                            .template("{msg}{spinner} {elapsed}"),
+                    );
+                    spinner.set_message(description.as_ref().to_owned());
+                    spinner.enable_steady_tick(150);
+                    Some(spinner)
+                } else {
+                    None
+                };
+
+                let output = check_run(description, command);
+
+                if let Some(spinner) = spinner {
+                    spinner.finish();
                 }
-                check_run(description, command)
+
+                output
             }
             Self::Verbose(verbosity) => {
                 eprintln!();

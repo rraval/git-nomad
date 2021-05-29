@@ -1,3 +1,5 @@
+//! See [`GitBinary`] for the primary entry point.
+
 use anyhow::{bail, Result};
 use std::{collections::HashSet, ffi::OsStr, path::Path, process::Command};
 
@@ -6,15 +8,25 @@ use crate::{
     progress::{output_stdout, Progress, Run},
 };
 
+/// Containerizes all the naming schemes used by nomad from the wild west of all other git tools,
+/// both built-in and third party.
 mod namespace {
     use crate::backend::Config;
 
+    /// The main name that we declare to be ours and nobody elses. This lays claim to the section
+    /// in `git config` and the `refs/{PREFIX}` hierarchy in all git repos!
     const PREFIX: &str = "nomad";
 
+    /// Where information is stored for `git config`.
     pub fn config_key(key: &str) -> String {
         format!("{}.{}", PREFIX, key)
     }
 
+    /// The refspec to fetch remote nomad managed refs as local refs.
+    ///
+    /// `refs/nomad/rraval/apollo/master` becomes `refs/nomad/apollo/master`.
+    ///
+    /// `refs/nomad/rraval/boreas/feature` becomes `refs/nomad/boreas/feature`.
     pub fn fetch_refspec(config: &Config) -> String {
         format!(
             "+refs/{prefix}/{user}/*:refs/{prefix}/*",
@@ -23,6 +35,10 @@ mod namespace {
         )
     }
 
+    /// The refspec to push local branches as nomad managed refs in the remote.
+    ///
+    /// When run on host `boreas` that has a branch named `feature`:
+    /// `refs/heads/feature` becomes `refs/nomad/rraval/boreas/feature`.
     pub fn push_refspec(config: &Config) -> String {
         format!(
             "+refs/heads/*:refs/{prefix}/{user}/{host}/*",
@@ -32,15 +48,25 @@ mod namespace {
         )
     }
 
+    /// A nomad ref in the local clone, which elides the user name for convenience.
+    ///
+    /// Note that `branch` can be the empty string which conveniently acts as a prefix for parsing
+    /// `git show-ref` output.
     pub fn local_ref(config: &Config, branch: &str) -> String {
         format!("refs/{}/{}/{}", PREFIX, config.host, branch)
     }
 
+    /// A nomad ref in the remote.
+    ///
+    /// Note that `branch` can be the empty string which conveniently acts as a prefix for parsing
+    /// `git show-ref` output.
     pub fn remote_ref(config: &Config, branch: &str) -> String {
         format!("refs/{}/{}/{}/{}", PREFIX, config.user, config.host, branch)
     }
 }
 
+/// Information about a specific ref in the local repository, somewhat analogous to the information
+/// that `git show-ref` produces.
 #[derive(PartialEq, Eq, Hash, Debug, Clone)]
 pub struct GitRef {
     commit_id: Option<String>,

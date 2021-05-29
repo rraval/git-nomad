@@ -1,12 +1,10 @@
-use anyhow::{bail, Context, Result};
-use std::{
-    collections::HashSet,
-    ffi::OsStr,
-    path::Path,
-    process::{Command, Output},
-};
+use anyhow::{bail, Result};
+use std::{collections::HashSet, ffi::OsStr, path::Path, process::Command};
 
-use crate::backend::{Backend, Branch, Config, HostBranch, Remote, Snapshot};
+use crate::{
+    backend::{Backend, Branch, Config, HostBranch, Remote, Snapshot},
+    progress::{output_stdout, Progress, Run},
+};
 
 mod namespace {
     use crate::backend::Config;
@@ -66,23 +64,36 @@ impl GitRef {
     }
 }
 
-pub struct GitBinary<'a> {
-    name: &'a OsStr,
+pub struct GitBinary<'progress, 'name> {
+    progress: &'progress Progress,
+    name: &'name OsStr,
     git_dir: String,
 }
 
-impl<'a> GitBinary<'a> {
-    pub fn new(name: &'a str, cwd: &Path) -> Result<GitBinary<'a>> {
+impl<'progress, 'name> GitBinary<'progress, 'name> {
+    pub fn new(
+        progress: &'progress Progress,
+        name: &'name str,
+        cwd: &Path,
+    ) -> Result<GitBinary<'progress, 'name>> {
         let name = name.as_ref();
-        let git_dir = check_output(
-            Command::new(name)
-                .current_dir(cwd)
-                .args(&["rev-parse", "--absolute-git-dir"]),
-        )
-        .map(LineArity::of)
-        .and_then(LineArity::one)?;
+        let git_dir = progress
+            .run(
+                Run::Trivial,
+                "Resolving .git directory",
+                Command::new(name)
+                    .current_dir(cwd)
+                    .args(&["rev-parse", "--absolute-git-dir"]),
+            )
+            .and_then(output_stdout)
+            .map(LineArity::of)
+            .and_then(LineArity::one)?;
 
-        Ok(GitBinary { name, git_dir })
+        Ok(GitBinary {
+            progress,
+            name,
+            git_dir,
+        })
     }
 
     fn command(&self) -> Command {
@@ -92,58 +103,101 @@ impl<'a> GitBinary<'a> {
     }
 
     fn get_config(&self, key: &str) -> Result<Option<String>> {
-        check_output(self.command().args(&[
-            "config",
-            "--local",
-            // Use a default to prevent git from returning a non-zero exit code when the value does
-            // not exist.
-            "--default",
-            "",
-            "--get",
-            key,
-        ]))
-        .map(LineArity::of)
-        .and_then(LineArity::zero_or_one)
+        self.progress
+            .run(
+                Run::Trivial,
+                format!("Get config {}", key),
+                self.command().args(&[
+                    "config",
+                    "--local",
+                    // Use a default to prevent git from returning a non-zero exit code when the value does
+                    // not exist.
+                    "--default",
+                    "",
+                    "--get",
+                    key,
+                ]),
+            )
+            .and_then(output_stdout)
+            .map(LineArity::of)
+            .and_then(LineArity::zero_or_one)
     }
 
     fn set_config(&self, key: &str, value: &str) -> Result<()> {
-        check_run(
+        self.progress.run(
+            Run::Trivial,
+            format!("Set config {} = {}", key, value),
             self.command()
                 .args(&["config", "--local", "--replace-all", key, value]),
         )?;
         Ok(())
     }
 
-    fn fetch_refspecs<S: AsRef<OsStr>>(&self, remote: &str, refspecs: &[S]) -> Result<()> {
+    fn fetch_refspecs<Description, RefSpec>(
+        &self,
+        description: Description,
+        remote: &str,
+        refspecs: &[RefSpec],
+    ) -> Result<()>
+    where
+        Description: AsRef<str>,
+        RefSpec: AsRef<OsStr>,
+    {
         assert!(!refspecs.is_empty());
-        check_run(self.command().args(&["fetch", remote]).args(refspecs))?;
+        self.progress.run(
+            Run::Notable,
+            description,
+            self.command().args(&["fetch", remote]).args(refspecs),
+        )?;
         Ok(())
     }
 
-    fn push_refspecs<S: AsRef<OsStr>>(&self, remote: &str, refspecs: &[S]) -> Result<()> {
+    fn push_refspecs<Description, RefSpec>(
+        &self,
+        description: Description,
+        remote: &str,
+        refspecs: &[RefSpec],
+    ) -> Result<()>
+    where
+        Description: AsRef<str>,
+        RefSpec: AsRef<OsStr>,
+    {
         assert!(!refspecs.is_empty());
-        check_run(self.command().args(&["push", remote]).args(refspecs))?;
+        self.progress.run(
+            Run::Notable,
+            description,
+            self.command().args(&["push", remote]).args(refspecs),
+        )?;
         Ok(())
     }
 
-    fn list_refs(&self) -> Result<Vec<GitRef>> {
-        let output = check_output(self.command().arg("show-ref"))?;
+    fn list_refs<Description>(&self, description: Description) -> Result<Vec<GitRef>>
+    where
+        Description: AsRef<str>,
+    {
+        let output = self
+            .progress
+            .run(Run::Trivial, description, self.command().arg("show-ref"))
+            .and_then(output_stdout)?;
         Ok(output.lines().map(GitRef::parse_show_ref_line).collect())
     }
 
-    fn delete_ref(&self, git_ref: &GitRef) -> Result<()> {
+    fn delete_ref<Description>(&self, description: Description, git_ref: &GitRef) -> Result<()>
+    where
+        Description: AsRef<str>,
+    {
         let mut command = self.command();
         command.args(&["update-ref", "-d", &git_ref.name]);
         if let Some(ref commit_id) = git_ref.commit_id {
             command.arg(commit_id);
         }
 
-        check_run(&mut command)?;
+        self.progress.run(Run::Notable, description, &mut command)?;
         Ok(())
     }
 }
 
-impl<'a> Backend for GitBinary<'a> {
+impl<'progress, 'name> Backend for GitBinary<'progress, 'name> {
     type Ref = GitRef;
 
     fn read_config(&self) -> Result<Option<Config>> {
@@ -171,8 +225,12 @@ impl<'a> Backend for GitBinary<'a> {
     }
 
     fn fetch(&self, config: &Config, remote: &Remote) -> Result<Snapshot<Self::Ref>> {
-        self.fetch_refspecs(&remote.0, &[&namespace::fetch_refspec(config)])?;
-        let refs = self.list_refs()?;
+        self.fetch_refspecs(
+            format!("Fetching branches from {}", remote.0),
+            &remote.0,
+            &[&namespace::fetch_refspec(config)],
+        )?;
+        let refs = self.list_refs("Fetching all refs")?;
 
         let mut local_branches = HashSet::<Branch>::new();
         let mut host_branches = HashSet::<HostBranch<GitRef>>::new();
@@ -198,7 +256,11 @@ impl<'a> Backend for GitBinary<'a> {
     }
 
     fn push(&self, config: &Config, remote: &Remote) -> Result<()> {
-        self.push_refspecs(&remote.0, &[&namespace::push_refspec(config)])
+        self.push_refspecs(
+            format!("Pushing local branches to {}", remote.0),
+            &remote.0,
+            &[&namespace::push_refspec(config)],
+        )
     }
 
     fn prune<'b, Prune>(&self, config: &Config, remote: &Remote, prune: Prune) -> Result<()>
@@ -219,7 +281,11 @@ impl<'a> Backend for GitBinary<'a> {
 
         // Delete from the remote first
         if !refspecs.is_empty() {
-            self.push_refspecs(&remote.0, &refspecs)?;
+            self.push_refspecs(
+                format!("Pruning deleted branches at {}", remote.0),
+                &remote.0,
+                &refspecs,
+            )?;
         }
 
         // ... then delete locally. This order means that interruptions leave the local ref around
@@ -230,28 +296,11 @@ impl<'a> Backend for GitBinary<'a> {
         //
         // But that is non-local reasoning and this ordering is theoretically correct.
         for r in refs {
-            self.delete_ref(&r)?;
+            self.delete_ref(format!("Pruning local tracking ref: {}", r.name), &r)?;
         }
 
         Ok(())
     }
-}
-
-fn check_run(command: &mut Command) -> Result<Output> {
-    let output = command
-        .output()
-        .with_context(|| format!("Running {:?}", command))?;
-
-    if !output.status.success() {
-        bail!("command failure {:#?}", output);
-    }
-
-    Ok(output)
-}
-
-fn check_output(command: &mut Command) -> Result<String> {
-    let output = check_run(command)?;
-    Ok(String::from_utf8(output.stdout)?)
 }
 
 #[derive(Debug)]
@@ -305,14 +354,20 @@ mod test_impl {
 
     use tempfile::{tempdir, TempDir};
 
-    use super::{check_output, GitBinary};
+    use crate::progress::{Progress, Run, Verbosity};
+
+    use super::GitBinary;
     use anyhow::Result;
+
+    const PROGRESS: Progress = Progress::Verbose(Verbosity::CommandAndOutput);
 
     fn git_init() -> Result<(String, TempDir)> {
         let name = "git".to_owned();
         let tmpdir = tempdir()?;
 
-        check_output(
+        PROGRESS.run(
+            Run::Notable,
+            "",
             Command::new(&name)
                 .current_dir(tmpdir.path())
                 .args(&["init"]),
@@ -326,7 +381,7 @@ mod test_impl {
     fn toplevel_at_root() -> Result<()> {
         let (name, tmpdir) = git_init()?;
 
-        let git = GitBinary::new(&name, tmpdir.path())?;
+        let git = GitBinary::new(&PROGRESS, &name, tmpdir.path())?;
         assert_eq!(
             Some(git.git_dir.as_str()),
             tmpdir.path().join(".git").to_str()
@@ -342,7 +397,7 @@ mod test_impl {
         let subdir = tmpdir.path().join("subdir");
         create_dir(&subdir)?;
 
-        let git = GitBinary::new(&name, subdir.as_path())?;
+        let git = GitBinary::new(&PROGRESS, &name, subdir.as_path())?;
         assert_eq!(
             Some(git.git_dir.as_str()),
             tmpdir.path().join(".git").to_str(),
@@ -355,7 +410,7 @@ mod test_impl {
     #[test]
     fn read_empty_config() -> Result<()> {
         let (name, tmpdir) = git_init()?;
-        let git = GitBinary::new(&name, tmpdir.path())?;
+        let git = GitBinary::new(&PROGRESS, &name, tmpdir.path())?;
 
         let got = git.get_config("test.key")?;
         assert_eq!(got, None);
@@ -367,7 +422,7 @@ mod test_impl {
     #[test]
     fn write_then_read_config() -> Result<()> {
         let (name, tmpdir) = git_init()?;
-        let git = GitBinary::new(&name, tmpdir.path())?;
+        let git = GitBinary::new(&PROGRESS, &name, tmpdir.path())?;
 
         git.set_config("test.key", "testvalue")?;
         let got = git.get_config("test.key")?;
@@ -393,19 +448,22 @@ mod test_backend {
     use crate::{
         backend::{Backend, Branch, Config, HostBranch, Remote, Snapshot},
         git_binary::namespace,
+        progress::{Progress, Run, Verbosity},
     };
 
-    use super::{check_run, GitBinary, GitRef};
+    use super::{GitBinary, GitRef};
 
     const GIT: &str = "git";
     const ORIGIN: &str = "origin";
     const BRANCH: &str = "branch0";
     const USER: &str = "user0";
 
+    const PROGRESS: Progress = Progress::Verbose(Verbosity::CommandAndOutput);
+
     struct GitRemote {
         root_dir: TempDir,
         remote_dir: PathBuf,
-        git: GitBinary<'static>,
+        git: GitBinary<'static, 'static>,
     }
 
     impl GitRemote {
@@ -417,7 +475,13 @@ mod test_backend {
                 let remote_dir = remote_dir.as_path();
 
                 let git = |args: &[&str]| {
-                    check_run(Command::new(GIT).current_dir(remote_dir).args(args)).unwrap();
+                    PROGRESS
+                        .run(
+                            Run::Notable,
+                            "",
+                            Command::new(GIT).current_dir(remote_dir).args(args),
+                        )
+                        .unwrap();
                 };
 
                 create_dir(remote_dir).unwrap();
@@ -430,7 +494,7 @@ mod test_backend {
                 git(&["commit", "-m", "commit0"]);
             }
 
-            let git = GitBinary::new(GIT, &remote_dir).unwrap();
+            let git = GitBinary::new(&PROGRESS, GIT, &remote_dir).unwrap();
 
             GitRemote {
                 root_dir,
@@ -447,17 +511,20 @@ mod test_backend {
                 dir
             };
 
-            check_run(
-                Command::new(GIT)
-                    .current_dir(&self.root_dir)
-                    .arg("clone")
-                    .args(&["--origin", ORIGIN])
-                    .arg(&self.remote_dir)
-                    .arg(&clone_dir),
-            )
-            .unwrap();
+            PROGRESS
+                .run(
+                    Run::Notable,
+                    "",
+                    Command::new(GIT)
+                        .current_dir(&self.root_dir)
+                        .arg("clone")
+                        .args(&["--origin", ORIGIN])
+                        .arg(&self.remote_dir)
+                        .arg(&clone_dir),
+                )
+                .unwrap();
 
-            let git = GitBinary::new(GIT, &clone_dir).unwrap();
+            let git = GitBinary::new(&PROGRESS, GIT, &clone_dir).unwrap();
 
             GitClone {
                 _remote: self,
@@ -475,7 +542,7 @@ mod test_backend {
         _remote: &'a GitRemote,
         _clone_dir: PathBuf,
         config: Config,
-        git: GitBinary<'static>,
+        git: GitBinary<'static, 'static>,
     }
 
     impl<'a> GitClone<'a> {
@@ -525,7 +592,10 @@ mod test_backend {
         let host0 = origin.clone("host0");
         host0.push();
 
-        let refs = origin.git.list_refs().unwrap();
+        let refs = origin
+            .git
+            .list_refs("Local branches should have remote refs")
+            .unwrap();
 
         assert_eq!(ref_names(&refs), {
             let mut set: HashSet<String> = HashSet::new();
@@ -564,7 +634,7 @@ mod test_backend {
         };
 
         {
-            let refs = host1.git.list_refs().unwrap();
+            let refs = host1.git.list_refs("Before fetch").unwrap();
             assert_eq!(ref_names(&refs), pre_fetch_refs());
         }
 
@@ -579,7 +649,7 @@ mod test_backend {
 
         // After fetch, we should have the additional ref
         {
-            let refs = host1.git.list_refs().unwrap();
+            let refs = host1.git.list_refs("After fetch").unwrap();
             assert_eq!(ref_names(&refs), {
                 let mut set = pre_fetch_refs();
                 // the additional ref from the host0 push
@@ -600,7 +670,7 @@ mod test_backend {
         let remote_nomad_refs = || {
             remote
                 .git
-                .list_refs()
+                .list_refs("Remote refs")
                 .unwrap()
                 .into_iter()
                 .filter_map(|r| {
@@ -614,7 +684,7 @@ mod test_backend {
         let local_nomad_refs = || {
             local
                 .git
-                .list_refs()
+                .list_refs("Local refs")
                 .unwrap()
                 .into_iter()
                 .filter_map(|r| {

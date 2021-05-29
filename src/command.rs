@@ -1,8 +1,8 @@
 use anyhow::{bail, Result};
 
-use crate::backend::{Backend, Config, Remote};
+use crate::{backend::{Backend, Config, Remote}, progress::Progress};
 
-pub fn init<B: Backend>(backend: B, new_config: &Config) -> Result<()> {
+pub fn init<B: Backend>(progress: &Progress, backend: B, new_config: &Config) -> Result<()> {
     if let Some(existing_config) = backend.read_config()? {
         bail!(
             "Found existing config, refusing to init again: {:#?}",
@@ -11,7 +11,9 @@ pub fn init<B: Backend>(backend: B, new_config: &Config) -> Result<()> {
     }
 
     backend.write_config(new_config)?;
-    println!("Wrote {:#?}", new_config);
+    if progress.is_output_allowed() {
+        println!("Wrote {:#?}", new_config);
+    }
 
     Ok(())
 }

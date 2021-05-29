@@ -65,11 +65,11 @@ mod namespace {
     }
 }
 
-/// Information about a specific ref in the local repository, somewhat analogous to the information
+/// Information about a specific ref in the local repository, analogous to the information
 /// that `git show-ref` produces.
 #[derive(PartialEq, Eq, Hash, Debug, Clone)]
 pub struct GitRef {
-    commit_id: Option<String>,
+    commit_id: String,
     name: String,
 }
 
@@ -83,10 +83,7 @@ impl GitRef {
             "Unexpected show-ref line format: {}",
             line
         );
-        GitRef {
-            commit_id: Some(commit_id),
-            name,
-        }
+        GitRef { commit_id, name }
     }
 }
 
@@ -197,6 +194,28 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
         Ok(())
     }
 
+    #[cfg(test)]
+    fn get_ref<Description, RefName>(
+        &self,
+        description: Description,
+        ref_name: RefName,
+    ) -> Result<GitRef>
+    where
+        Description: AsRef<str>,
+        RefName: AsRef<str>,
+    {
+        self.progress
+            .run(
+                Run::Trivial,
+                description,
+                self.command().args(&["show-ref", ref_name.as_ref()]),
+            )
+            .and_then(output_stdout)
+            .map(LineArity::of)
+            .and_then(LineArity::one)
+            .map(|line| GitRef::parse_show_ref_line(&line))
+    }
+
     fn list_refs<Description>(&self, description: Description) -> Result<Vec<GitRef>>
     where
         Description: AsRef<str>,
@@ -213,11 +232,7 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
         Description: AsRef<str>,
     {
         let mut command = self.command();
-        command.args(&["update-ref", "-d", &git_ref.name]);
-        if let Some(ref commit_id) = git_ref.commit_id {
-            command.arg(commit_id);
-        }
-
+        command.args(&["update-ref", "-d", &git_ref.name, &git_ref.commit_id]);
         self.progress.run(Run::Notable, description, &mut command)?;
         Ok(())
     }
@@ -585,16 +600,16 @@ mod test_backend {
         }
 
         fn prune(&self) {
+            let ref_name = namespace::local_ref(&self.config, BRANCH);
+            let git_ref = self.git.get_ref("", ref_name).unwrap();
+
             self.git
                 .prune(
                     &self.config,
                     &self.remote(),
                     iter::once(&HostBranch {
                         branch: Branch::str(BRANCH),
-                        ref_: GitRef {
-                            commit_id: None,
-                            name: namespace::local_ref(&self.config, BRANCH),
-                        },
+                        ref_: git_ref,
                     }),
                 )
                 .unwrap();
@@ -607,7 +622,7 @@ mod test_backend {
 
     fn ref_commit_ids(refs: &[GitRef]) -> HashSet<String> {
         refs.iter()
-            .filter_map(|r| r.commit_id.clone())
+            .map(|r| r.commit_id.clone())
             .collect::<HashSet<_>>()
     }
 

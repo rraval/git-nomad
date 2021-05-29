@@ -1,13 +1,22 @@
+//! See [`GitRef`] for the primary entry point.
+
 use std::{error::Error, fmt};
 
-/// Information about a specific ref in the local repository, analogous to the information
+/// Information about a specific ref in a git repository, analogous to the information
 /// that `git show-ref` produces.
+///
+/// Callers should leverage all the information here for additional safety (for example, using
+/// `git update-ref -d <name> <commit_id>` to only delete the reference if it matches the expected
+/// commit ID).
 #[derive(PartialEq, Eq, Hash, Debug, Clone)]
 pub struct GitRef {
+    /// The hash representing the git commit ID that the ref points to.
     pub commit_id: String,
+    /// The full ref name, like `refs/heads/master`.
     pub name: String,
 }
 
+/// All the ways a `git show-ref` line can fail to parse.
 #[derive(Debug, Eq, PartialEq)]
 pub enum GitRefParseError {
     MissingName(String),
@@ -35,6 +44,7 @@ fn is_not_empty<S: AsRef<str>>(str: &S) -> bool {
 }
 
 impl GitRef {
+    /// Parse a single line from `git show-ref` as a [`GitRef`].
     pub fn parse_show_ref_line(line: &str) -> Result<GitRef, GitRefParseError> {
         let mut parts = line.split(' ').map(String::from).collect::<Vec<_>>();
         let name = parts

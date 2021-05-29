@@ -1,9 +1,11 @@
 [package]
 name = "git-nomad"
-description = "Synchronize work-in-progress git branches in a light weight fashion"
 version = "0.1.0"
 authors = ["Ronuk Raval <ronuk.raval@gmail.com>"]
 edition = "2018"
+description = "Synchronize work-in-progress git branches in a light weight fashion"
+repository = "https://github.com/rraval/git-nomad"
+license = "MIT"
 
 [dependencies]
 anyhow = "1"

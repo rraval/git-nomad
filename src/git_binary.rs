@@ -66,13 +66,23 @@ mod namespace {
     }
 }
 
+/// Implements repository manipulations by delegating to some ambient `git` binary that exists
+/// somewhere on the system.
 pub struct GitBinary<'progress, 'name> {
+    /// Used to actually execute commands while reporting progress to the user.
     progress: &'progress Progress,
+
+    /// The name of the `git` binary to use. Implemented on top of [`Command::new`], so
+    /// non-absolute paths are looked up against `$PATH`.
     name: &'name OsStr,
+
+    /// The absolute path to the `.git` directory of the repository.
     git_dir: String,
 }
 
 impl<'progress, 'name> GitBinary<'progress, 'name> {
+    /// Create a new [`GitBinary`] by finding the `.git` dir relative to `cwd`, which implements
+    /// the usual git rules of searching ancestor directories.
     pub fn new(
         progress: &'progress Progress,
         name: &'name str,
@@ -98,12 +108,17 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
         })
     }
 
+    /// Invoke a git sub-command with an explicit `--git-dir` to make it independent of the working
+    /// directory it is invoked from.
     fn command(&self) -> Command {
         let mut command = Command::new(self.name);
         command.args(&["--git-dir", &self.git_dir]);
         command
     }
 
+    /// Wraps `git config` to read a single value from the local git repository.
+    ///
+    /// Explicitly ignores user level or global config to keep things nice and sealed.
     fn get_config(&self, key: &str) -> Result<Option<String>> {
         self.progress
             .run(
@@ -125,6 +140,7 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
             .and_then(LineArity::zero_or_one)
     }
 
+    /// Wraps `git config` to write a single value to the local git repository.
     fn set_config(&self, key: &str, value: &str) -> Result<()> {
         self.progress.run(
             Run::Trivial,
@@ -135,6 +151,12 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
         Ok(())
     }
 
+    /// Wraps `git fetch` to fetch refs from a given remote into the local repository.
+    ///
+    /// # Panics
+    ///
+    /// If `refspecs` is empty, which means git will use the user configured default behaviour
+    /// which is definitely not what we want.
     fn fetch_refspecs<Description, RefSpec>(
         &self,
         description: Description,
@@ -154,6 +176,12 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
         Ok(())
     }
 
+    /// Wraps `git push` to push refs from the local repository into the given remote.
+    ///
+    /// # Panics
+    ///
+    /// If `refspecs` is empty, which means git will use the user configured default behaviour
+    /// which is definitely not what we want.
     fn push_refspecs<Description, RefSpec>(
         &self,
         description: Description,
@@ -173,6 +201,7 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
         Ok(())
     }
 
+    /// Extract a single `GitRef` for a given `ref_name`.
     #[cfg(test)]
     fn get_ref<Description, RefName>(
         &self,
@@ -196,6 +225,7 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
             .and_then(|line| GitRef::parse_show_ref_line(&line).map_err(Into::into))
     }
 
+    /// List all the non-HEAD refs in the repository as `GitRef`s.
     fn list_refs<Description>(&self, description: Description) -> Result<Vec<GitRef>>
     where
         Description: AsRef<str>,
@@ -210,6 +240,9 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
             .collect()
     }
 
+    /// Delete a ref from the repository.
+    ///
+    /// Note that deleting refs on a remote is done via [`GitBinary::push_refspecs`].
     fn delete_ref<Description>(&self, description: Description, git_ref: &GitRef) -> Result<()>
     where
         Description: AsRef<str>,
@@ -221,6 +254,7 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
     }
 }
 
+/// Implements nomad workflows over an ambient `git` binary.
 impl<'progress, 'name> Backend for GitBinary<'progress, 'name> {
     type Ref = GitRef;
 
@@ -327,14 +361,21 @@ impl<'progress, 'name> Backend for GitBinary<'progress, 'name> {
     }
 }
 
+/// Utility to parse line based output of various `git` sub-commands.
 #[derive(Debug)]
 enum LineArity {
+    /// The command produced no lines.
     Zero(),
+    /// The command produced exactly one line.
     One(String),
+    /// The command produced two or more lines.
     Many(String),
 }
 
 impl LineArity {
+    /// Smart constructor to parse a [`LineArity`] from an arbitrary line.
+    ///
+    /// Coerces the empty line as [`LineArity::Zero`].
     fn of(string: String) -> LineArity {
         let mut lines = string.lines().map(String::from).collect::<Vec<_>>();
         let last = lines.pop();
@@ -355,6 +396,7 @@ impl LineArity {
         }
     }
 
+    /// The caller expects the output to only have a single line.
     fn one(self) -> Result<String> {
         if let LineArity::One(line) = self {
             Ok(line)
@@ -363,6 +405,7 @@ impl LineArity {
         }
     }
 
+    /// The caller expects the output to have zero or one line.
     fn zero_or_one(self) -> Result<Option<String>> {
         match self {
             LineArity::Zero() => Ok(None),

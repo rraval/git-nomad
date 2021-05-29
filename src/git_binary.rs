@@ -437,7 +437,7 @@ mod test_impl {
             "",
             Command::new(&name)
                 .current_dir(tmpdir.path())
-                .args(&["init"]),
+                .args(&["init", "--initial-branch", "branch0"]),
         )?;
 
         Ok((name, tmpdir))

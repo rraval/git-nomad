@@ -3,7 +3,7 @@
 use anyhow::{bail, Result};
 
 use crate::{
-    backend::{Backend, Config, Remote},
+    backend::{Backend, Config, HostBranch, Remote},
     progress::Progress,
 };
 
@@ -32,5 +32,23 @@ pub fn sync<B: Backend>(backend: B, config: &Config, remote: &Remote) -> Result<
     backend.fetch(config, remote)?;
     let snapshot = backend.snapshot()?;
     backend.prune(config, remote, snapshot.prune(config).iter())?;
+    Ok(())
+}
+
+/// List all nomad managed refs organized by host.
+///
+/// Does not respect [`Progress::is_output_allowed`] because output is the whole point of this
+/// command.
+pub fn ls<B: Backend>(backend: B) -> Result<()> {
+    let snapshot = backend.snapshot()?;
+
+    for (host, branches) in snapshot.sorted_hosts_and_branches() {
+        println!("{}", host);
+
+        for HostBranch { ref_, .. } in branches {
+            println!("  {}", ref_);
+        }
+    }
+
     Ok(())
 }

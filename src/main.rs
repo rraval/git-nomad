@@ -76,6 +76,7 @@ fn main() -> Result<()> {
                         .help("Git remote to sync against"),
                 ),
         )
+        .subcommand(SubCommand::with_name("ls").about("List refs for all hosts"))
         .get_matches();
 
     let progress = &{
@@ -118,6 +119,10 @@ fn main() -> Result<()> {
                 command::sync(git, &config, &remote)
             }
         };
+    }
+
+    if matches.subcommand_matches("ls").is_some() {
+        return command::ls(git);
     }
 
     Ok(())

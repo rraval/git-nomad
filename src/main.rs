@@ -116,7 +116,7 @@ fn main() -> Result<()> {
             None => bail!("No configuration found, try `init` first"),
             Some(config) => {
                 let remote = Remote(string_value(matches, "remote")?);
-                command::sync(git, &config, &remote)
+                command::sync(progress, git, &config, &remote)
             }
         };
     }

@@ -9,6 +9,31 @@ use crate::{
     progress::{output_stdout, Progress, Run},
 };
 
+/// Attempt to run a git binary without impurities from the environment slipping in.
+///
+/// Doing this correctly seems to have a long and complicated history:
+/// https://stackoverflow.com/a/67512433
+fn git_command<S: AsRef<OsStr>>(name: S) -> Command {
+    let mut command = Command::new(name);
+
+    let author_name = "git-nomad";
+    let author_email = "git-nomad@invalid";
+    let author_date = "1970-01-01T00:00:00";
+
+    command
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("GIT_CONFIG_NOGLOBAL", "1")
+        .env("HOME", "")
+        .env("XDG_CONFIG_HOME", "")
+        .env("GIT_AUTHOR_NAME", author_name)
+        .env("GIT_AUTHOR_EMAIL", author_email)
+        .env("GIT_AUTHOR_DATE", author_date)
+        .env("GIT_COMMITTER_NAME", author_name)
+        .env("GIT_COMMITTER_EMAIL", author_email)
+        .env("GIT_COMMITTER_DATE", author_date);
+    command
+}
+
 /// Containerizes all the naming schemes used by nomad from the wild west of all other git tools,
 /// both built-in and third party.
 mod namespace {
@@ -150,7 +175,7 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
             .run(
                 Run::Trivial,
                 "Resolving .git directory",
-                Command::new(name)
+                git_command(name)
                     .current_dir(cwd)
                     .args(&["rev-parse", "--absolute-git-dir"]),
             )
@@ -168,7 +193,7 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
     /// Invoke a git sub-command with an explicit `--git-dir` to make it independent of the working
     /// directory it is invoked from.
     fn command(&self) -> Command {
-        let mut command = Command::new(self.name);
+        let mut command = git_command(self.name);
         command.args(&["--git-dir", &self.git_dir]);
         command
     }
@@ -473,13 +498,13 @@ impl LineArity {
 
 #[cfg(test)]
 mod test_impl {
-    use std::{fs::create_dir, process::Command};
+    use std::fs::create_dir;
 
     use tempfile::{tempdir, TempDir};
 
     use crate::progress::{Progress, Run, Verbosity};
 
-    use super::GitBinary;
+    use super::{git_command, GitBinary};
     use anyhow::Result;
 
     const PROGRESS: Progress = Progress::Verbose(Verbosity::CommandAndOutput);
@@ -491,7 +516,7 @@ mod test_impl {
         PROGRESS.run(
             Run::Notable,
             "",
-            Command::new(&name).current_dir(tmpdir.path()).args(&[
+            git_command(&name).current_dir(tmpdir.path()).args(&[
                 "init",
                 "--initial-branch",
                 "branch0",
@@ -565,7 +590,6 @@ mod test_backend {
         fs::{create_dir, write},
         iter,
         path::PathBuf,
-        process::Command,
     };
 
     use tempfile::{tempdir, TempDir};
@@ -576,7 +600,7 @@ mod test_backend {
         progress::{Progress, Run, Verbosity},
     };
 
-    use super::{GitBinary, GitRef};
+    use super::{git_command, GitBinary, GitRef};
 
     const GIT: &str = "git";
     const ORIGIN: &str = "origin";
@@ -604,7 +628,7 @@ mod test_backend {
                         .run(
                             Run::Notable,
                             "",
-                            Command::new(GIT).current_dir(remote_dir).args(args),
+                            git_command(GIT).current_dir(remote_dir).args(args),
                         )
                         .unwrap();
                 };
@@ -616,7 +640,7 @@ mod test_backend {
                 write(file0, "line0\nline1\n").unwrap();
 
                 git(&["add", "."]);
-                git(&["commit", "--author", "Test <test@example.com>", "-m", "commit0"]);
+                git(&["commit", "-m", "commit0"]);
             }
 
             let git = GitBinary::new(&PROGRESS, GIT, &remote_dir).unwrap();
@@ -640,7 +664,7 @@ mod test_backend {
                 .run(
                     Run::Notable,
                     "",
-                    Command::new(GIT)
+                    git_command(GIT)
                         .current_dir(&self.root_dir)
                         .arg("clone")
                         .args(&["--origin", ORIGIN])

@@ -616,7 +616,7 @@ mod test_backend {
                 write(file0, "line0\nline1\n").unwrap();
 
                 git(&["add", "."]);
-                git(&["commit", "-m", "commit0"]);
+                git(&["commit", "--author", "Test <test@example.com>", "-m", "commit0"]);
             }
 
             let git = GitBinary::new(&PROGRESS, GIT, &remote_dir).unwrap();

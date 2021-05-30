@@ -421,7 +421,7 @@ impl<'progress, 'name> Backend for GitBinary<'progress, 'name> {
         // Delete from the remote first
         if !refspecs.is_empty() {
             self.push_refspecs(
-                format!("Pruning deleted branches at {}", remote.0),
+                format!("Pruning branches at {}", remote.0),
                 &remote.0,
                 &refspecs,
             )?;
@@ -435,7 +435,7 @@ impl<'progress, 'name> Backend for GitBinary<'progress, 'name> {
         //
         // But that is non-local reasoning and this ordering is theoretically correct.
         for r in refs {
-            self.delete_ref(format!("  Prune {}", r.name), &r)?;
+            self.delete_ref(format!("  Delete {}", r.name), &r)?;
         }
 
         Ok(())

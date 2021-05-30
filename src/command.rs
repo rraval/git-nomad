@@ -3,7 +3,7 @@
 use anyhow::{bail, Result};
 
 use crate::{
-    backend::{Backend, Config, HostBranch, Remote},
+    backend::{Backend, Config, HostBranch, Remote, Snapshot},
     progress::Progress,
 };
 
@@ -61,5 +61,17 @@ pub fn ls<B: Backend>(backend: B) -> Result<()> {
         }
     }
 
+    Ok(())
+}
+
+/// Delete nomad managed refs returned by `to_prune`.
+pub fn prune<B: Backend, F>(backend: B, config: &Config, remote: &Remote, to_prune: F) -> Result<()>
+where
+    F: Fn(Snapshot<B::Ref>) -> Vec<HostBranch<B::Ref>>,
+{
+    backend.fetch(&config, &remote)?;
+    let snapshot = backend.snapshot()?;
+    let prune = to_prune(snapshot);
+    backend.prune(&config, &remote, prune.iter())?;
     Ok(())
 }

@@ -1,4 +1,4 @@
-use std::env::current_dir;
+use std::{collections::HashSet, env::current_dir};
 
 use anyhow::{bail, Context, Result};
 use clap::{
@@ -24,6 +24,12 @@ fn string_value(matches: &ArgMatches, name: &'static str) -> Result<String> {
 fn main() -> Result<()> {
     let default_user = whoami::username();
     let default_host = whoami::hostname();
+
+    let remote_arg = || {
+        Arg::with_name("remote")
+            .default_value("origin")
+            .help("Git remote to sync against")
+    };
 
     let matches = App::new("git nomad")
         .settings(&[AppSettings::SubcommandRequiredElseHelp])
@@ -70,13 +76,27 @@ fn main() -> Result<()> {
         .subcommand(
             SubCommand::with_name("sync")
                 .about("Sync local branches to remote")
-                .arg(
-                    Arg::with_name("remote")
-                        .default_value("origin")
-                        .help("Git remote to sync against"),
-                ),
+                .arg(remote_arg()),
         )
         .subcommand(SubCommand::with_name("ls").about("List refs for all hosts"))
+        .subcommand(
+            SubCommand::with_name("prune")
+                .about("Delete nomad refs locally and on the remote")
+                .arg(
+                    Arg::with_name("all")
+                        .long("all")
+                        .help("Delete refs for all hosts"),
+                )
+                .arg(
+                    Arg::with_name("host")
+                        .short("H")
+                        .long("host")
+                        .takes_value(true)
+                        .multiple(true)
+                        .help("Delete refs for specific host (can be specified multiple times)"),
+                )
+                .arg(remote_arg()),
+        )
         .get_matches();
 
     let progress = &{
@@ -123,6 +143,23 @@ fn main() -> Result<()> {
 
     if matches.subcommand_matches("ls").is_some() {
         return command::ls(git);
+    }
+
+    if let Some(matches) = matches.subcommand_matches("prune") {
+        return match git.read_config()? {
+            None => bail!("No configuration found, nothing to prune"),
+            Some(config) => {
+                let remote = Remote(string_value(matches, "remote")?);
+                if matches.is_present("all") {
+                    command::prune(git, &config, &remote, |snapshot| snapshot.prune_all())
+                } else if let Some(hosts) = matches.values_of("host") {
+                    let set = hosts.collect::<HashSet<_>>();
+                    command::prune(git, &config, &remote, |snapshot| snapshot.prune_hosts(&set))
+                } else {
+                    bail!("Must specify --all or --host");
+                }
+            }
+        };
     }
 
     Ok(())

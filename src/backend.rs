@@ -71,6 +71,21 @@ impl<Ref: Display> Snapshot<Ref> {
         host_branches
     }
 
+    /// Return all nomad branches regardless of host.
+    pub fn prune_all(self) -> Vec<HostBranch<Ref>> {
+        let Self { host_branches, .. } = self;
+        host_branches
+    }
+
+    /// Return all nomad branches for specific hosts.
+    pub fn prune_hosts(self, hosts: &HashSet<&str>) -> Vec<HostBranch<Ref>> {
+        let Self {
+            mut host_branches, ..
+        } = self;
+        host_branches.retain(|hb| hosts.contains(hb.host.as_str()));
+        host_branches
+    }
+
     /// Return all [`HostBranch`]s grouped by host in sorted order.
     pub fn sorted_hosts_and_branches(self) -> Vec<(String, Vec<HostBranch<Ref>>)> {
         let mut by_host = HashMap::<String, Vec<HostBranch<Ref>>>::new();
@@ -151,10 +166,8 @@ mod tests {
         }
     }
 
-    /// [`Snapshot::prune`] should only remote branches for the current host.
-    #[test]
-    fn snapshot_prune_removes_branches() {
-        let snapshot = Snapshot {
+    fn snapshot() -> Snapshot<Ref> {
+        Snapshot {
             local_branches: iter::once(Branch::str("branch0")).collect(),
             host_branches: vec![
                 HostBranch {
@@ -173,12 +186,20 @@ mod tests {
                     ref_: Ref,
                 },
             ],
-        };
+        }
+    }
 
-        let prune = snapshot.prune(&Config {
+    fn config() -> Config {
+        Config {
             user: "user0".to_string(),
             host: "host0".to_string(),
-        });
+        }
+    }
+
+    /// [`Snapshot::prune`] should only remote branches for the current host.
+    #[test]
+    fn snapshot_prune_removes_missing_branches() {
+        let prune = snapshot().prune(&config());
 
         assert_eq!(
             prune,
@@ -187,6 +208,53 @@ mod tests {
                 branch: Branch::str("branch1"),
                 ref_: Ref,
             }]
+        );
+    }
+
+    /// [`Snapshot::prune_all`] should remove all branches.
+    #[test]
+    fn snapshot_prune_all() {
+        let prune = snapshot().prune_all();
+        assert_eq!(
+            prune,
+            vec![
+                HostBranch {
+                    host: "host0".to_string(),
+                    branch: Branch::str("branch0"),
+                    ref_: Ref,
+                },
+                HostBranch {
+                    host: "host0".to_string(),
+                    branch: Branch::str("branch1"),
+                    ref_: Ref,
+                },
+                HostBranch {
+                    host: "host1".to_string(),
+                    branch: Branch::str("branch1"),
+                    ref_: Ref,
+                },
+            ],
+        );
+    }
+
+    /// [`Snapshot::prune_hosts`] should only remove branches for specified hosts.
+    #[test]
+    fn snapshot_prune_hosts() {
+        let prune = snapshot().prune_hosts(&iter::once("host0").collect());
+        assert_eq!(
+            prune,
+            vec![
+                HostBranch {
+                    host: "host0".to_string(),
+                    branch: Branch::str("branch0"),
+                    ref_: Ref,
+                },
+                HostBranch {
+                    host: "host0".to_string(),
+                    branch: Branch::str("branch1"),
+                    ref_: Ref,
+                },
+            ],
         );
     }
 }

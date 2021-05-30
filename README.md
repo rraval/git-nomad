@@ -1,5 +1,7 @@
 # git-nomad
 
+> ⚠ This application is still in its prototype phase. Really bad things like data loss should not be possible and there's decent test coverage of the core workflows. That said, backwards incompatible iterations in response to public feedback are still on the table. Caveat emptor!
+
 Synchronize work-in-progress git branches in a light weight fashion. Motivation:
 
 - You frequently work on the same repository from multiple machines, like a laptop and a desktop.
@@ -143,9 +145,20 @@ Using refs like this has advantages:
 
 ## Installation
 
+### On NixOS / via Nix
+
 There is a [prototype Nix package available][nixpkg] but it has not been integrated into Nixpkgs yet.
 
+### From source
+
+If you have [`cargo`][cargo] available:
+
+```
+cargo install git-nomad
+```
+
+[cargo]: https://www.rust-lang.org/tools/install
 [git-cafs]: https://git-scm.com/book/en/v2/Git-Internals-Git-Objects
 [git-refs]: https://git-scm.com/book/en/v2/Git-Internals-Git-References
-[sync]: https://github.com/rraval/git-nomad/blob/master/src/command.rs
 [nixpkg]: https://github.com/rraval/nix/blob/master/git-nomad.nix
+[sync]: https://github.com/rraval/git-nomad/blob/master/src/command.rs

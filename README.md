@@ -83,4 +83,32 @@ rraval@boreas:~/git-nomad$ git checkout -b feature refs/nomad/apollo/feature
 
 ## How it works
 
+Git is unabashedly a [content-addressed filesystem][git-cafs] that manipulates `blob`, `tree`, and `commit` objects. Layered on top of this is a half decent version control system, though this claim is contentious at best.
+
+Git branches are implemented on top of [a more general scheme called `refs`][git-refs], where the local branch `master` is simply the commit pointed to by `refs/heads/master`. Git reserves a few hierarchies for its own use:
+
+- `refs/heads/*` represent local branches.
+- `refs/tags/*` represent tags.
+- `refs/remotes/*` represent remote branches.
+
+`git-nomad` works directly with refs to implement [its own light weight synchronization scheme][sync]:
+
+1. Push local `refs/heads/*` to remote `refs/nomad/{user}/{host}/*`. This allows multiple users on multiple hosts to all use `git-nomad` on the same remote without overwriting data.
+2. Fetch remote `refs/nomad/{user}/*` to local `refs/nomad/*`. This makes all the host refs for a given user available in a local clone.
+3. Prune local `refs/nomad/*` refs where the corresponding branch has been deleted.
+
+Using refs like this has advantages:
+
+- You only pay the storage cost for the content unique to the branch. The bulk of repository history is shared!
+- As refs get cleaned up, `git`s automatic garbage collection should reclaim space.
+- Since these refs are under a separate `refs/nomad` hierarchy, they are not subject to the usual fast-forward only rules.
+
 ## Installation
+
+FIXME: Publish to cargo.
+
+FIXME: Make this runnable under nix.
+
+[git-cafs]: https://git-scm.com/book/en/v2/Git-Internals-Git-Objects
+[git-refs]: https://git-scm.com/book/en/v2/Git-Internals-Git-References
+[sync]: https://github.com/rraval/git-nomad/blob/master/src/command.rs

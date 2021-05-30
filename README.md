@@ -39,8 +39,12 @@ Whenever you like, you can push the state of your local branches with:
 # Synchronizes with a remote called `origin` by default.
 # See `--help` for overriding this explicitly.
 rraval@apollo:~/git-nomad$ git nomad sync
-Pushing local branches to origin... 3s
+Pushing local branches to origin... 2s
 Fetching branches from origin... 1s
+
+apollo
+  refs/nomad/apollo/master -> fe8bf41bbaf201c0506b60677f03a23da2873fdc
+  refs/nomad/apollo/feature -> e02800d10b11ae03a93e43b8f7fc17b70dfe7acf
 ```
 
 ---
@@ -56,9 +60,26 @@ Wrote Config {
 }
 ```
 
-FIXME: needs a built in way to list nomad managed refs.
+You can now run `sync` on this new machine as well:
 
-FIXME: needs a way to purge nomad refs.
+```console
+rraval@boreas:~/git-nomad$ git nomad sync
+Pushing local branches to origin... 1s
+Fetching branches from origin... 1s
+
+apollo
+  refs/nomad/apollo/master -> fe8bf41bbaf201c0506b60677f03a23da2873fdc
+  refs/nomad/apollo/feature -> e02800d10b11ae03a93e43b8f7fc17b70dfe7acf
+boreas
+  refs/nomad/boreas/master -> fe8bf41bbaf201c0506b60677f03a23da2873fdc
+```
+
+Which prints out refs to use to pick up where you left off:
+
+```console
+rraval@boreas:~/git-nomad$ git checkout -b feature refs/nomad/apollo/feature
+# Hack away
+```
 
 ## How it works
 

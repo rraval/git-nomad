@@ -43,8 +43,8 @@ Pushing local branches to origin... 2s
 Fetching branches from origin... 1s
 
 apollo
-  refs/nomad/apollo/master -> fe8bf41bbaf201c0506b60677f03a23da2873fdc
   refs/nomad/apollo/feature -> e02800d10b11ae03a93e43b8f7fc17b70dfe7acf
+  refs/nomad/apollo/master -> fe8bf41bbaf201c0506b60677f03a23da2873fdc
 ```
 
 ---
@@ -68,8 +68,8 @@ Pushing local branches to origin... 1s
 Fetching branches from origin... 1s
 
 apollo
-  refs/nomad/apollo/master -> fe8bf41bbaf201c0506b60677f03a23da2873fdc
   refs/nomad/apollo/feature -> e02800d10b11ae03a93e43b8f7fc17b70dfe7acf
+  refs/nomad/apollo/master -> fe8bf41bbaf201c0506b60677f03a23da2873fdc
 boreas
   refs/nomad/boreas/master -> fe8bf41bbaf201c0506b60677f03a23da2873fdc
 ```
@@ -78,7 +78,43 @@ Which prints out refs to use to pick up where you left off:
 
 ```console
 rraval@boreas:~/git-nomad$ git checkout -b feature refs/nomad/apollo/feature
-# Hack away
+# Hack away where you left off on apollo
+```
+
+---
+
+Let's say that the `boreas` machine is where development is happening now, so
+you go back to `apollo` to throw away the now outdated branch:
+
+```console
+rraval@apollo:~/git-nomad$ git checkout master
+rraval@apollo:~/git-nomad$ git branch -D feature
+Deleted branch feature (was e02800d).
+
+rraval@apollo:~/git-nomad$ git nomad sync
+Pushing local branches to origin... 1s
+Fetching branches from origin... 1s
+Pruning branches at origin... 2s
+  Delete refs/nomad/apollo/feature... 0s
+
+apollo
+  refs/nomad/apollo/master -> fe8bf41bbaf201c0506b60677f03a23da2873fdc
+boreas
+  refs/nomad/boreas/feature -> 3187d762ca557bfa741bc07d47e0b7f8c1777400
+  refs/nomad/boreas/master -> fe8bf41bbaf201c0506b60677f03a23da2873fdc
+```
+
+---
+
+If you'd like to stop using `git-nomad` and clean up all the refs it has created:
+
+```console
+# Needs to be run once per clone where `git nomad init` has been run.
+# See also the `prune --host` option.
+rraval@apollo:~/git-nomad$ git nomad prune --all
+Fetching branches from origin... 1s
+Pruning branches at origin... 2s
+  Delete refs/nomad/apollo/master... 0s
 ```
 
 ## How it works
@@ -105,10 +141,9 @@ Using refs like this has advantages:
 
 ## Installation
 
-FIXME: Publish to cargo.
-
-FIXME: Make this runnable under nix.
+There is a [prototype Nix package available][nixpkg] but it has not been integrated into Nixpkgs yet.
 
 [git-cafs]: https://git-scm.com/book/en/v2/Git-Internals-Git-Objects
 [git-refs]: https://git-scm.com/book/en/v2/Git-Internals-Git-References
 [sync]: https://github.com/rraval/git-nomad/blob/master/src/command.rs
+[nixpkg]: https://github.com/rraval/nix/blob/master/git-nomad.nix

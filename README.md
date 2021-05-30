@@ -1,6 +1,6 @@
 # git-nomad
 
-> ⚠ This application is still in its prototype phase. Really bad things like data loss should not be possible and there's decent test coverage of the core workflows. That said, backwards incompatible iterations in response to public feedback are still on the table. Caveat emptor!
+> ⚠ This application is still in its prototype phase. Really bad things like data loss should not be possible and there's decent test coverage of the core workflows. That said, backwards incompatible iterations in response to public feedback are still on the table. [Help make things better...](#contributing)
 
 Synchronize work-in-progress git branches in a light weight fashion. Motivation:
 
@@ -157,8 +157,16 @@ If you have [`cargo`][cargo] available:
 cargo install git-nomad
 ```
 
+## Contributing
+
+There are a few ways to make this project better:
+
+1. Try it and [file issues][new-issue] when things break. Use the `-vvv` flag to capture all information about the commands that were run.
+2. Build packages for various operating systems.
+
 [cargo]: https://www.rust-lang.org/tools/install
 [git-cafs]: https://git-scm.com/book/en/v2/Git-Internals-Git-Objects
 [git-refs]: https://git-scm.com/book/en/v2/Git-Internals-Git-References
+[new-issue]: https://github.com/rraval/git-nomad/issues/new
 [nixpkg]: https://github.com/rraval/nix/blob/master/git-nomad.nix
 [sync]: https://github.com/rraval/git-nomad/blob/master/src/command.rs

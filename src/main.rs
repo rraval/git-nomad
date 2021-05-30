@@ -2,7 +2,8 @@ use std::{collections::HashSet, env::current_dir};
 
 use anyhow::{bail, Context, Result};
 use clap::{
-    crate_authors, crate_description, crate_name, App, AppSettings, Arg, ArgMatches, SubCommand,
+    crate_authors, crate_description, crate_name, crate_version, App, AppSettings, Arg, ArgMatches,
+    SubCommand,
 };
 
 use crate::{
@@ -34,6 +35,7 @@ fn main() -> Result<()> {
     let matches = App::new("git nomad")
         .settings(&[AppSettings::SubcommandRequiredElseHelp])
         .name(crate_name!())
+        .version(crate_version!())
         .author(crate_authors!())
         .about(crate_description!())
         .arg(

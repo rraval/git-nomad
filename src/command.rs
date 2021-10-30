@@ -69,9 +69,9 @@ pub fn prune<B: Backend, F>(backend: B, config: &Config, remote: &Remote, to_pru
 where
     F: Fn(Snapshot<B::Ref>) -> Vec<HostBranch<B::Ref>>,
 {
-    backend.fetch(&config, &remote)?;
+    backend.fetch(config, remote)?;
     let snapshot = backend.snapshot()?;
     let prune = to_prune(snapshot);
-    backend.prune(&config, &remote, prune.iter())?;
+    backend.prune(config, remote, prune.iter())?;
     Ok(())
 }

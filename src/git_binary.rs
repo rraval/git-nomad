@@ -588,7 +588,6 @@ mod test_backend {
     use std::{
         collections::HashSet,
         fs::{create_dir, write},
-        iter,
         path::PathBuf,
     };
 
@@ -604,7 +603,7 @@ mod test_backend {
 
     const GIT: &str = "git";
     const ORIGIN: &str = "origin";
-    const BRANCH: &str = "branch0";
+    const INITIAL_BRANCH: &str = "master";
     const USER: &str = "user0";
 
     const PROGRESS: Progress = Progress::Verbose(Verbosity::CommandAndOutput);
@@ -634,7 +633,7 @@ mod test_backend {
                 };
 
                 create_dir(remote_dir).unwrap();
-                git(&["init", "--initial-branch", BRANCH]);
+                git(&["init", "--initial-branch", INITIAL_BRANCH]);
 
                 let file0 = remote_dir.join("file0");
                 write(file0, "line0\nline1\n").unwrap();
@@ -707,20 +706,23 @@ mod test_backend {
             self.git.fetch(&self.config, &self.remote()).unwrap()
         }
 
-        fn prune(&self) {
-            let ref_name = namespace::local_ref(&self.config, BRANCH);
-            let git_ref = self.git.get_ref("", ref_name).unwrap();
+        fn prune<'b, B: IntoIterator<Item = &'b str>>(&self, branch_names: B) {
+            let host_branches: Vec<_> = branch_names
+                .into_iter()
+                .map(|name| {
+                    let ref_name = namespace::local_ref(&self.config, name);
+                    let ref_ = self.git.get_ref("", ref_name).unwrap();
+
+                    HostBranch {
+                        host: self.config.host.clone(),
+                        branch: Branch::str(name),
+                        ref_,
+                    }
+                })
+                .collect();
 
             self.git
-                .prune(
-                    &self.config,
-                    &self.remote(),
-                    iter::once(&HostBranch {
-                        host: self.config.host.clone(),
-                        branch: Branch::str(BRANCH),
-                        ref_: git_ref,
-                    }),
-                )
+                .prune(&self.config, &self.remote(), host_branches.iter())
                 .unwrap();
         }
     }
@@ -749,8 +751,8 @@ mod test_backend {
 
         assert_eq!(ref_names(&refs), {
             let mut set: HashSet<String> = HashSet::new();
-            set.insert(format!("refs/heads/{}", BRANCH));
-            set.insert(namespace::remote_ref(&host0.config, BRANCH));
+            set.insert(format!("refs/heads/{}", INITIAL_BRANCH));
+            set.insert(namespace::remote_ref(&host0.config, INITIAL_BRANCH));
             set
         });
 
@@ -774,10 +776,10 @@ mod test_backend {
             let mut set: HashSet<String> = HashSet::new();
 
             // the local branch
-            set.insert(format!("refs/heads/{}", BRANCH));
+            set.insert(format!("refs/heads/{}", INITIAL_BRANCH));
 
             // the remote branch and what's checked out
-            set.insert(format!("refs/remotes/{}/{}", ORIGIN, BRANCH));
+            set.insert(format!("refs/remotes/{}/{}", ORIGIN, INITIAL_BRANCH));
             set.insert(format!("refs/remotes/{}/HEAD", ORIGIN));
 
             set
@@ -805,7 +807,7 @@ mod test_backend {
             assert_eq!(ref_names(&refs), {
                 let mut set = pre_fetch_refs();
                 // the additional ref from the host0 push
-                set.insert(namespace::local_ref(&host0.config, BRANCH));
+                set.insert(namespace::local_ref(&host0.config, INITIAL_BRANCH));
                 set
             });
             assert_eq!(
@@ -814,7 +816,7 @@ mod test_backend {
                     .snapshot()
                     .unwrap()
                     .branches_for_host(&host0.config),
-                vec![Branch::str(BRANCH)]
+                vec![Branch::str(INITIAL_BRANCH)]
             );
         }
     }
@@ -858,7 +860,7 @@ mod test_backend {
         let empty_set = HashSet::new();
         let branch_set = {
             let mut set = HashSet::new();
-            set.insert(BRANCH.to_string());
+            set.insert(INITIAL_BRANCH.to_string());
             set
         };
 
@@ -877,7 +879,7 @@ mod test_backend {
         assert_eq!(local_nomad_refs(), branch_set);
 
         // Pruning removes the ref remotely and locally
-        local.prune();
+        local.prune([INITIAL_BRANCH]);
         assert_eq!(remote_nomad_refs(), empty_set);
         assert_eq!(local_nomad_refs(), empty_set);
     }

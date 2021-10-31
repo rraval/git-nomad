@@ -62,7 +62,7 @@ pub struct Snapshot<Ref: Display> {
 impl<Ref: Display> Snapshot<Ref> {
     /// Find nomad host branches that can be pruned because the local branch they were based on no
     /// longer exists.
-    pub fn prune(self, config: &Config) -> Vec<HostBranch<Ref>> {
+    pub fn prune_locally_deleted_branches(self, config: &Config) -> Vec<HostBranch<Ref>> {
         let Self {
             mut host_branches,
             local_branches,
@@ -78,7 +78,7 @@ impl<Ref: Display> Snapshot<Ref> {
     }
 
     /// Return all nomad branches for specific hosts.
-    pub fn prune_hosts(self, hosts: &HashSet<&str>) -> Vec<HostBranch<Ref>> {
+    pub fn prune_all_by_hosts(self, hosts: &HashSet<&str>) -> Vec<HostBranch<Ref>> {
         let Self {
             mut host_branches, ..
         } = self;
@@ -196,10 +196,11 @@ mod tests {
         }
     }
 
-    /// [`Snapshot::prune`] should only remote branches for the current host.
+    /// [`Snapshot::prune_locally_deleted_branches`] should only remove branches for the current
+    /// host.
     #[test]
     fn snapshot_prune_removes_missing_branches() {
-        let prune = snapshot().prune(&config());
+        let prune = snapshot().prune_locally_deleted_branches(&config());
 
         assert_eq!(
             prune,
@@ -237,10 +238,10 @@ mod tests {
         );
     }
 
-    /// [`Snapshot::prune_hosts`] should only remove branches for specified hosts.
+    /// [`Snapshot::prune_all_by_hosts`] should only remove branches for specified hosts.
     #[test]
     fn snapshot_prune_hosts() {
-        let prune = snapshot().prune_hosts(&iter::once("host0").collect());
+        let prune = snapshot().prune_all_by_hosts(&iter::once("host0").collect());
         assert_eq!(
             prune,
             vec![

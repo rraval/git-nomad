@@ -156,7 +156,9 @@ fn main() -> Result<()> {
                     command::prune(git, &config, &remote, |snapshot| snapshot.prune_all())
                 } else if let Some(hosts) = matches.values_of("host") {
                     let set = hosts.collect::<HashSet<_>>();
-                    command::prune(git, &config, &remote, |snapshot| snapshot.prune_hosts(&set))
+                    command::prune(git, &config, &remote, |snapshot| {
+                        snapshot.prune_all_by_hosts(&set)
+                    })
                 } else {
                     bail!("Must specify --all or --host");
                 }

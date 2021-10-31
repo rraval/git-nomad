@@ -36,7 +36,11 @@ pub fn sync<B: Backend>(
     backend.push(config, remote)?;
     backend.fetch(config, remote)?;
     let snapshot = backend.snapshot()?;
-    backend.prune(config, remote, snapshot.prune(config).iter())?;
+    backend.prune(
+        config,
+        remote,
+        snapshot.prune_locally_deleted_branches(config).iter(),
+    )?;
 
     if progress.is_output_allowed() {
         println!();

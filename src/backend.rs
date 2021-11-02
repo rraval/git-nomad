@@ -2,6 +2,7 @@
 use std::{
     collections::{HashMap, HashSet},
     fmt::Display,
+    hash::Hash,
 };
 
 use anyhow::Result;
@@ -51,6 +52,17 @@ pub struct HostBranch<Ref> {
     pub ref_: Ref,
 }
 
+/// A nomad managed ref from a remote, which may belong to an entirely different user.
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub struct RemoteHostBranch {
+    /// The user this branch belongs to.
+    pub user: String,
+    /// The host this branch comes from.
+    pub host: String,
+    /// The branch name.
+    pub branch: Branch,
+}
+
 /// A point in time view of refs we care about.
 pub struct Snapshot<Ref: Display> {
     /// The active branches in this clone that the user manipulates directly with `git branch` etc.
@@ -59,31 +71,68 @@ pub struct Snapshot<Ref: Display> {
     pub host_branches: Vec<HostBranch<Ref>>,
 }
 
+/// Describes where a ref should be removed from.
+#[derive(Debug, PartialEq, Eq)]
+pub enum PruneFrom<Ref> {
+    LocalOnly(HostBranch<Ref>),
+    LocalAndRemote(HostBranch<Ref>),
+}
+
 impl<Ref: Display> Snapshot<Ref> {
-    /// Find nomad host branches that can be pruned because the local branch they were based on no
-    /// longer exists.
-    pub fn prune_locally_deleted_branches(self, config: &Config) -> Vec<HostBranch<Ref>> {
+    /// Find nomad host branches that can be pruned because:
+    /// 1. The local branch they were based on no longer exists.
+    /// 2. The remote branch they were based on no longer exists.
+    pub fn prune_deleted_branches(
+        self,
+        config: &Config,
+        remote_host_branches: &HashSet<RemoteHostBranch>,
+    ) -> Vec<PruneFrom<Ref>> {
         let Self {
-            mut host_branches,
+            host_branches,
             local_branches,
         } = self;
-        host_branches.retain(|hb| hb.host == config.host && !local_branches.contains(&hb.branch));
-        host_branches
+
+        let mut prune = Vec::<PruneFrom<Ref>>::new();
+
+        for hb in host_branches {
+            if hb.host == config.host {
+                if !local_branches.contains(&hb.branch) {
+                    prune.push(PruneFrom::LocalAndRemote(hb));
+                }
+            } else if !remote_host_branches.contains(&RemoteHostBranch {
+                user: config.user.clone(),
+                host: hb.host.clone(),
+                branch: hb.branch.clone(),
+            }) {
+                prune.push(PruneFrom::LocalOnly(hb));
+            }
+        }
+
+        prune
     }
 
     /// Return all nomad branches regardless of host.
-    pub fn prune_all(self) -> Vec<HostBranch<Ref>> {
+    pub fn prune_all(self) -> Vec<PruneFrom<Ref>> {
         let Self { host_branches, .. } = self;
         host_branches
+            .into_iter()
+            .map(PruneFrom::LocalAndRemote)
+            .collect()
     }
 
     /// Return all nomad branches for specific hosts.
-    pub fn prune_all_by_hosts(self, hosts: &HashSet<&str>) -> Vec<HostBranch<Ref>> {
-        let Self {
-            mut host_branches, ..
-        } = self;
-        host_branches.retain(|hb| hosts.contains(hb.host.as_str()));
+    pub fn prune_all_by_hosts(self, hosts: &HashSet<&str>) -> Vec<PruneFrom<Ref>> {
+        let Self { host_branches, .. } = self;
         host_branches
+            .into_iter()
+            .filter_map(|hb| {
+                if !hosts.contains(hb.host.as_str()) {
+                    return None;
+                }
+
+                Some(PruneFrom::LocalAndRemote(hb))
+            })
+            .collect()
     }
 
     /// Return all [`HostBranch`]s grouped by host in sorted order.
@@ -137,7 +186,7 @@ pub trait Backend {
     fn snapshot(&self) -> Result<Snapshot<Self::Ref>>;
 
     /// Fetch all nomad managed refs from a given remote.
-    fn fetch(&self, config: &Config, remote: &Remote) -> Result<()>;
+    fn fetch(&self, config: &Config, remote: &Remote) -> Result<HashSet<RemoteHostBranch>>;
 
     /// Push local branches to nomad managed refs in the remote.
     fn push(&self, config: &Config, remote: &Remote) -> Result<()>;
@@ -146,16 +195,20 @@ pub trait Backend {
     fn prune<'a, Prune>(&self, config: &Config, remote: &Remote, prune: Prune) -> Result<()>
     where
         Self::Ref: 'a,
-        Prune: Iterator<Item = &'a HostBranch<Self::Ref>>;
+        Prune: Iterator<Item = &'a PruneFrom<Self::Ref>>;
 }
 
 #[cfg(test)]
 mod tests {
-    use std::{fmt, iter};
+    use std::{
+        collections::HashSet,
+        fmt,
+        iter::{self, FromIterator},
+    };
 
-    use crate::backend::{Config, HostBranch};
+    use crate::backend::{Config, HostBranch, PruneFrom};
 
-    use super::{Branch, Snapshot};
+    use super::{Branch, RemoteHostBranch, Snapshot};
 
     #[derive(Debug, PartialEq, Eq)]
     struct Ref;
@@ -166,9 +219,9 @@ mod tests {
         }
     }
 
-    fn snapshot() -> Snapshot<Ref> {
+    fn snapshot(local_branches: impl IntoIterator<Item = &'static str>) -> Snapshot<Ref> {
         Snapshot {
-            local_branches: iter::once(Branch::str("branch0")).collect(),
+            local_branches: local_branches.into_iter().map(Branch::str).collect(),
             host_branches: vec![
                 HostBranch {
                     host: "host0".to_string(),
@@ -196,44 +249,151 @@ mod tests {
         }
     }
 
-    /// [`Snapshot::prune_locally_deleted_branches`] should only remove branches for the current
-    /// host.
+    fn remote_host_branches(
+        collection: impl IntoIterator<Item = (&'static str, &'static str, &'static str)>,
+    ) -> HashSet<RemoteHostBranch> {
+        HashSet::from_iter(
+            collection
+                .into_iter()
+                .map(|(user, host, branch)| RemoteHostBranch {
+                    user: user.to_string(),
+                    host: host.to_string(),
+                    branch: Branch::str(branch),
+                }),
+        )
+    }
+
+    /// Sets up the scenario where:
+    ///
+    ///     There are local branches
+    ///     ... That DO NOT have nomad refs
+    ///
+    ///     There are local nomad refs from other hosts
+    ///     ... That have corresponding remote nomad refs
+    ///
+    /// In this case, we should prune nothing.
     #[test]
-    fn snapshot_prune_removes_missing_branches() {
-        let prune = snapshot().prune_locally_deleted_branches(&config());
+    fn snapshot_prune_does_nothing0() {
+        let prune = snapshot(["branch0", "branch1"]).prune_deleted_branches(
+            &config(),
+            &remote_host_branches([("user0", "host1", "branch1")]),
+        );
+
+        assert_eq!(prune, Vec::new(),);
+    }
+
+    /// Sets up the scenario where:
+    ///
+    ///     There are local branches
+    ///     ... That have nomad refs
+    ///
+    ///     There are local nomad refs from other hosts
+    ///     ... That have corresponding remote nomad refs
+    ///
+    /// In this case, we should prune nothing.
+    #[test]
+    fn snapshot_prune_does_nothing1() {
+        let prune = snapshot(["branch0", "branch1"]).prune_deleted_branches(
+            &config(),
+            &remote_host_branches([
+                ("user0", "host0", "branch0"),
+                ("user0", "host0", "branch1"),
+                ("user0", "host1", "branch1"),
+            ]),
+        );
+
+        assert_eq!(prune, Vec::new(),);
+    }
+
+    /// Sets up the scenario where:
+    ///
+    ///     There are NO local branches
+    ///     ... That have nomad refs
+    ///
+    ///     There are local nomad refs from other hosts
+    ///     ... That have corresponding remote nomad refs
+    ///
+    /// In this case, we should remove the nomad refs for the local branches that no longer exist.
+    #[test]
+    fn snapshot_prune_removes_local_missing_branches() {
+        let prune = snapshot([
+            "branch0",
+            // This branch has been removed
+            // "branch1",
+        ])
+        .prune_deleted_branches(
+            &config(),
+            &remote_host_branches([
+                ("user0", "host0", "branch0"),
+                ("user0", "host0", "branch1"),
+                ("user0", "host1", "branch1"),
+            ]),
+        );
 
         assert_eq!(
             prune,
-            vec![HostBranch {
+            vec![PruneFrom::LocalAndRemote(HostBranch {
                 host: "host0".to_string(),
                 branch: Branch::str("branch1"),
                 ref_: Ref,
-            }]
+            })]
+        );
+    }
+
+    /// Sets up the scenario where:
+    ///
+    ///     There are local branches
+    ///     ... That have nomad refs
+    ///
+    ///     There are local nomad refs from other hosts
+    ///     ... That DO NOT have corresponding remote nomad refs
+    ///
+    /// In this case, we should remove the local nomad refs from other hosts since the
+    /// corresponding remote refs no longer exist.
+    #[test]
+    fn snapshot_prune_removes_remote_missing_branches() {
+        let prune = snapshot(["branch0", "branch1"]).prune_deleted_branches(
+            &config(),
+            &remote_host_branches([
+                ("user0", "host0", "branch0"),
+                ("user0", "host0", "branch1"),
+                // This remote nomad ref for another host has been removed
+                // ("user0", "host1", "branch1"),
+            ]),
+        );
+
+        assert_eq!(
+            prune,
+            vec![PruneFrom::LocalOnly(HostBranch {
+                host: "host1".to_string(),
+                branch: Branch::str("branch1"),
+                ref_: Ref,
+            })]
         );
     }
 
     /// [`Snapshot::prune_all`] should remove all branches.
     #[test]
     fn snapshot_prune_all() {
-        let prune = snapshot().prune_all();
+        let prune = snapshot(["branch0", "branch1"]).prune_all();
         assert_eq!(
             prune,
             vec![
-                HostBranch {
+                PruneFrom::LocalAndRemote(HostBranch {
                     host: "host0".to_string(),
                     branch: Branch::str("branch0"),
                     ref_: Ref,
-                },
-                HostBranch {
+                },),
+                PruneFrom::LocalAndRemote(HostBranch {
                     host: "host0".to_string(),
                     branch: Branch::str("branch1"),
                     ref_: Ref,
-                },
-                HostBranch {
+                },),
+                PruneFrom::LocalAndRemote(HostBranch {
                     host: "host1".to_string(),
                     branch: Branch::str("branch1"),
                     ref_: Ref,
-                },
+                },),
             ],
         );
     }
@@ -241,20 +401,21 @@ mod tests {
     /// [`Snapshot::prune_all_by_hosts`] should only remove branches for specified hosts.
     #[test]
     fn snapshot_prune_hosts() {
-        let prune = snapshot().prune_all_by_hosts(&iter::once("host0").collect());
+        let prune =
+            snapshot(["branch0", "branch1"]).prune_all_by_hosts(&iter::once("host0").collect());
         assert_eq!(
             prune,
             vec![
-                HostBranch {
+                PruneFrom::LocalAndRemote(HostBranch {
                     host: "host0".to_string(),
                     branch: Branch::str("branch0"),
                     ref_: Ref,
-                },
-                HostBranch {
+                },),
+                PruneFrom::LocalAndRemote(HostBranch {
                     host: "host0".to_string(),
                     branch: Branch::str("branch1"),
                     ref_: Ref,
-                },
+                },),
             ],
         );
     }

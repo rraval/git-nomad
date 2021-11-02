@@ -43,6 +43,7 @@ Whenever you like, you can push the state of your local branches with:
 rraval@apollo:~/git-nomad$ git nomad sync
 Pushing local branches to origin... 2s
 Fetching branches from origin... 1s
+Listing branches at origin... 0s
 
 apollo
   refs/nomad/apollo/feature -> e02800d10b11ae03a93e43b8f7fc17b70dfe7acf
@@ -68,6 +69,7 @@ You can now run `sync` on this new machine as well:
 rraval@boreas:~/git-nomad$ git nomad sync
 Pushing local branches to origin... 1s
 Fetching branches from origin... 1s
+Listing branches at origin... 0s
 
 apollo
   refs/nomad/apollo/feature -> e02800d10b11ae03a93e43b8f7fc17b70dfe7acf
@@ -96,6 +98,7 @@ Deleted branch feature (was e02800d).
 rraval@apollo:~/git-nomad$ git nomad sync
 Pushing local branches to origin... 1s
 Fetching branches from origin... 1s
+Listing branches at origin... 0s
 Pruning branches at origin... 2s
   Delete refs/nomad/apollo/feature (was e02800d10b11ae03a93e43b8f7fc17b70dfe7acf)... 0s
 
@@ -115,6 +118,7 @@ If you'd like to stop using `git-nomad` and clean up all the refs it has created
 # See also the `prune --host` option.
 rraval@apollo:~/git-nomad$ git nomad prune --all
 Fetching branches from origin... 1s
+Listing branches at origin... 0s
 Pruning branches at origin... 2s
   Delete refs/nomad/apollo/master (was fe8bf41bbaf201c0506b60677f03a23da2873fdc)... 0s
   Delete refs/nomad/boreas/feature (was 3187d762ca557bfa741bc07d47e0b7f8c1777400)... 0s

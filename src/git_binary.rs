@@ -4,7 +4,7 @@ use anyhow::{bail, Result};
 use std::{collections::HashSet, ffi::OsStr, path::Path, process::Command};
 
 use crate::{
-    backend::{Backend, Branch, Config, HostBranch, Remote, Snapshot},
+    backend::{Backend, Branch, Config, HostBranch, PruneFrom, Remote, RemoteHostBranch, Snapshot},
     git_ref::GitRef,
     progress::{output_stdout, Progress, Run},
 };
@@ -38,7 +38,7 @@ fn git_command<S: AsRef<OsStr>>(name: S) -> Command {
 /// both built-in and third party.
 mod namespace {
     use crate::{
-        backend::{Branch, Config, HostBranch},
+        backend::{Branch, Config, HostBranch, RemoteHostBranch},
         git_ref::GitRef,
     };
 
@@ -51,6 +51,15 @@ mod namespace {
         format!("{}.{}", PREFIX, key)
     }
 
+    /// The refspec to list remote nomad managed refs.
+    pub fn list_refspec(config: &Config) -> String {
+        format!(
+            "refs/{prefix}/{user}/*",
+            prefix = PREFIX,
+            user = config.user
+        )
+    }
+
     /// The refspec to fetch remote nomad managed refs as local refs.
     ///
     /// `refs/nomad/rraval/apollo/master` becomes `refs/nomad/apollo/master`.
@@ -58,9 +67,9 @@ mod namespace {
     /// `refs/nomad/rraval/boreas/feature` becomes `refs/nomad/boreas/feature`.
     pub fn fetch_refspec(config: &Config) -> String {
         format!(
-            "+refs/{prefix}/{user}/*:refs/{prefix}/*",
+            "+{remote_pattern}:refs/{prefix}/*",
+            remote_pattern = list_refspec(config),
             prefix = PREFIX,
-            user = config.user
         )
     }
 
@@ -94,7 +103,7 @@ mod namespace {
         format!("refs/{}/{}/{}/{}", PREFIX, config.user, config.host, branch)
     }
 
-    pub fn as_host_branch(git_ref: GitRef) -> Result<HostBranch<GitRef>, GitRef> {
+    pub fn host_branch_from_local_ref(git_ref: GitRef) -> Result<HostBranch<GitRef>, GitRef> {
         let parts = git_ref.name.split('/').collect::<Vec<_>>();
         match parts.as_slice() {
             ["refs", prefix, host, branch_name] => {
@@ -112,19 +121,39 @@ mod namespace {
         }
     }
 
+    pub fn host_branch_from_remote_ref(git_ref: GitRef) -> Result<RemoteHostBranch, GitRef> {
+        let parts = git_ref.name.split('/').collect::<Vec<_>>();
+        match parts.as_slice() {
+            ["refs", prefix, user, host, branch_name] => {
+                if prefix != &PREFIX {
+                    return Err(git_ref);
+                }
+
+                Ok(RemoteHostBranch {
+                    user: user.to_string(),
+                    host: host.to_string(),
+                    branch: Branch::str(branch_name),
+                })
+            }
+            _ => Err(git_ref),
+        }
+    }
+
     #[cfg(test)]
     mod tests {
         use crate::{
-            backend::{Branch, Config, HostBranch},
+            backend::{Branch, Config, HostBranch, RemoteHostBranch},
             git_ref::GitRef,
         };
 
-        use super::{as_host_branch, local_ref};
+        use super::{
+            host_branch_from_local_ref, host_branch_from_remote_ref, local_ref, remote_ref,
+        };
 
-        /// [`as_host_branch`] should be able to parse ref names produced by [`local_ref`] (they
+        /// [`host_branch_from_local_ref`] should be able to parse ref names produced by [`local_ref`] (they
         /// are duals).
         #[test]
-        fn test_create_and_parse() {
+        fn test_create_and_parse_local_ref() {
             let git_ref = GitRef {
                 commit_id: "some_commit_id".to_string(),
                 name: local_ref(
@@ -137,11 +166,36 @@ mod namespace {
             };
 
             assert_eq!(
-                as_host_branch(git_ref.clone()),
+                host_branch_from_local_ref(git_ref.clone()),
                 Ok(HostBranch {
                     host: "host0".to_string(),
                     branch: Branch::str("branch0"),
                     ref_: git_ref,
+                })
+            );
+        }
+
+        /// [`host_branch_from_remote_ref`] should be able to parse ref names produced by
+        /// [`remote_ref`] (they are duals).
+        #[test]
+        fn test_create_and_parse_remote_ref() {
+            let git_ref = GitRef {
+                commit_id: "some_commit_id".to_string(),
+                name: remote_ref(
+                    &Config {
+                        user: "user0".to_string(),
+                        host: "host0".to_string(),
+                    },
+                    "branch0",
+                ),
+            };
+
+            assert_eq!(
+                host_branch_from_remote_ref(git_ref),
+                Ok(RemoteHostBranch {
+                    user: "user0".to_string(),
+                    host: "host0".to_string(),
+                    branch: Branch::str("branch0"),
                 })
             );
         }
@@ -322,6 +376,39 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
             .collect()
     }
 
+    /// Wraps `git ls-remote` to query a remote for all refs that match the given `refspecs`.
+    ///
+    /// # Panics
+    ///
+    /// If `refspecs` is empty, which means git will list all refs, which is never what we want.
+    fn list_remote_refs<Description, RefSpec>(
+        &self,
+        description: Description,
+        remote: &Remote,
+        refspecs: &[RefSpec],
+    ) -> Result<Vec<GitRef>>
+    where
+        Description: AsRef<str>,
+        RefSpec: AsRef<OsStr>,
+    {
+        assert!(!refspecs.is_empty());
+        let output = self
+            .progress
+            .run(
+                Run::Notable,
+                description,
+                self.command()
+                    .arg("ls-remote")
+                    .arg(&remote.0)
+                    .args(refspecs),
+            )
+            .and_then(output_stdout)?;
+        output
+            .lines()
+            .map(|line| GitRef::parse_ls_remote_line(line).map_err(Into::into))
+            .collect()
+    }
+
     /// Delete a ref from the repository.
     ///
     /// Note that deleting refs on a remote is done via [`GitBinary::push_refspecs`].
@@ -375,7 +462,7 @@ impl<'progress, 'name> Backend for GitBinary<'progress, 'name> {
                 local_branches.insert(Branch::str(name));
             }
 
-            if let Ok(host_branch) = namespace::as_host_branch(r) {
+            if let Ok(host_branch) = namespace::host_branch_from_local_ref(r) {
                 host_branches.push(host_branch);
             }
         }
@@ -386,12 +473,28 @@ impl<'progress, 'name> Backend for GitBinary<'progress, 'name> {
         })
     }
 
-    fn fetch(&self, config: &Config, remote: &Remote) -> Result<()> {
+    fn fetch(&self, config: &Config, remote: &Remote) -> Result<HashSet<RemoteHostBranch>> {
         self.fetch_refspecs(
             format!("Fetching branches from {}", remote.0),
             remote,
             &[&namespace::fetch_refspec(config)],
-        )
+        )?;
+
+        // In an ideal world, we would be able to get the list of refs fetched directly from `git`.
+        //
+        // However, `git fetch` is a porcelain command and we don't want to get into parsing its
+        // output, so do an entirely separate network fetch with the plumbing `git ls-remote` which
+        // we can parse instead.
+        let remote_refs = self.list_remote_refs(
+            format!("Listing branches at {}", remote.0),
+            remote,
+            &[&namespace::list_refspec(config)],
+        )?;
+
+        Ok(remote_refs
+            .into_iter()
+            .filter_map(|ref_| namespace::host_branch_from_remote_ref(ref_).ok())
+            .collect())
     }
 
     fn push(&self, config: &Config, remote: &Remote) -> Result<()> {
@@ -404,18 +507,26 @@ impl<'progress, 'name> Backend for GitBinary<'progress, 'name> {
 
     fn prune<'b, Prune>(&self, config: &Config, remote: &Remote, prune: Prune) -> Result<()>
     where
-        Prune: Iterator<Item = &'b HostBranch<GitRef>>,
+        Prune: Iterator<Item = &'b PruneFrom<GitRef>>,
     {
         let mut refspecs = Vec::<String>::new();
         let mut refs = Vec::<GitRef>::new();
 
-        for host_branch in prune {
-            refspecs.push(format!(
-                ":{}",
-                namespace::remote_ref(config, &host_branch.branch.0)
-            ));
+        for prune_from in prune {
+            if let PruneFrom::LocalAndRemote(hb) = prune_from {
+                refspecs.push(format!(
+                    ":{}",
+                    namespace::remote_ref(config, &hb.branch.0)
+                ));
+            }
 
-            refs.push(host_branch.ref_.clone());
+            refs.push(
+                match prune_from {
+                    PruneFrom::LocalOnly(hb) | PruneFrom::LocalAndRemote(hb) => hb,
+                }
+                .ref_
+                .clone(),
+            );
         }
 
         // Delete from the remote first
@@ -588,16 +699,13 @@ mod test_backend {
     use std::{
         collections::HashSet,
         fs::{create_dir, write},
+        iter::FromIterator,
         path::PathBuf,
     };
 
     use tempfile::{tempdir, TempDir};
 
-    use crate::{
-        backend::{Backend, Branch, Config, HostBranch, Remote},
-        git_binary::namespace,
-        progress::{Progress, Run, Verbosity},
-    };
+    use crate::{backend::{Backend, Branch, Config, HostBranch, PruneFrom, Remote, RemoteHostBranch}, git_binary::namespace, progress::{Progress, Run, Verbosity}};
 
     use super::{git_command, GitBinary, GitRef};
 
@@ -702,27 +810,27 @@ mod test_backend {
             self.git.push(&self.config, &self.remote()).unwrap();
         }
 
-        fn fetch(&self) {
+        fn fetch(&self) -> HashSet<RemoteHostBranch> {
             self.git.fetch(&self.config, &self.remote()).unwrap()
         }
 
-        fn prune<'b, B: IntoIterator<Item = &'b str>>(&self, branch_names: B) {
-            let host_branches: Vec<_> = branch_names
+        fn prune_local_and_remote<'b, B: IntoIterator<Item = &'b str>>(&self, branch_names: B) {
+            let prune_from: Vec<_> = branch_names
                 .into_iter()
                 .map(|name| {
                     let ref_name = namespace::local_ref(&self.config, name);
                     let ref_ = self.git.get_ref("", ref_name).unwrap();
 
-                    HostBranch {
+                    PruneFrom::LocalAndRemote(HostBranch {
                         host: self.config.host.clone(),
                         branch: Branch::str(name),
                         ref_,
-                    }
+                    })
                 })
                 .collect();
 
             self.git
-                .prune(&self.config, &self.remote(), host_branches.iter())
+                .prune(&self.config, &self.remote(), prune_from.iter())
                 .unwrap();
         }
     }
@@ -799,7 +907,15 @@ mod test_backend {
                 .branches_for_host(&host0.config),
             vec![]
         );
-        host1.fetch();
+        let remote_host_branches = host1.fetch();
+        assert_eq!(
+            remote_host_branches,
+            HashSet::from_iter([RemoteHostBranch {
+                user: USER.to_string(),
+                host: "host0".to_string(),
+                branch: Branch::str(INITIAL_BRANCH),
+            }]),
+        );
 
         // After fetch, we should have the additional ref
         {
@@ -879,7 +995,7 @@ mod test_backend {
         assert_eq!(local_nomad_refs(), branch_set);
 
         // Pruning removes the ref remotely and locally
-        local.prune([INITIAL_BRANCH]);
+        local.prune_local_and_remote([INITIAL_BRANCH]);
         assert_eq!(remote_nomad_refs(), empty_set);
         assert_eq!(local_nomad_refs(), empty_set);
     }

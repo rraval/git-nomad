@@ -53,9 +53,8 @@ fn is_not_empty<S: AsRef<str>>(str: &S) -> bool {
 }
 
 impl GitRef {
-    /// Parse a single line from `git show-ref` as a [`GitRef`].
-    pub fn parse_show_ref_line(line: &str) -> Result<GitRef, GitRefParseError> {
-        let mut parts = line.split(' ').map(String::from).collect::<Vec<_>>();
+    fn parse_char_delimited_line(line: &str, delimiter: char) -> Result<GitRef, GitRefParseError> {
+        let mut parts = line.split(delimiter).map(String::from).collect::<Vec<_>>();
         let name = parts
             .pop()
             .filter(is_not_empty)
@@ -70,6 +69,16 @@ impl GitRef {
         }
 
         Ok(GitRef { commit_id, name })
+    }
+
+    /// Parse a single line from `git show-ref` as a [`GitRef`].
+    pub fn parse_show_ref_line(line: &str) -> Result<GitRef, GitRefParseError> {
+        Self::parse_char_delimited_line(line, ' ')
+    }
+
+    /// Parse a single line from `git ls-remote` as a [`GitRef`].
+    pub fn parse_ls_remote_line(line: &str) -> Result<GitRef, GitRefParseError> {
+        Self::parse_char_delimited_line(line, '\t')
     }
 }
 

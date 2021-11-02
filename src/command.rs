@@ -2,10 +2,7 @@
 
 use anyhow::{bail, Result};
 
-use crate::{
-    backend::{Backend, Config, HostBranch, Remote, Snapshot},
-    progress::Progress,
-};
+use crate::{backend::{Backend, Config, HostBranch, PruneFrom, Remote, Snapshot}, progress::Progress};
 
 /// Initialize a git clone to have branches managed by nomad.
 ///
@@ -34,12 +31,14 @@ pub fn sync<B: Backend>(
     remote: &Remote,
 ) -> Result<()> {
     backend.push(config, remote)?;
-    backend.fetch(config, remote)?;
+    let remote_host_branches = backend.fetch(config, remote)?;
     let snapshot = backend.snapshot()?;
     backend.prune(
         config,
         remote,
-        snapshot.prune_locally_deleted_branches(config).iter(),
+        snapshot
+            .prune_deleted_branches(config, &remote_host_branches)
+            .iter(),
     )?;
 
     if progress.is_output_allowed() {
@@ -71,7 +70,7 @@ pub fn ls<B: Backend>(backend: B) -> Result<()> {
 /// Delete nomad managed refs returned by `to_prune`.
 pub fn prune<B: Backend, F>(backend: B, config: &Config, remote: &Remote, to_prune: F) -> Result<()>
 where
-    F: Fn(Snapshot<B::Ref>) -> Vec<HostBranch<B::Ref>>,
+    F: Fn(Snapshot<B::Ref>) -> Vec<PruneFrom<B::Ref>>,
 {
     backend.fetch(config, remote)?;
     let snapshot = backend.snapshot()?;

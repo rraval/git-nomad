@@ -41,8 +41,8 @@ impl Branch {
 }
 
 /// A nomad managed ref for the current user.
-#[derive(Debug, PartialEq, Eq, Hash)]
-pub struct HostBranch<Ref: Display> {
+#[derive(Debug, PartialEq, Eq)]
+pub struct HostBranch<Ref> {
     /// The host this branch comes from.
     pub host: String,
     /// The branch name.

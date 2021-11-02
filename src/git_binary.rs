@@ -242,7 +242,7 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
     fn fetch_refspecs<Description, RefSpec>(
         &self,
         description: Description,
-        remote: &str,
+        remote: &Remote,
         refspecs: &[RefSpec],
     ) -> Result<()>
     where
@@ -253,7 +253,7 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
         self.progress.run(
             Run::Notable,
             description,
-            self.command().args(&["fetch", remote]).args(refspecs),
+            self.command().args(&["fetch", &remote.0]).args(refspecs),
         )?;
         Ok(())
     }
@@ -267,7 +267,7 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
     fn push_refspecs<Description, RefSpec>(
         &self,
         description: Description,
-        remote: &str,
+        remote: &Remote,
         refspecs: &[RefSpec],
     ) -> Result<()>
     where
@@ -278,7 +278,7 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
         self.progress.run(
             Run::Notable,
             description,
-            self.command().args(&["push", remote]).args(refspecs),
+            self.command().args(&["push", &remote.0]).args(refspecs),
         )?;
         Ok(())
     }
@@ -389,7 +389,7 @@ impl<'progress, 'name> Backend for GitBinary<'progress, 'name> {
     fn fetch(&self, config: &Config, remote: &Remote) -> Result<()> {
         self.fetch_refspecs(
             format!("Fetching branches from {}", remote.0),
-            &remote.0,
+            remote,
             &[&namespace::fetch_refspec(config)],
         )
     }
@@ -397,7 +397,7 @@ impl<'progress, 'name> Backend for GitBinary<'progress, 'name> {
     fn push(&self, config: &Config, remote: &Remote) -> Result<()> {
         self.push_refspecs(
             format!("Pushing local branches to {}", remote.0),
-            &remote.0,
+            remote,
             &[&namespace::push_refspec(config)],
         )
     }
@@ -422,7 +422,7 @@ impl<'progress, 'name> Backend for GitBinary<'progress, 'name> {
         if !refspecs.is_empty() {
             self.push_refspecs(
                 format!("Pruning branches at {}", remote.0),
-                &remote.0,
+                remote,
                 &refspecs,
             )?;
         }

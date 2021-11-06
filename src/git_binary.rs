@@ -514,10 +514,7 @@ impl<'progress, 'name> Backend for GitBinary<'progress, 'name> {
 
         for prune_from in prune {
             if let PruneFrom::LocalAndRemote(hb) = prune_from {
-                refspecs.push(format!(
-                    ":{}",
-                    namespace::remote_ref(config, &hb.branch.0)
-                ));
+                refspecs.push(format!(":{}", namespace::remote_ref(config, &hb.branch.0)));
             }
 
             refs.push(
@@ -705,7 +702,11 @@ mod test_backend {
 
     use tempfile::{tempdir, TempDir};
 
-    use crate::{backend::{Backend, Branch, Config, HostBranch, PruneFrom, Remote, RemoteHostBranch}, git_binary::namespace, progress::{Progress, Run, Verbosity}};
+    use crate::{
+        backend::{Backend, Branch, Config, HostBranch, PruneFrom, Remote, RemoteHostBranch},
+        git_binary::namespace,
+        progress::{Progress, Run, Verbosity},
+    };
 
     use super::{git_command, GitBinary, GitRef};
 

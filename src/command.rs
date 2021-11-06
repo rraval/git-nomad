@@ -2,7 +2,10 @@
 
 use anyhow::{bail, Result};
 
-use crate::{backend::{Backend, Config, HostBranch, PruneFrom, Remote, Snapshot}, progress::Progress};
+use crate::{
+    backend::{Backend, Config, HostBranch, PruneFrom, Remote, Snapshot},
+    progress::Progress,
+};
 
 /// Initialize a git clone to have branches managed by nomad.
 ///

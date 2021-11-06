@@ -13,6 +13,8 @@ However, the output of the application is designed for humans, not machines, and
 
 ## [Unreleased]
 
+## [0.2.0] - 2021-11-06
+
 ### Changed
 - The `--version` information now leverages `git describe` to properly capture the precise revision the binary was built from.
 

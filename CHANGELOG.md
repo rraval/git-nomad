@@ -13,6 +13,10 @@ However, the output of the application is designed for humans, not machines, and
 
 ## [Unreleased]
 
+### Fixed
+
+- Allow non-git based builds to work again, with several fallbacks to compute the `--version`.
+
 ## [0.2.0] - 2021-11-06
 
 ### Changed

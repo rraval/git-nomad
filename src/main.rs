@@ -2,8 +2,13 @@ use std::{collections::HashSet, env::current_dir};
 
 use anyhow::{bail, Context, Result};
 use clap::{
-    crate_authors, crate_description, crate_name, App, AppSettings, Arg, ArgMatches, SubCommand,
+    crate_authors, crate_description, crate_name, App, AppSettings, Arg, ArgMatches,
+    SubCommand,
 };
+// `crate_version!` is only used as a version fallback and thus macro expansion may make the only
+// usage disappear.
+#[allow(unused_imports)]
+use clap::crate_version;
 use git_version::git_version;
 
 use crate::{
@@ -36,7 +41,9 @@ fn main() -> Result<()> {
         .settings(&[AppSettings::SubcommandRequiredElseHelp])
         .name(crate_name!())
         .version(git_version!(
-            args = ["--tags", "--always", "--dirty=-modified"]
+            prefix = "git:",
+            args = ["--tags", "--always", "--dirty=-modified"],
+            fallback = crate_version!(),
         ))
         .author(crate_authors!())
         .about(crate_description!())

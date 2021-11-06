@@ -13,6 +13,8 @@ However, the output of the application is designed for humans, not machines, and
 
 ## [Unreleased]
 
+## [0.2.1]
+
 ### Fixed
 
 - Allow non-git based builds to work again, with several fallbacks to compute the `--version`.

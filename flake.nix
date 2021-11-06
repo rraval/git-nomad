@@ -14,6 +14,7 @@
     devShell = pkgs.mkShell {
       buildInputs = with pkgs; [
         cargo
+        cargo-outdated
         clippy
         gdb
         rust-analyzer

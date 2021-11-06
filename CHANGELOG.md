@@ -13,6 +13,9 @@ However, the output of the application is designed for humans, not machines, and
 
 ## [Unreleased]
 
+### Changed
+- The `--version` information now leverages `git describe` to properly capture the precise revision the binary was built from.
+
 ### Fixed
 - Clean up deleted branches from other hosts. See https://github.com/rraval/git-nomad/issues/1.
 

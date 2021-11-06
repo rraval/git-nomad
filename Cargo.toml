@@ -8,8 +8,8 @@ repository = "https://github.com/rraval/git-nomad"
 license = "MIT"
 
 [dependencies]
-anyhow = "^1.0.41"
+anyhow = "^1.0.45"
 clap = "^2.33.3"
 indicatif = "^0.16.2"
 tempfile = "^3.2.0"
-whoami = "^1.1.2"
+whoami = "^1.1.5"

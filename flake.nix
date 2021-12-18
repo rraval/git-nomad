@@ -13,6 +13,7 @@
   in eachSystem (pkgs: {
     devShell = pkgs.mkShell {
       buildInputs = with pkgs; [
+        act
         cargo
         cargo-outdated
         clippy

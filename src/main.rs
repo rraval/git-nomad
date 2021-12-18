@@ -2,8 +2,7 @@ use std::{collections::HashSet, env::current_dir};
 
 use anyhow::{bail, Context, Result};
 use clap::{
-    crate_authors, crate_description, crate_name, App, AppSettings, Arg, ArgMatches,
-    SubCommand,
+    crate_authors, crate_description, crate_name, App, AppSettings, Arg, ArgMatches, SubCommand,
 };
 // `crate_version!` is only used as a version fallback and thus macro expansion may make the only
 // usage disappear.

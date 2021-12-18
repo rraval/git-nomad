@@ -332,7 +332,9 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
         self.progress.run(
             Run::Notable,
             description,
-            self.command().args(&["push", &remote.0]).args(refspecs),
+            self.command()
+                .args(&["push", "--no-verify", &remote.0])
+                .args(refspecs),
         )?;
         Ok(())
     }

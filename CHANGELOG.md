@@ -13,6 +13,8 @@ However, the output of the application is designed for humans, not machines, and
 
 ## [Unreleased]
 
+- Skip pre-push hooks for git-nomad operations.
+
 ## [0.2.1]
 
 ### Fixed

@@ -145,16 +145,6 @@ impl<Ref: Display + Eq + Hash> Snapshot<Ref> {
 
         as_vec
     }
-
-    /// Return only the nomad managed branch names for a given host.
-    #[cfg(test)]
-    pub fn branches_for_host(&self, config: &Config) -> Vec<Branch> {
-        self.host_branches
-            .iter()
-            .filter(|hb| hb.user == config.user && hb.host == config.host)
-            .map(|hb| hb.branch.clone())
-            .collect()
-    }
 }
 
 /// An abstraction point between the high level operation of nomad ("synchronize git branches")
@@ -179,7 +169,7 @@ pub trait Backend {
     fn push(&self, config: &Config, remote: &Remote) -> Result<()>;
 
     /// Prune the given nomad managed refs from both the local and remote clones.
-    fn prune<'a, Prune>(&self, config: &Config, remote: &Remote, prune: Prune) -> Result<()>
+    fn prune<'a, Prune>(&self, remote: &Remote, prune: Prune) -> Result<()>
     where
         Self::Ref: 'a,
         Prune: Iterator<Item = &'a PruneFrom<Self::Ref>>;

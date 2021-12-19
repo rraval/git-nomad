@@ -37,7 +37,6 @@ pub fn sync<B: Backend>(
     let remote_host_branches = backend.fetch(config, remote)?;
     let snapshot = backend.snapshot(config)?;
     backend.prune(
-        config,
         remote,
         snapshot
             .prune_deleted_branches(config, &remote_host_branches)
@@ -78,6 +77,6 @@ where
     backend.fetch(config, remote)?;
     let snapshot = backend.snapshot(config)?;
     let prune = to_prune(snapshot);
-    backend.prune(config, remote, prune.iter())?;
+    backend.prune(remote, prune.iter())?;
     Ok(())
 }

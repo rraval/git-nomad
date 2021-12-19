@@ -86,61 +86,60 @@ mod namespace {
         )
     }
 
-    /// A nomad ref in the local clone, which elides the user name for convenience.
-    ///
-    /// Note that `branch` can be the empty string which conveniently acts as a prefix for parsing
-    /// `git show-ref` output.
-    #[cfg(test)]
-    pub fn local_ref(config: &Config, branch: &str) -> String {
-        format!("refs/{}/{}/{}", PREFIX, config.host, branch)
-    }
+    impl<Ref> NomadRef<Ref> {
+        /// A nomad ref in the local clone, which elides the user name for convenience.
+        #[cfg(test)]
+        pub fn to_git_local_ref(&self) -> String {
+            format!("refs/{}/{}/{}", PREFIX, self.host, self.branch.0)
+        }
 
-    /// A nomad ref in the remote.
-    ///
-    /// Note that `branch` can be the empty string which conveniently acts as a prefix for parsing
-    /// `git show-ref` output.
-    pub fn remote_ref(config: &Config, branch: &str) -> String {
-        format!("refs/{}/{}/{}/{}", PREFIX, config.user, config.host, branch)
-    }
-
-    pub fn host_branch_from_local_ref(
-        config: &Config,
-        git_ref: GitRef,
-    ) -> Result<NomadRef<GitRef>, GitRef> {
-        let parts = git_ref.name.split('/').collect::<Vec<_>>();
-        match parts.as_slice() {
-            ["refs", prefix, host, branch_name] => {
-                if prefix != &PREFIX {
-                    return Err(git_ref);
-                }
-
-                Ok(NomadRef {
-                    user: config.user.clone(),
-                    host: host.to_string(),
-                    branch: Branch::str(branch_name),
-                    ref_: git_ref,
-                })
-            }
-            _ => Err(git_ref),
+        /// A nomad ref in the remote. The remote may have many users that all use `git-nomad` and
+        /// so shouldn't step on each others toes.
+        pub fn to_git_remote_ref(&self) -> String {
+            format!(
+                "refs/{}/{}/{}/{}",
+                PREFIX, self.user, self.host, self.branch.0
+            )
         }
     }
 
-    pub fn host_branch_from_remote_ref(git_ref: GitRef) -> Result<NomadRef<GitRef>, GitRef> {
-        let parts = git_ref.name.split('/').collect::<Vec<_>>();
-        match parts.as_slice() {
-            ["refs", prefix, user, host, branch_name] => {
-                if prefix != &PREFIX {
-                    return Err(git_ref);
-                }
+    impl NomadRef<GitRef> {
+        pub fn from_git_local_ref(config: &Config, git_ref: GitRef) -> Result<Self, GitRef> {
+            let parts = git_ref.name.split('/').collect::<Vec<_>>();
+            match parts.as_slice() {
+                ["refs", prefix, host, branch_name] => {
+                    if prefix != &PREFIX {
+                        return Err(git_ref);
+                    }
 
-                Ok(NomadRef {
-                    user: user.to_string(),
-                    host: host.to_string(),
-                    branch: Branch::str(branch_name),
-                    ref_: git_ref,
-                })
+                    Ok(NomadRef {
+                        user: config.user.clone(),
+                        host: host.to_string(),
+                        branch: Branch::str(branch_name),
+                        ref_: git_ref,
+                    })
+                }
+                _ => Err(git_ref),
             }
-            _ => Err(git_ref),
+        }
+
+        pub fn from_git_remote_ref(git_ref: GitRef) -> Result<Self, GitRef> {
+            let parts = git_ref.name.split('/').collect::<Vec<_>>();
+            match parts.as_slice() {
+                ["refs", prefix, user, host, branch_name] => {
+                    if prefix != &PREFIX {
+                        return Err(git_ref);
+                    }
+
+                    Ok(NomadRef {
+                        user: user.to_string(),
+                        host: host.to_string(),
+                        branch: Branch::str(branch_name),
+                        ref_: git_ref,
+                    })
+                }
+                _ => Err(git_ref),
+            }
         }
     }
 
@@ -151,58 +150,63 @@ mod namespace {
             git_ref::GitRef,
         };
 
-        use super::{
-            host_branch_from_local_ref, host_branch_from_remote_ref, local_ref, remote_ref,
-        };
+        const USER: &str = "user0";
+        const HOST: &str = "host0";
+        const BRANCH: &str = "branch0";
 
-        /// [`host_branch_from_local_ref`] should be able to parse ref names produced by [`local_ref`] (they
-        /// are duals).
+        /// [`NomadRef::from_git_local_ref`] should be able to parse ref names produced by
+        /// [`NomadRef::to_git_local_ref`] (they are duals).
         #[test]
-        fn test_create_and_parse_local_ref() {
-            let config = &Config {
-                user: "user0".to_string(),
-                host: "host0".to_string(),
-            };
-            let git_ref = GitRef {
+        fn test_to_and_from_local_ref() {
+            let local_ref_name = NomadRef::<()> {
+                user: USER.to_string(),
+                host: HOST.to_string(),
+                branch: Branch::str(BRANCH),
+                ref_: (),
+            }
+            .to_git_local_ref();
+
+            let local_git_ref = GitRef {
                 commit_id: "some_commit_id".to_string(),
-                name: local_ref(config, "branch0"),
+                name: local_ref_name,
             };
 
-            assert_eq!(
-                host_branch_from_local_ref(config, git_ref.clone()),
-                Ok(NomadRef {
-                    user: config.user.clone(),
-                    host: config.host.clone(),
-                    branch: Branch::str("branch0"),
-                    ref_: git_ref,
-                })
-            );
-        }
-
-        /// [`host_branch_from_remote_ref`] should be able to parse ref names produced by
-        /// [`remote_ref`] (they are duals).
-        #[test]
-        fn test_create_and_parse_remote_ref() {
-            let git_ref = GitRef {
-                commit_id: "some_commit_id".to_string(),
-                name: remote_ref(
-                    &Config {
-                        user: "user0".to_string(),
-                        host: "host0".to_string(),
-                    },
-                    "branch0",
-                ),
-            };
-
-            assert_eq!(
-                host_branch_from_remote_ref(git_ref.clone()),
-                Ok(NomadRef {
+            let nomad_ref = NomadRef::<GitRef>::from_git_local_ref(
+                &Config {
                     user: "user0".to_string(),
                     host: "host0".to_string(),
-                    branch: Branch::str("branch0"),
-                    ref_: git_ref,
-                })
-            );
+                },
+                local_git_ref,
+            )
+            .unwrap();
+
+            assert_eq!(&nomad_ref.user, USER);
+            assert_eq!(&nomad_ref.host, HOST);
+            assert_eq!(&nomad_ref.branch.0, BRANCH);
+        }
+
+        /// [`NomadRef::from_git_remote_ref`] should be able to parse ref names produced by
+        /// [`NomadRef::to_git_local_ref`] (they are duals).
+        #[test]
+        fn test_to_and_from_remote_ref() {
+            let remote_ref_name = NomadRef::<()> {
+                user: USER.to_string(),
+                host: HOST.to_string(),
+                branch: Branch::str(BRANCH),
+                ref_: (),
+            }
+            .to_git_remote_ref();
+
+            let remote_git_ref = GitRef {
+                commit_id: "some_commit_id".to_string(),
+                name: remote_ref_name,
+            };
+
+            let nomad_ref = NomadRef::<GitRef>::from_git_remote_ref(remote_git_ref).unwrap();
+
+            assert_eq!(&nomad_ref.user, USER);
+            assert_eq!(&nomad_ref.host, HOST);
+            assert_eq!(&nomad_ref.branch.0, BRANCH);
         }
     }
 }
@@ -469,8 +473,8 @@ impl<'progress, 'name> Backend for GitBinary<'progress, 'name> {
                 local_branches.insert(Branch::str(name));
             }
 
-            if let Ok(host_branch) = namespace::host_branch_from_local_ref(config, r) {
-                host_branches.push(host_branch);
+            if let Ok(nomad_ref) = NomadRef::<GitRef>::from_git_local_ref(config, r) {
+                host_branches.push(nomad_ref);
             }
         }
 
@@ -500,7 +504,7 @@ impl<'progress, 'name> Backend for GitBinary<'progress, 'name> {
 
         Ok(remote_refs
             .into_iter()
-            .filter_map(|ref_| namespace::host_branch_from_remote_ref(ref_).ok())
+            .filter_map(|ref_| NomadRef::<GitRef>::from_git_remote_ref(ref_).ok())
             .collect())
     }
 
@@ -512,7 +516,7 @@ impl<'progress, 'name> Backend for GitBinary<'progress, 'name> {
         )
     }
 
-    fn prune<'b, Prune>(&self, config: &Config, remote: &Remote, prune: Prune) -> Result<()>
+    fn prune<'b, Prune>(&self, remote: &Remote, prune: Prune) -> Result<()>
     where
         Prune: Iterator<Item = &'b PruneFrom<GitRef>>,
     {
@@ -520,13 +524,15 @@ impl<'progress, 'name> Backend for GitBinary<'progress, 'name> {
         let mut refs = Vec::<GitRef>::new();
 
         for prune_from in prune {
-            if let PruneFrom::LocalAndRemote(hb) = prune_from {
-                refspecs.push(format!(":{}", namespace::remote_ref(config, &hb.branch.0)));
+            if let PruneFrom::LocalAndRemote(nomad_ref) = prune_from {
+                refspecs.push(format!(":{}", nomad_ref.to_git_remote_ref()));
             }
 
             refs.push(
                 match prune_from {
-                    PruneFrom::LocalOnly(hb) | PruneFrom::LocalAndRemote(hb) => hb,
+                    PruneFrom::LocalOnly(nomad_ref) | PruneFrom::LocalAndRemote(nomad_ref) => {
+                        nomad_ref
+                    }
                 }
                 .ref_
                 .clone(),
@@ -711,7 +717,6 @@ mod test_backend {
 
     use crate::{
         backend::{Backend, Branch, Config, NomadRef, PruneFrom, Remote},
-        git_binary::namespace,
         progress::{Progress, Run, Verbosity},
     };
 
@@ -723,6 +728,29 @@ mod test_backend {
     const USER: &str = "user0";
 
     const PROGRESS: Progress = Progress::Verbose(Verbosity::CommandAndOutput);
+
+    #[derive(PartialEq, Eq, Hash, Debug, Clone)]
+    struct GitCommitId {
+        commit_id: String,
+    }
+
+    impl From<GitRef> for GitCommitId {
+        fn from(git_ref: GitRef) -> Self {
+            let GitRef { commit_id, .. } = git_ref;
+            Self { commit_id }
+        }
+    }
+
+    impl From<NomadRef<GitRef>> for NomadRef<GitCommitId> {
+        fn from(nomad_ref: NomadRef<GitRef>) -> Self {
+            Self {
+                user: nomad_ref.user,
+                host: nomad_ref.host,
+                branch: nomad_ref.branch,
+                ref_: nomad_ref.ref_.into(),
+            }
+        }
+    }
 
     struct GitRemote {
         root_dir: TempDir,
@@ -800,6 +828,19 @@ mod test_backend {
                 git,
             }
         }
+
+        fn nomad_refs(&self) -> HashSet<NomadRef<GitCommitId>> {
+            self.git
+                .list_refs("")
+                .unwrap()
+                .into_iter()
+                .filter_map(|git_ref| {
+                    NomadRef::<GitRef>::from_git_remote_ref(git_ref)
+                        .ok()
+                        .map(Into::into)
+                })
+                .collect::<HashSet<_>>()
+        }
     }
 
     struct GitClone<'a> {
@@ -826,48 +867,53 @@ mod test_backend {
             let prune_from: Vec<_> = branch_names
                 .into_iter()
                 .map(|name| {
-                    let ref_name = namespace::local_ref(&self.config, name);
-                    let ref_ = self.git.get_ref("", ref_name).unwrap();
-
-                    PruneFrom::LocalAndRemote(NomadRef {
-                        user: self.config.host.clone(),
+                    let nomad_ref = NomadRef::<()> {
+                        user: self.config.user.clone(),
                         host: self.config.host.clone(),
                         branch: Branch::str(name),
-                        ref_,
-                    })
+                        ref_: (),
+                    };
+
+                    let ref_name = nomad_ref.to_git_local_ref();
+
+                    let nomad_ref = NomadRef {
+                        user: nomad_ref.user,
+                        host: nomad_ref.host,
+                        branch: nomad_ref.branch,
+                        ref_: self.git.get_ref("", ref_name).unwrap(),
+                    };
+
+                    PruneFrom::LocalAndRemote(nomad_ref)
                 })
                 .collect();
 
-            self.git
-                .prune(&self.config, &self.remote(), prune_from.iter())
-                .unwrap();
+            self.git.prune(&self.remote(), prune_from.iter()).unwrap();
         }
-    }
 
-    fn nomad_refs(git: &GitBinary, config: &Config, prefix: &str) -> HashSet<String> {
-        git.list_refs(&config.host)
-            .unwrap()
-            .into_iter()
-            .filter_map(|r| r.name.strip_prefix(prefix).map(String::from))
-            .collect::<HashSet<_>>()
-    }
+        fn get_nomad_ref(&self, branch: &str) -> Option<NomadRef<GitCommitId>> {
+            self.git
+                .get_ref("", format!("refs/heads/{}", branch))
+                .ok()
+                .map(|git_ref| NomadRef {
+                    user: self.config.user.clone(),
+                    host: self.config.host.clone(),
+                    branch: Branch::str(branch),
+                    ref_: git_ref.into(),
+                })
+        }
 
-    fn remote_nomad_refs(git: &GitBinary, config: &Config) -> HashSet<String> {
-        nomad_refs(git, config, &namespace::remote_ref(config, ""))
-    }
-
-    fn local_nomad_refs(git: &GitBinary, config: &Config) -> HashSet<String> {
-        nomad_refs(git, config, &namespace::local_ref(config, ""))
-    }
-
-    fn ref_names(refs: &[GitRef]) -> HashSet<String> {
-        refs.iter().map(|r| r.name.clone()).collect::<HashSet<_>>()
-    }
-
-    fn ref_commit_ids(refs: &[GitRef]) -> HashSet<String> {
-        refs.iter()
-            .map(|r| r.commit_id.clone())
-            .collect::<HashSet<_>>()
+        fn nomad_refs(&self) -> HashSet<NomadRef<GitCommitId>> {
+            self.git
+                .list_refs(&self.config.host)
+                .unwrap()
+                .into_iter()
+                .filter_map(|git_ref| {
+                    NomadRef::<GitRef>::from_git_local_ref(&self.config, git_ref)
+                        .ok()
+                        .map(Into::into)
+                })
+                .collect::<HashSet<_>>()
+        }
     }
 
     /// Push should put local branches to remote `refs/nomad/{user}/{host}/{branch}`
@@ -877,20 +923,10 @@ mod test_backend {
         let host0 = origin.clone("host0");
         host0.push();
 
-        let refs = origin
-            .git
-            .list_refs("Local branches should have remote refs")
-            .unwrap();
-
-        assert_eq!(ref_names(&refs), {
-            let mut set: HashSet<String> = HashSet::new();
-            set.insert(format!("refs/heads/{}", INITIAL_BRANCH));
-            set.insert(namespace::remote_ref(&host0.config, INITIAL_BRANCH));
-            set
-        });
-
-        // even though there are 2 refs above, both should be pointing to the same commit
-        assert_eq!(ref_commit_ids(&refs).len(), 1);
+        assert_eq!(
+            origin.nomad_refs(),
+            HashSet::from_iter([host0.get_nomad_ref(INITIAL_BRANCH).unwrap()]),
+        );
     }
 
     /// Fetch should pull refs for all hosts that have pushed under the configured user under
@@ -904,71 +940,19 @@ mod test_backend {
 
         let host1 = origin.clone("host1");
 
-        // Before fetch, the host1 clone should only have the local and remote branch
-        let pre_fetch_refs = || {
-            let mut set: HashSet<String> = HashSet::new();
+        // Before fetch, the host1 clone should have no nomad refs
+        assert_eq!(host1.nomad_refs(), HashSet::new());
 
-            // the local branch
-            set.insert(format!("refs/heads/{}", INITIAL_BRANCH));
-
-            // the remote branch and what's checked out
-            set.insert(format!("refs/remotes/{}/{}", ORIGIN, INITIAL_BRANCH));
-            set.insert(format!("refs/remotes/{}/HEAD", ORIGIN));
-
-            set
-        };
-
-        {
-            let refs = host1.git.list_refs("Before fetch").unwrap();
-            assert_eq!(ref_names(&refs), pre_fetch_refs());
-        }
-
-        // host branches ought to be empty here since host1 has not pushed
+        // After fetch, we should see the one host0 branch
+        let nomad_refs = host1
+            .fetch()
+            .into_iter()
+            .map(Into::into)
+            .collect::<HashSet<NomadRef<GitCommitId>>>();
         assert_eq!(
-            host1
-                .git
-                .snapshot(&host0.config)
-                .unwrap()
-                .branches_for_host(&host0.config),
-            vec![]
+            nomad_refs,
+            HashSet::from_iter([host0.get_nomad_ref(INITIAL_BRANCH).unwrap()])
         );
-        let remote_host_branches = host1.fetch();
-        assert_eq!(
-            remote_host_branches,
-            HashSet::from_iter([NomadRef {
-                user: USER.to_string(),
-                host: "host0".to_string(),
-                branch: Branch::str(INITIAL_BRANCH),
-
-                // FIXME(#2): we don't know about the `GitRef` here, so simply extract it from the
-                // repo. This needs some refactoring that separates nomad ref parsing from
-                // `Config`.
-                ref_: remote_host_branches
-                    .iter()
-                    .next()
-                    .map(|hb| hb.ref_.clone())
-                    .unwrap(),
-            }]),
-        );
-
-        // After fetch, we should have the additional ref
-        {
-            let refs = host1.git.list_refs("After fetch").unwrap();
-            assert_eq!(ref_names(&refs), {
-                let mut set = pre_fetch_refs();
-                // the additional ref from the host0 push
-                set.insert(namespace::local_ref(&host0.config, INITIAL_BRANCH));
-                set
-            });
-            assert_eq!(
-                host1
-                    .git
-                    .snapshot(&host1.config)
-                    .unwrap()
-                    .branches_for_host(&host0.config),
-                vec![Branch::str(INITIAL_BRANCH)]
-            );
-        }
     }
 
     /// Pushing should create nomad refs in the remote.
@@ -979,33 +963,32 @@ mod test_backend {
         let origin = GitRemote::init();
         let host0 = origin.clone("host0");
 
-        let origin_nomad_refs = || remote_nomad_refs(&origin.git, &host0.config);
-        let host0_nomad_refs = || local_nomad_refs(&host0.git, &host0.config);
-
-        let empty_set = HashSet::new();
-        let branch_set = {
-            let mut set = HashSet::new();
-            set.insert(INITIAL_BRANCH.to_string());
-            set
-        };
-
         // In the beginning, there are no nomad refs
-        assert_eq!(origin_nomad_refs(), empty_set);
-        assert_eq!(host0_nomad_refs(), empty_set);
+        assert_eq!(origin.nomad_refs(), HashSet::new());
+        assert_eq!(host0.nomad_refs(), HashSet::new());
 
         // Pushing creates a remote nomad ref, but local remains empty
         host0.push();
-        assert_eq!(origin_nomad_refs(), branch_set);
-        assert_eq!(host0_nomad_refs(), empty_set);
+        assert_eq!(
+            origin.nomad_refs(),
+            HashSet::from_iter([host0.get_nomad_ref(INITIAL_BRANCH).unwrap()]),
+        );
+        assert_eq!(host0.nomad_refs(), HashSet::new());
 
         // Fetching creates a local nomad ref
         host0.fetch();
-        assert_eq!(origin_nomad_refs(), branch_set);
-        assert_eq!(host0_nomad_refs(), branch_set);
+        assert_eq!(
+            origin.nomad_refs(),
+            HashSet::from_iter([host0.get_nomad_ref(INITIAL_BRANCH).unwrap()]),
+        );
+        assert_eq!(
+            host0.nomad_refs(),
+            HashSet::from_iter([host0.get_nomad_ref(INITIAL_BRANCH).unwrap()]),
+        );
 
         // Pruning removes the ref remotely and locally
         host0.prune_local_and_remote([INITIAL_BRANCH]);
-        assert_eq!(origin_nomad_refs(), empty_set);
-        assert_eq!(host0_nomad_refs(), empty_set);
+        assert_eq!(origin.nomad_refs(), HashSet::new());
+        assert_eq!(host0.nomad_refs(), HashSet::new());
     }
 }

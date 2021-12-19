@@ -3,7 +3,7 @@
 use anyhow::{bail, Result};
 
 use crate::{
-    backend::{Backend, Config, HostBranch, PruneFrom, Remote, Snapshot},
+    backend::{Backend, Config, NomadRef, PruneFrom, Remote, Snapshot},
     progress::Progress,
 };
 
@@ -35,7 +35,7 @@ pub fn sync<B: Backend>(
 ) -> Result<()> {
     backend.push(config, remote)?;
     let remote_host_branches = backend.fetch(config, remote)?;
-    let snapshot = backend.snapshot()?;
+    let snapshot = backend.snapshot(config)?;
     backend.prune(
         config,
         remote,
@@ -46,7 +46,7 @@ pub fn sync<B: Backend>(
 
     if progress.is_output_allowed() {
         println!();
-        ls(backend)?
+        ls(backend, config)?
     }
 
     Ok(())
@@ -56,13 +56,13 @@ pub fn sync<B: Backend>(
 ///
 /// Does not respect [`Progress::is_output_allowed`] because output is the whole point of this
 /// command.
-pub fn ls<B: Backend>(backend: B) -> Result<()> {
-    let snapshot = backend.snapshot()?;
+pub fn ls<B: Backend>(backend: B, config: &Config) -> Result<()> {
+    let snapshot = backend.snapshot(config)?;
 
     for (host, branches) in snapshot.sorted_hosts_and_branches() {
         println!("{}", host);
 
-        for HostBranch { ref_, .. } in branches {
+        for NomadRef { ref_, .. } in branches {
             println!("  {}", ref_);
         }
     }
@@ -76,7 +76,7 @@ where
     F: Fn(Snapshot<B::Ref>) -> Vec<PruneFrom<B::Ref>>,
 {
     backend.fetch(config, remote)?;
-    let snapshot = backend.snapshot()?;
+    let snapshot = backend.snapshot(config)?;
     let prune = to_prune(snapshot);
     backend.prune(config, remote, prune.iter())?;
     Ok(())

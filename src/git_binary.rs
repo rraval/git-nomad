@@ -4,7 +4,7 @@ use anyhow::{bail, Result};
 use std::{collections::HashSet, ffi::OsStr, path::Path, process::Command};
 
 use crate::{
-    backend::{Backend, Branch, Config, HostBranch, PruneFrom, Remote, RemoteHostBranch, Snapshot},
+    backend::{Backend, Branch, Config, NomadRef, PruneFrom, Remote, Snapshot},
     git_ref::GitRef,
     progress::{output_stdout, Progress, Run},
 };
@@ -38,7 +38,7 @@ fn git_command<S: AsRef<OsStr>>(name: S) -> Command {
 /// both built-in and third party.
 mod namespace {
     use crate::{
-        backend::{Branch, Config, HostBranch, RemoteHostBranch},
+        backend::{Branch, Config, NomadRef},
         git_ref::GitRef,
     };
 
@@ -103,7 +103,10 @@ mod namespace {
         format!("refs/{}/{}/{}/{}", PREFIX, config.user, config.host, branch)
     }
 
-    pub fn host_branch_from_local_ref(git_ref: GitRef) -> Result<HostBranch<GitRef>, GitRef> {
+    pub fn host_branch_from_local_ref(
+        config: &Config,
+        git_ref: GitRef,
+    ) -> Result<NomadRef<GitRef>, GitRef> {
         let parts = git_ref.name.split('/').collect::<Vec<_>>();
         match parts.as_slice() {
             ["refs", prefix, host, branch_name] => {
@@ -111,7 +114,8 @@ mod namespace {
                     return Err(git_ref);
                 }
 
-                Ok(HostBranch {
+                Ok(NomadRef {
+                    user: config.user.clone(),
                     host: host.to_string(),
                     branch: Branch::str(branch_name),
                     ref_: git_ref,
@@ -121,7 +125,7 @@ mod namespace {
         }
     }
 
-    pub fn host_branch_from_remote_ref(git_ref: GitRef) -> Result<RemoteHostBranch, GitRef> {
+    pub fn host_branch_from_remote_ref(git_ref: GitRef) -> Result<NomadRef<GitRef>, GitRef> {
         let parts = git_ref.name.split('/').collect::<Vec<_>>();
         match parts.as_slice() {
             ["refs", prefix, user, host, branch_name] => {
@@ -129,10 +133,11 @@ mod namespace {
                     return Err(git_ref);
                 }
 
-                Ok(RemoteHostBranch {
+                Ok(NomadRef {
                     user: user.to_string(),
                     host: host.to_string(),
                     branch: Branch::str(branch_name),
+                    ref_: git_ref,
                 })
             }
             _ => Err(git_ref),
@@ -142,7 +147,7 @@ mod namespace {
     #[cfg(test)]
     mod tests {
         use crate::{
-            backend::{Branch, Config, HostBranch, RemoteHostBranch},
+            backend::{Branch, Config, NomadRef},
             git_ref::GitRef,
         };
 
@@ -154,21 +159,20 @@ mod namespace {
         /// are duals).
         #[test]
         fn test_create_and_parse_local_ref() {
+            let config = &Config {
+                user: "user0".to_string(),
+                host: "host0".to_string(),
+            };
             let git_ref = GitRef {
                 commit_id: "some_commit_id".to_string(),
-                name: local_ref(
-                    &Config {
-                        user: "user0".to_string(),
-                        host: "host0".to_string(),
-                    },
-                    "branch0",
-                ),
+                name: local_ref(config, "branch0"),
             };
 
             assert_eq!(
-                host_branch_from_local_ref(git_ref.clone()),
-                Ok(HostBranch {
-                    host: "host0".to_string(),
+                host_branch_from_local_ref(config, git_ref.clone()),
+                Ok(NomadRef {
+                    user: config.user.clone(),
+                    host: config.host.clone(),
                     branch: Branch::str("branch0"),
                     ref_: git_ref,
                 })
@@ -191,11 +195,12 @@ mod namespace {
             };
 
             assert_eq!(
-                host_branch_from_remote_ref(git_ref),
-                Ok(RemoteHostBranch {
+                host_branch_from_remote_ref(git_ref.clone()),
+                Ok(NomadRef {
                     user: "user0".to_string(),
                     host: "host0".to_string(),
                     branch: Branch::str("branch0"),
+                    ref_: git_ref,
                 })
             );
         }
@@ -453,18 +458,18 @@ impl<'progress, 'name> Backend for GitBinary<'progress, 'name> {
         Ok(())
     }
 
-    fn snapshot(&self) -> Result<Snapshot<Self::Ref>> {
+    fn snapshot(&self, config: &Config) -> Result<Snapshot<Self::Ref>> {
         let refs = self.list_refs("Fetching all refs")?;
 
         let mut local_branches = HashSet::<Branch>::new();
-        let mut host_branches = Vec::<HostBranch<GitRef>>::new();
+        let mut host_branches = Vec::<NomadRef<GitRef>>::new();
 
         for r in refs {
             if let Some(name) = r.name.strip_prefix("refs/heads/") {
                 local_branches.insert(Branch::str(name));
             }
 
-            if let Ok(host_branch) = namespace::host_branch_from_local_ref(r) {
+            if let Ok(host_branch) = namespace::host_branch_from_local_ref(config, r) {
                 host_branches.push(host_branch);
             }
         }
@@ -475,7 +480,7 @@ impl<'progress, 'name> Backend for GitBinary<'progress, 'name> {
         })
     }
 
-    fn fetch(&self, config: &Config, remote: &Remote) -> Result<HashSet<RemoteHostBranch>> {
+    fn fetch(&self, config: &Config, remote: &Remote) -> Result<HashSet<NomadRef<GitRef>>> {
         self.fetch_refspecs(
             format!("Fetching branches from {}", remote.0),
             remote,
@@ -705,7 +710,7 @@ mod test_backend {
     use tempfile::{tempdir, TempDir};
 
     use crate::{
-        backend::{Backend, Branch, Config, HostBranch, PruneFrom, Remote, RemoteHostBranch},
+        backend::{Backend, Branch, Config, NomadRef, PruneFrom, Remote},
         git_binary::namespace,
         progress::{Progress, Run, Verbosity},
     };
@@ -813,7 +818,7 @@ mod test_backend {
             self.git.push(&self.config, &self.remote()).unwrap();
         }
 
-        fn fetch(&self) -> HashSet<RemoteHostBranch> {
+        fn fetch(&self) -> HashSet<NomadRef<GitRef>> {
             self.git.fetch(&self.config, &self.remote()).unwrap()
         }
 
@@ -824,7 +829,8 @@ mod test_backend {
                     let ref_name = namespace::local_ref(&self.config, name);
                     let ref_ = self.git.get_ref("", ref_name).unwrap();
 
-                    PruneFrom::LocalAndRemote(HostBranch {
+                    PruneFrom::LocalAndRemote(NomadRef {
+                        user: self.config.host.clone(),
                         host: self.config.host.clone(),
                         branch: Branch::str(name),
                         ref_,
@@ -921,7 +927,7 @@ mod test_backend {
         assert_eq!(
             host1
                 .git
-                .snapshot()
+                .snapshot(&host0.config)
                 .unwrap()
                 .branches_for_host(&host0.config),
             vec![]
@@ -929,10 +935,19 @@ mod test_backend {
         let remote_host_branches = host1.fetch();
         assert_eq!(
             remote_host_branches,
-            HashSet::from_iter([RemoteHostBranch {
+            HashSet::from_iter([NomadRef {
                 user: USER.to_string(),
                 host: "host0".to_string(),
                 branch: Branch::str(INITIAL_BRANCH),
+
+                // FIXME(#2): we don't know about the `GitRef` here, so simply extract it from the
+                // repo. This needs some refactoring that separates nomad ref parsing from
+                // `Config`.
+                ref_: remote_host_branches
+                    .iter()
+                    .next()
+                    .map(|hb| hb.ref_.clone())
+                    .unwrap(),
             }]),
         );
 
@@ -948,7 +963,7 @@ mod test_backend {
             assert_eq!(
                 host1
                     .git
-                    .snapshot()
+                    .snapshot(&host1.config)
                     .unwrap()
                     .branches_for_host(&host0.config),
                 vec![Branch::str(INITIAL_BRANCH)]

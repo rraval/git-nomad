@@ -152,7 +152,10 @@ fn main() -> Result<()> {
     }
 
     if matches.subcommand_matches("ls").is_some() {
-        return command::ls(git);
+        return match git.read_config()? {
+            None => bail!("No configuration found, nothing to prune"),
+            Some(config) => command::ls(git, &config),
+        };
     }
 
     if let Some(matches) = matches.subcommand_matches("prune") {

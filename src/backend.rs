@@ -41,9 +41,11 @@ impl Branch {
     }
 }
 
-/// A nomad managed ref for the current user.
-#[derive(Debug, PartialEq, Eq)]
-pub struct HostBranch<Ref> {
+/// A ref representing a branch managed by nomad.
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub struct NomadRef<Ref> {
+    /// The user this branch belongs to.
+    pub user: String,
     /// The host this branch comes from.
     pub host: String,
     /// The branch name.
@@ -52,40 +54,29 @@ pub struct HostBranch<Ref> {
     pub ref_: Ref,
 }
 
-/// A nomad managed ref from a remote, which may belong to an entirely different user.
-#[derive(Debug, PartialEq, Eq, Hash)]
-pub struct RemoteHostBranch {
-    /// The user this branch belongs to.
-    pub user: String,
-    /// The host this branch comes from.
-    pub host: String,
-    /// The branch name.
-    pub branch: Branch,
-}
-
 /// A point in time view of refs we care about.
-pub struct Snapshot<Ref: Display> {
+pub struct Snapshot<Ref: Display + Eq + Hash> {
     /// The active branches in this clone that the user manipulates directly with `git branch` etc.
     pub local_branches: HashSet<Branch>,
     /// The refs that nomad manages to follow the local branches.
-    pub host_branches: Vec<HostBranch<Ref>>,
+    pub host_branches: Vec<NomadRef<Ref>>,
 }
 
 /// Describes where a ref should be removed from.
 #[derive(Debug, PartialEq, Eq)]
 pub enum PruneFrom<Ref> {
-    LocalOnly(HostBranch<Ref>),
-    LocalAndRemote(HostBranch<Ref>),
+    LocalOnly(NomadRef<Ref>),
+    LocalAndRemote(NomadRef<Ref>),
 }
 
-impl<Ref: Display> Snapshot<Ref> {
+impl<Ref: Display + Eq + Hash> Snapshot<Ref> {
     /// Find nomad host branches that can be pruned because:
     /// 1. The local branch they were based on no longer exists.
     /// 2. The remote branch they were based on no longer exists.
     pub fn prune_deleted_branches(
         self,
         config: &Config,
-        remote_host_branches: &HashSet<RemoteHostBranch>,
+        remote_host_branches: &HashSet<NomadRef<Ref>>,
     ) -> Vec<PruneFrom<Ref>> {
         let Self {
             host_branches,
@@ -99,11 +90,7 @@ impl<Ref: Display> Snapshot<Ref> {
                 if !local_branches.contains(&hb.branch) {
                     prune.push(PruneFrom::LocalAndRemote(hb));
                 }
-            } else if !remote_host_branches.contains(&RemoteHostBranch {
-                user: config.user.clone(),
-                host: hb.host.clone(),
-                branch: hb.branch.clone(),
-            }) {
+            } else if !remote_host_branches.contains(&hb) {
                 prune.push(PruneFrom::LocalOnly(hb));
             }
         }
@@ -135,9 +122,9 @@ impl<Ref: Display> Snapshot<Ref> {
             .collect()
     }
 
-    /// Return all [`HostBranch`]s grouped by host in sorted order.
-    pub fn sorted_hosts_and_branches(self) -> Vec<(String, Vec<HostBranch<Ref>>)> {
-        let mut by_host = HashMap::<String, Vec<HostBranch<Ref>>>::new();
+    /// Return all [`NomadRef`]s grouped by host in sorted order.
+    pub fn sorted_hosts_and_branches(self) -> Vec<(String, Vec<NomadRef<Ref>>)> {
+        let mut by_host = HashMap::<String, Vec<NomadRef<Ref>>>::new();
         let Self { host_branches, .. } = self;
 
         for hb in host_branches {
@@ -164,7 +151,7 @@ impl<Ref: Display> Snapshot<Ref> {
     pub fn branches_for_host(&self, config: &Config) -> Vec<Branch> {
         self.host_branches
             .iter()
-            .filter(|hb| hb.host == config.host)
+            .filter(|hb| hb.user == config.user && hb.host == config.host)
             .map(|hb| hb.branch.clone())
             .collect()
     }
@@ -174,7 +161,7 @@ impl<Ref: Display> Snapshot<Ref> {
 /// with the low level implementation ("invoke a git binary").
 pub trait Backend {
     /// Any additional information the backend would like to carry about a nomad managed ref.
-    type Ref: Display;
+    type Ref: Display + Eq + Hash;
 
     /// Extract the persistent nomad [`Config`] for this git clone.
     fn read_config(&self) -> Result<Option<Config>>;
@@ -183,10 +170,10 @@ pub trait Backend {
     fn write_config(&self, config: &Config) -> Result<()>;
 
     /// Build a point in time snapshot for all refs that nomad cares about.
-    fn snapshot(&self) -> Result<Snapshot<Self::Ref>>;
+    fn snapshot(&self, config: &Config) -> Result<Snapshot<Self::Ref>>;
 
     /// Fetch all nomad managed refs from a given remote.
-    fn fetch(&self, config: &Config, remote: &Remote) -> Result<HashSet<RemoteHostBranch>>;
+    fn fetch(&self, config: &Config, remote: &Remote) -> Result<HashSet<NomadRef<Self::Ref>>>;
 
     /// Push local branches to nomad managed refs in the remote.
     fn push(&self, config: &Config, remote: &Remote) -> Result<()>;
@@ -206,11 +193,11 @@ mod tests {
         iter::{self, FromIterator},
     };
 
-    use crate::backend::{Config, HostBranch, PruneFrom};
+    use crate::backend::{Config, PruneFrom};
 
-    use super::{Branch, RemoteHostBranch, Snapshot};
+    use super::{Branch, NomadRef, Snapshot};
 
-    #[derive(Debug, PartialEq, Eq)]
+    #[derive(Debug, PartialEq, Eq, Hash)]
     struct Ref;
 
     impl fmt::Display for Ref {
@@ -223,17 +210,20 @@ mod tests {
         Snapshot {
             local_branches: local_branches.into_iter().map(Branch::str).collect(),
             host_branches: vec![
-                HostBranch {
+                NomadRef {
+                    user: "user0".to_string(),
                     host: "host0".to_string(),
                     branch: Branch::str("branch0"),
                     ref_: Ref,
                 },
-                HostBranch {
+                NomadRef {
+                    user: "user0".to_string(),
                     host: "host0".to_string(),
                     branch: Branch::str("branch1"),
                     ref_: Ref,
                 },
-                HostBranch {
+                NomadRef {
+                    user: "user0".to_string(),
                     host: "host1".to_string(),
                     branch: Branch::str("branch1"),
                     ref_: Ref,
@@ -251,16 +241,13 @@ mod tests {
 
     fn remote_host_branches(
         collection: impl IntoIterator<Item = (&'static str, &'static str, &'static str)>,
-    ) -> HashSet<RemoteHostBranch> {
-        HashSet::from_iter(
-            collection
-                .into_iter()
-                .map(|(user, host, branch)| RemoteHostBranch {
-                    user: user.to_string(),
-                    host: host.to_string(),
-                    branch: Branch::str(branch),
-                }),
-        )
+    ) -> HashSet<NomadRef<Ref>> {
+        HashSet::from_iter(collection.into_iter().map(|(user, host, branch)| NomadRef {
+            user: user.to_string(),
+            host: host.to_string(),
+            branch: Branch::str(branch),
+            ref_: Ref {},
+        }))
     }
 
     /// Sets up the scenario where:
@@ -332,7 +319,8 @@ mod tests {
 
         assert_eq!(
             prune,
-            vec![PruneFrom::LocalAndRemote(HostBranch {
+            vec![PruneFrom::LocalAndRemote(NomadRef {
+                user: "user0".to_string(),
                 host: "host0".to_string(),
                 branch: Branch::str("branch1"),
                 ref_: Ref,
@@ -364,7 +352,8 @@ mod tests {
 
         assert_eq!(
             prune,
-            vec![PruneFrom::LocalOnly(HostBranch {
+            vec![PruneFrom::LocalOnly(NomadRef {
+                user: "user0".to_string(),
                 host: "host1".to_string(),
                 branch: Branch::str("branch1"),
                 ref_: Ref,
@@ -379,17 +368,20 @@ mod tests {
         assert_eq!(
             prune,
             vec![
-                PruneFrom::LocalAndRemote(HostBranch {
+                PruneFrom::LocalAndRemote(NomadRef {
+                    user: "user0".to_string(),
                     host: "host0".to_string(),
                     branch: Branch::str("branch0"),
                     ref_: Ref,
                 },),
-                PruneFrom::LocalAndRemote(HostBranch {
+                PruneFrom::LocalAndRemote(NomadRef {
+                    user: "user0".to_string(),
                     host: "host0".to_string(),
                     branch: Branch::str("branch1"),
                     ref_: Ref,
                 },),
-                PruneFrom::LocalAndRemote(HostBranch {
+                PruneFrom::LocalAndRemote(NomadRef {
+                    user: "user0".to_string(),
                     host: "host1".to_string(),
                     branch: Branch::str("branch1"),
                     ref_: Ref,
@@ -406,12 +398,14 @@ mod tests {
         assert_eq!(
             prune,
             vec![
-                PruneFrom::LocalAndRemote(HostBranch {
+                PruneFrom::LocalAndRemote(NomadRef {
+                    user: "user0".to_string(),
                     host: "host0".to_string(),
                     branch: Branch::str("branch0"),
                     ref_: Ref,
                 },),
-                PruneFrom::LocalAndRemote(HostBranch {
+                PruneFrom::LocalAndRemote(NomadRef {
+                    user: "user0".to_string(),
                     host: "host0".to_string(),
                     branch: Branch::str("branch1"),
                     ref_: Ref,

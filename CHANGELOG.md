@@ -13,6 +13,10 @@ However, the output of the application is designed for humans, not machines, and
 
 ## [Unreleased]
 
+## [0.3.2]
+
+- Patch release to test the automated release workflow.
+
 ## [0.3.1]
 
 - Updates some minor dependencies.
@@ -21,6 +25,7 @@ However, the output of the application is designed for humans, not machines, and
 ## [0.3.0]
 
 ### Changed
+
 - Skip running pre-push hooks for git-nomad operations. This allows pushing work-in-progress branches with lint or compile errors (if the repo has pre-push hooks that check that).
 
 ## [0.2.1]
@@ -32,14 +37,17 @@ However, the output of the application is designed for humans, not machines, and
 ## [0.2.0] - 2021-11-06
 
 ### Changed
+
 - The `--version` information now leverages `git describe` to properly capture the precise revision the binary was built from.
 
 ### Fixed
+
 - Clean up deleted branches from other hosts. See https://github.com/rraval/git-nomad/issues/1.
 
 ## [0.1.1] - 2021-05-30
 
 ### Added
+
 - Support for a `--version` flag that reports the crate version.
 
 ## [0.1.0] - 2021-05-30
@@ -47,6 +55,7 @@ However, the output of the application is designed for humans, not machines, and
 An initial release with a reasonable complete implementation.
 
 ### Added
+
 - `init` to configure user and host names to use
 - `ls` to display all nomad managed refs
 - `prune` to remove local and remote nomad managed refs

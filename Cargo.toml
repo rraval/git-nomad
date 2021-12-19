@@ -1,6 +1,6 @@
 [package]
 name = "git-nomad"
-version = "0.2.1"
+version = "0.3.0"
 authors = ["Ronuk Raval <ronuk.raval@gmail.com>"]
 edition = "2018"
 description = "Synchronize work-in-progress git branches in a light weight fashion"

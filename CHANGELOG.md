@@ -13,7 +13,10 @@ However, the output of the application is designed for humans, not machines, and
 
 ## [Unreleased]
 
-- Skip pre-push hooks for git-nomad operations.
+## [0.3.0]
+
+### Changed
+- Skip running pre-push hooks for git-nomad operations. This allows pushing work-in-progress branches with lint or compile errors (if the repo has pre-push hooks that check that).
 
 ## [0.2.1]
 

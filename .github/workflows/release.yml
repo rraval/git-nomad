@@ -37,7 +37,7 @@ jobs:
       - name: Strip and compress binary
         run: |
           strip "target/${{ matrix.target }}/release/git-nomad"
-          gzip --best "target/${{ matrix.target }}/release/git-nomad"
+          gzip --force --best "target/${{ matrix.target }}/release/git-nomad"
 
       - name: Upload asset
         uses: actions/upload-release-asset@v1

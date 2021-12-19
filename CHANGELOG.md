@@ -13,6 +13,10 @@ However, the output of the application is designed for humans, not machines, and
 
 ## [Unreleased]
 
+### Fixed
+
+- [#2][i2]: A severe bug related to purging refs from other hosts, i.e. after you wish to stop using git-nomad.
+
 ## [0.3.2]
 
 - Patch release to test the automated release workflow.
@@ -42,7 +46,7 @@ However, the output of the application is designed for humans, not machines, and
 
 ### Fixed
 
-- Clean up deleted branches from other hosts. See https://github.com/rraval/git-nomad/issues/1.
+- [#1][i1]: Clean up deleted branches from other hosts.
 
 ## [0.1.1] - 2021-05-30
 
@@ -60,3 +64,6 @@ An initial release with a reasonable complete implementation.
 - `ls` to display all nomad managed refs
 - `prune` to remove local and remote nomad managed refs
 - `sync` to reconcile local and remote state
+
+[i1]: https://github.com/rraval/git-nomad/issues/1
+[i2]: https://github.com/rraval/git-nomad/issues/2

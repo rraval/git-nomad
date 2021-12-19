@@ -10,7 +10,7 @@ use crate::{
 /// Initialize a git clone to have branches managed by nomad.
 ///
 /// Will refuse to overwrite an already existing configuration.
-pub fn init<B: Backend>(progress: &Progress, backend: B, new_config: &Config) -> Result<()> {
+pub fn init<B: Backend>(progress: &Progress, backend: &B, new_config: &Config) -> Result<()> {
     if let Some(existing_config) = backend.read_config()? {
         bail!(
             "Found existing config, refusing to init again: {:#?}",
@@ -29,7 +29,7 @@ pub fn init<B: Backend>(progress: &Progress, backend: B, new_config: &Config) ->
 /// Synchronize current local branches with nomad managed refs in the given remote.
 pub fn sync<B: Backend>(
     progress: &Progress,
-    backend: B,
+    backend: &B,
     config: &Config,
     remote: &Remote,
 ) -> Result<()> {
@@ -55,7 +55,7 @@ pub fn sync<B: Backend>(
 ///
 /// Does not respect [`Progress::is_output_allowed`] because output is the whole point of this
 /// command.
-pub fn ls<B: Backend>(backend: B, config: &Config) -> Result<()> {
+pub fn ls<B: Backend>(backend: &B, config: &Config) -> Result<()> {
     let snapshot = backend.snapshot(config)?;
 
     for (host, branches) in snapshot.sorted_hosts_and_branches() {
@@ -70,7 +70,12 @@ pub fn ls<B: Backend>(backend: B, config: &Config) -> Result<()> {
 }
 
 /// Delete nomad managed refs returned by `to_prune`.
-pub fn prune<B: Backend, F>(backend: B, config: &Config, remote: &Remote, to_prune: F) -> Result<()>
+pub fn prune<B: Backend, F>(
+    backend: &B,
+    config: &Config,
+    remote: &Remote,
+    to_prune: F,
+) -> Result<()>
 where
     F: Fn(Snapshot<B::Ref>) -> Vec<PruneFrom<B::Ref>>,
 {
@@ -79,4 +84,81 @@ where
     let prune = to_prune(snapshot);
     backend.prune(remote, prune.iter())?;
     Ok(())
+}
+
+#[cfg(test)]
+mod test {
+    use std::{collections::HashSet, iter::FromIterator};
+
+    use crate::{
+        backend::Snapshot,
+        command::prune,
+        git_testing::{GitRemote, INITIAL_BRANCH, PROGRESS},
+    };
+
+    use super::sync;
+
+    #[test]
+    fn issue_2_other_host() {
+        let origin = GitRemote::init();
+
+        let host0 = origin.clone("host0");
+        sync(&PROGRESS, &host0.git, &host0.config, &host0.remote()).unwrap();
+
+        let host1 = origin.clone("host1");
+        sync(&PROGRESS, &host1.git, &host1.config, &host1.remote()).unwrap();
+
+        // both hosts have synced, the origin should have both refs
+        assert_eq!(
+            origin.nomad_refs(),
+            HashSet::from_iter([
+                host0.get_nomad_ref(INITIAL_BRANCH).unwrap(),
+                host1.get_nomad_ref(INITIAL_BRANCH).unwrap(),
+            ])
+        );
+
+        // pruning refs for host0 from host1
+        prune(&host1.git, &host1.config, &host1.remote(), |snapshot| {
+            snapshot.prune_all_by_hosts(&HashSet::from_iter(["host0"]))
+        })
+        .unwrap();
+
+        // the origin should only have refs for host1
+        assert_eq!(
+            origin.nomad_refs(),
+            HashSet::from_iter([host1.get_nomad_ref(INITIAL_BRANCH).unwrap(),])
+        );
+    }
+
+    #[test]
+    fn issue_2_all() {
+        let origin = GitRemote::init();
+
+        let host0 = origin.clone("host0");
+        sync(&PROGRESS, &host0.git, &host0.config, &host0.remote()).unwrap();
+
+        let host1 = origin.clone("host1");
+        sync(&PROGRESS, &host1.git, &host1.config, &host1.remote()).unwrap();
+
+        // both hosts have synced, the origin should have both refs
+        assert_eq!(
+            origin.nomad_refs(),
+            HashSet::from_iter([
+                host0.get_nomad_ref(INITIAL_BRANCH).unwrap(),
+                host1.get_nomad_ref(INITIAL_BRANCH).unwrap(),
+            ])
+        );
+
+        // pruning refs for all hosts from host1
+        prune(
+            &host1.git,
+            &host1.config,
+            &host1.remote(),
+            Snapshot::prune_all,
+        )
+        .unwrap();
+
+        // the origin should have no refs
+        assert_eq!(origin.nomad_refs(), HashSet::new(),);
+    }
 }

@@ -140,7 +140,7 @@ fn main() -> Result<()> {
         let host = string_value(matches, "host")?;
 
         let config = Config { user, host };
-        command::init(progress, git, &config)?;
+        command::init(progress, &git, &config)?;
         return Ok(());
     }
 
@@ -149,7 +149,7 @@ fn main() -> Result<()> {
             None => bail!("No configuration found, try `init` first"),
             Some(config) => {
                 let remote = Remote(string_value(matches, "remote")?);
-                command::sync(progress, git, &config, &remote)
+                command::sync(progress, &git, &config, &remote)
             }
         };
     }
@@ -157,7 +157,7 @@ fn main() -> Result<()> {
     if matches.subcommand_matches("ls").is_some() {
         return match git.read_config()? {
             None => bail!("No configuration found, nothing to prune"),
-            Some(config) => command::ls(git, &config),
+            Some(config) => command::ls(&git, &config),
         };
     }
 
@@ -167,10 +167,10 @@ fn main() -> Result<()> {
             Some(config) => {
                 let remote = Remote(string_value(matches, "remote")?);
                 if matches.is_present("all") {
-                    command::prune(git, &config, &remote, |snapshot| snapshot.prune_all())
+                    command::prune(&git, &config, &remote, |snapshot| snapshot.prune_all())
                 } else if let Some(hosts) = matches.values_of("host") {
                     let set = hosts.collect::<HashSet<_>>();
-                    command::prune(git, &config, &remote, |snapshot| {
+                    command::prune(&git, &config, &remote, |snapshot| {
                         snapshot.prune_all_by_hosts(&set)
                     })
                 } else {

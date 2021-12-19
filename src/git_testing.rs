@@ -17,7 +17,7 @@ const GIT: &str = "git";
 const ORIGIN: &str = "origin";
 pub const INITIAL_BRANCH: &str = "master";
 const USER: &str = "user0";
-const PROGRESS: Progress = Progress::Verbose(Verbosity::CommandAndOutput);
+pub const PROGRESS: Progress = Progress::Verbose(Verbosity::CommandAndOutput);
 
 #[derive(PartialEq, Eq, Hash, Debug, Clone)]
 pub struct GitCommitId {
@@ -136,12 +136,12 @@ impl GitRemote {
 pub struct GitClone<'a> {
     _remote: &'a GitRemote,
     _clone_dir: PathBuf,
-    config: Config,
-    git: GitBinary<'static, 'static>,
+    pub config: Config,
+    pub git: GitBinary<'static, 'static>,
 }
 
 impl<'a> GitClone<'a> {
-    fn remote(&self) -> Remote {
+    pub fn remote(&self) -> Remote {
         Remote(ORIGIN.to_owned())
     }
 

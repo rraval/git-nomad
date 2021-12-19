@@ -215,7 +215,7 @@ mod tests {
 
     impl fmt::Display for Ref {
         fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            panic!("Not expected to be called")
+            unreachable!()
         }
     }
 

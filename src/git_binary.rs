@@ -466,7 +466,7 @@ impl<'progress, 'name> Backend for GitBinary<'progress, 'name> {
         let refs = self.list_refs("Fetching all refs")?;
 
         let mut local_branches = HashSet::<Branch>::new();
-        let mut host_branches = Vec::<NomadRef<GitRef>>::new();
+        let mut nomad_refs = Vec::<NomadRef<GitRef>>::new();
 
         for r in refs {
             if let Some(name) = r.name.strip_prefix("refs/heads/") {
@@ -474,13 +474,13 @@ impl<'progress, 'name> Backend for GitBinary<'progress, 'name> {
             }
 
             if let Ok(nomad_ref) = NomadRef::<GitRef>::from_git_local_ref(config, r) {
-                host_branches.push(nomad_ref);
+                nomad_refs.push(nomad_ref);
             }
         }
 
         Ok(Snapshot {
             local_branches,
-            host_branches,
+            nomad_refs,
         })
     }
 

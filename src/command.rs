@@ -34,12 +34,12 @@ pub fn sync<B: Backend>(
     remote: &Remote,
 ) -> Result<()> {
     backend.push(config, remote)?;
-    let remote_host_branches = backend.fetch(config, remote)?;
+    let remote_nomad_refs = backend.fetch(config, remote)?;
     let snapshot = backend.snapshot(config)?;
     backend.prune(
         remote,
         snapshot
-            .prune_deleted_branches(config, &remote_host_branches)
+            .prune_deleted_branches(config, &remote_nomad_refs)
             .iter(),
     )?;
 

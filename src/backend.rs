@@ -59,7 +59,7 @@ pub struct Snapshot<Ref: Display + Eq + Hash> {
     /// The active branches in this clone that the user manipulates directly with `git branch` etc.
     pub local_branches: HashSet<Branch>,
     /// The refs that nomad manages to follow the local branches.
-    pub host_branches: Vec<NomadRef<Ref>>,
+    pub nomad_refs: Vec<NomadRef<Ref>>,
 }
 
 /// Describes where a ref should be removed from.
@@ -76,22 +76,22 @@ impl<Ref: Display + Eq + Hash> Snapshot<Ref> {
     pub fn prune_deleted_branches(
         self,
         config: &Config,
-        remote_host_branches: &HashSet<NomadRef<Ref>>,
+        remote_nomad_refs: &HashSet<NomadRef<Ref>>,
     ) -> Vec<PruneFrom<Ref>> {
         let Self {
-            host_branches,
+            nomad_refs,
             local_branches,
         } = self;
 
         let mut prune = Vec::<PruneFrom<Ref>>::new();
 
-        for hb in host_branches {
-            if hb.host == config.host {
-                if !local_branches.contains(&hb.branch) {
-                    prune.push(PruneFrom::LocalAndRemote(hb));
+        for nomad_ref in nomad_refs {
+            if nomad_ref.host == config.host {
+                if !local_branches.contains(&nomad_ref.branch) {
+                    prune.push(PruneFrom::LocalAndRemote(nomad_ref));
                 }
-            } else if !remote_host_branches.contains(&hb) {
-                prune.push(PruneFrom::LocalOnly(hb));
+            } else if !remote_nomad_refs.contains(&nomad_ref) {
+                prune.push(PruneFrom::LocalOnly(nomad_ref));
             }
         }
 
@@ -100,8 +100,8 @@ impl<Ref: Display + Eq + Hash> Snapshot<Ref> {
 
     /// Return all nomad branches regardless of host.
     pub fn prune_all(self) -> Vec<PruneFrom<Ref>> {
-        let Self { host_branches, .. } = self;
-        host_branches
+        let Self { nomad_refs, .. } = self;
+        nomad_refs
             .into_iter()
             .map(PruneFrom::LocalAndRemote)
             .collect()
@@ -109,15 +109,15 @@ impl<Ref: Display + Eq + Hash> Snapshot<Ref> {
 
     /// Return all nomad branches for specific hosts.
     pub fn prune_all_by_hosts(self, hosts: &HashSet<&str>) -> Vec<PruneFrom<Ref>> {
-        let Self { host_branches, .. } = self;
-        host_branches
+        let Self { nomad_refs, .. } = self;
+        nomad_refs
             .into_iter()
-            .filter_map(|hb| {
-                if !hosts.contains(hb.host.as_str()) {
+            .filter_map(|nomad_ref| {
+                if !hosts.contains(nomad_ref.host.as_str()) {
                     return None;
                 }
 
-                Some(PruneFrom::LocalAndRemote(hb))
+                Some(PruneFrom::LocalAndRemote(nomad_ref))
             })
             .collect()
     }
@@ -125,13 +125,13 @@ impl<Ref: Display + Eq + Hash> Snapshot<Ref> {
     /// Return all [`NomadRef`]s grouped by host in sorted order.
     pub fn sorted_hosts_and_branches(self) -> Vec<(String, Vec<NomadRef<Ref>>)> {
         let mut by_host = HashMap::<String, Vec<NomadRef<Ref>>>::new();
-        let Self { host_branches, .. } = self;
+        let Self { nomad_refs, .. } = self;
 
-        for hb in host_branches {
+        for nomad_ref in nomad_refs {
             by_host
-                .entry(hb.host.clone())
+                .entry(nomad_ref.host.clone())
                 .or_insert_with(Vec::new)
-                .push(hb);
+                .push(nomad_ref);
         }
 
         let mut as_vec = by_host
@@ -199,7 +199,7 @@ mod tests {
     fn snapshot(local_branches: impl IntoIterator<Item = &'static str>) -> Snapshot<Ref> {
         Snapshot {
             local_branches: local_branches.into_iter().map(Branch::str).collect(),
-            host_branches: vec![
+            nomad_refs: vec![
                 NomadRef {
                     user: "user0".to_string(),
                     host: "host0".to_string(),
@@ -229,7 +229,7 @@ mod tests {
         }
     }
 
-    fn remote_host_branches(
+    fn remote_nomad_refs(
         collection: impl IntoIterator<Item = (&'static str, &'static str, &'static str)>,
     ) -> HashSet<NomadRef<Ref>> {
         HashSet::from_iter(collection.into_iter().map(|(user, host, branch)| NomadRef {
@@ -253,7 +253,7 @@ mod tests {
     fn snapshot_prune_does_nothing0() {
         let prune = snapshot(["branch0", "branch1"]).prune_deleted_branches(
             &config(),
-            &remote_host_branches([("user0", "host1", "branch1")]),
+            &remote_nomad_refs([("user0", "host1", "branch1")]),
         );
 
         assert_eq!(prune, Vec::new(),);
@@ -272,7 +272,7 @@ mod tests {
     fn snapshot_prune_does_nothing1() {
         let prune = snapshot(["branch0", "branch1"]).prune_deleted_branches(
             &config(),
-            &remote_host_branches([
+            &remote_nomad_refs([
                 ("user0", "host0", "branch0"),
                 ("user0", "host0", "branch1"),
                 ("user0", "host1", "branch1"),
@@ -300,7 +300,7 @@ mod tests {
         ])
         .prune_deleted_branches(
             &config(),
-            &remote_host_branches([
+            &remote_nomad_refs([
                 ("user0", "host0", "branch0"),
                 ("user0", "host0", "branch1"),
                 ("user0", "host1", "branch1"),
@@ -332,7 +332,7 @@ mod tests {
     fn snapshot_prune_removes_remote_missing_branches() {
         let prune = snapshot(["branch0", "branch1"]).prune_deleted_branches(
             &config(),
-            &remote_host_branches([
+            &remote_nomad_refs([
                 ("user0", "host0", "branch0"),
                 ("user0", "host0", "branch1"),
                 // This remote nomad ref for another host has been removed

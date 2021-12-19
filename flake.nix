@@ -16,6 +16,7 @@
         act
         cargo
         cargo-outdated
+        cargo-tarpaulin
         clippy
         gdb
         rust-analyzer

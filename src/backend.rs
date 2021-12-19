@@ -55,7 +55,7 @@ pub struct NomadRef<Ref> {
 }
 
 /// A point in time view of refs we care about.
-pub struct Snapshot<Ref: Display + Eq + Hash> {
+pub struct Snapshot<Ref> {
     /// The active branches in this clone that the user manipulates directly with `git branch` etc.
     pub local_branches: HashSet<Branch>,
     /// The refs that nomad manages to follow the local branches.
@@ -69,35 +69,7 @@ pub enum PruneFrom<Ref> {
     LocalAndRemote(NomadRef<Ref>),
 }
 
-impl<Ref: Display + Eq + Hash> Snapshot<Ref> {
-    /// Find nomad host branches that can be pruned because:
-    /// 1. The local branch they were based on no longer exists.
-    /// 2. The remote branch they were based on no longer exists.
-    pub fn prune_deleted_branches(
-        self,
-        config: &Config,
-        remote_nomad_refs: &HashSet<NomadRef<Ref>>,
-    ) -> Vec<PruneFrom<Ref>> {
-        let Self {
-            nomad_refs,
-            local_branches,
-        } = self;
-
-        let mut prune = Vec::<PruneFrom<Ref>>::new();
-
-        for nomad_ref in nomad_refs {
-            if nomad_ref.host == config.host {
-                if !local_branches.contains(&nomad_ref.branch) {
-                    prune.push(PruneFrom::LocalAndRemote(nomad_ref));
-                }
-            } else if !remote_nomad_refs.contains(&nomad_ref) {
-                prune.push(PruneFrom::LocalOnly(nomad_ref));
-            }
-        }
-
-        prune
-    }
-
+impl<Ref> Snapshot<Ref> {
     /// Return all nomad branches regardless of host.
     pub fn prune_all(self) -> Vec<PruneFrom<Ref>> {
         let Self { nomad_refs, .. } = self;
@@ -144,6 +116,36 @@ impl<Ref: Display + Eq + Hash> Snapshot<Ref> {
         as_vec.sort_by(|(host_a, _), (host_b, _)| host_a.cmp(host_b));
 
         as_vec
+    }
+}
+
+impl<Ref: Eq + Hash> Snapshot<Ref> {
+    /// Find nomad host branches that can be pruned because:
+    /// 1. The local branch they were based on no longer exists.
+    /// 2. The remote branch they were based on no longer exists.
+    pub fn prune_deleted_branches(
+        self,
+        config: &Config,
+        remote_nomad_refs: &HashSet<NomadRef<Ref>>,
+    ) -> Vec<PruneFrom<Ref>> {
+        let Self {
+            nomad_refs,
+            local_branches,
+        } = self;
+
+        let mut prune = Vec::<PruneFrom<Ref>>::new();
+
+        for nomad_ref in nomad_refs {
+            if nomad_ref.host == config.host {
+                if !local_branches.contains(&nomad_ref.branch) {
+                    prune.push(PruneFrom::LocalAndRemote(nomad_ref));
+                }
+            } else if !remote_nomad_refs.contains(&nomad_ref) {
+                prune.push(PruneFrom::LocalOnly(nomad_ref));
+            }
+        }
+
+        prune
     }
 }
 

@@ -513,15 +513,16 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
         )
     }
 
-    pub fn prune_nomad_refs<'b, Prune>(&self, remote: &Remote, prune: Prune) -> Result<()>
-    where
-        Prune: Iterator<Item = &'b PruneFrom<GitRef>>,
-    {
+    pub fn prune_nomad_refs(
+        &self,
+        remote: &Remote,
+        prune: impl Iterator<Item = PruneFrom<GitRef>>,
+    ) -> Result<()> {
         let mut refspecs = Vec::<String>::new();
         let mut refs = Vec::<GitRef>::new();
 
         for prune_from in prune {
-            if let PruneFrom::LocalAndRemote(nomad_ref) = prune_from {
+            if let PruneFrom::LocalAndRemote(ref nomad_ref) = prune_from {
                 refspecs.push(format!(":{}", nomad_ref.to_git_remote_ref()));
             }
 
@@ -531,8 +532,7 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
                         nomad_ref
                     }
                 }
-                .ref_
-                .clone(),
+                .ref_,
             );
         }
 

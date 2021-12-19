@@ -38,7 +38,7 @@ pub fn sync(progress: &Progress, git: &GitBinary, config: &Config, remote: &Remo
         remote,
         snapshot
             .prune_deleted_branches(config, &remote_nomad_refs)
-            .iter(),
+            .into_iter(),
     )?;
 
     if progress.is_output_allowed() {
@@ -75,7 +75,7 @@ where
     git.fetch_nomad_refs(config, remote)?;
     let snapshot = git.snapshot(config)?;
     let prune = to_prune(snapshot);
-    git.prune_nomad_refs(remote, prune.iter())?;
+    git.prune_nomad_refs(remote, prune.into_iter())?;
     Ok(())
 }
 

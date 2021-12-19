@@ -159,7 +159,7 @@ impl<'a> GitClone<'a> {
     }
 
     pub fn prune_local_and_remote<'b, B: IntoIterator<Item = &'b str>>(&self, branch_names: B) {
-        let prune_from: Vec<_> = branch_names
+        let prune_from = branch_names
             .into_iter()
             .map(|name| {
                 let nomad_ref = NomadRef::<()> {
@@ -179,11 +179,10 @@ impl<'a> GitClone<'a> {
                 };
 
                 PruneFrom::LocalAndRemote(nomad_ref)
-            })
-            .collect();
+            });
 
         self.git
-            .prune_nomad_refs(&self.remote(), prune_from.iter())
+            .prune_nomad_refs(&self.remote(), prune_from)
             .unwrap();
     }
 

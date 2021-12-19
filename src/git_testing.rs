@@ -7,11 +7,11 @@ use std::{
 use tempfile::{tempdir, TempDir};
 
 use crate::{
-    backend::{Backend, Branch, Config, NomadRef, Remote},
     git_binary::{git_command, GitBinary},
     git_ref::GitRef,
     progress::{Progress, Run, Verbosity},
     snapshot::PruneFrom,
+    types::{Branch, Config, NomadRef, Remote},
 };
 
 const GIT: &str = "git";
@@ -147,11 +147,15 @@ impl<'a> GitClone<'a> {
     }
 
     pub fn push(&self) {
-        self.git.push(&self.config, &self.remote()).unwrap();
+        self.git
+            .push_nomad_refs(&self.config, &self.remote())
+            .unwrap();
     }
 
     pub fn fetch(&self) -> HashSet<NomadRef<GitRef>> {
-        self.git.fetch(&self.config, &self.remote()).unwrap()
+        self.git
+            .fetch_nomad_refs(&self.config, &self.remote())
+            .unwrap()
     }
 
     pub fn prune_local_and_remote<'b, B: IntoIterator<Item = &'b str>>(&self, branch_names: B) {
@@ -178,7 +182,9 @@ impl<'a> GitClone<'a> {
             })
             .collect();
 
-        self.git.prune(&self.remote(), prune_from.iter()).unwrap();
+        self.git
+            .prune_nomad_refs(&self.remote(), prune_from.iter())
+            .unwrap();
     }
 
     pub fn get_nomad_ref(&self, branch: &str) -> Option<NomadRef<GitCommitId>> {

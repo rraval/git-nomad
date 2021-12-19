@@ -1,10 +1,3 @@
-//! See [`Backend`] for the primary entry point.
-use std::{collections::HashSet, fmt::Display, hash::Hash};
-
-use anyhow::Result;
-
-use crate::snapshot::{PruneFrom, Snapshot};
-
 /// The primary configuration that nomad works off.
 #[derive(Debug)]
 pub struct Config {
@@ -50,32 +43,4 @@ pub struct NomadRef<Ref> {
     pub branch: Branch,
     /// Any additional data the [`Backend`] would like to carry around.
     pub ref_: Ref,
-}
-
-/// An abstraction point between the high level operation of nomad ("synchronize git branches")
-/// with the low level implementation ("invoke a git binary").
-pub trait Backend {
-    /// Any additional information the backend would like to carry about a nomad managed ref.
-    type Ref: Display + Eq + Hash;
-
-    /// Extract the persistent nomad [`Config`] for this git clone.
-    fn read_config(&self) -> Result<Option<Config>>;
-
-    /// Persist a new [`Config`] for this git clone.
-    fn write_config(&self, config: &Config) -> Result<()>;
-
-    /// Build a point in time snapshot for all refs that nomad cares about.
-    fn snapshot(&self, config: &Config) -> Result<Snapshot<Self::Ref>>;
-
-    /// Fetch all nomad managed refs from a given remote.
-    fn fetch(&self, config: &Config, remote: &Remote) -> Result<HashSet<NomadRef<Self::Ref>>>;
-
-    /// Push local branches to nomad managed refs in the remote.
-    fn push(&self, config: &Config, remote: &Remote) -> Result<()>;
-
-    /// Prune the given nomad managed refs from both the local and remote clones.
-    fn prune<'a, Prune>(&self, remote: &Remote, prune: Prune) -> Result<()>
-    where
-        Self::Ref: 'a,
-        Prune: Iterator<Item = &'a PruneFrom<Self::Ref>>;
 }

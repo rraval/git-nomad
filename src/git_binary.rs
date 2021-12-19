@@ -4,10 +4,10 @@ use anyhow::{bail, Result};
 use std::{collections::HashSet, ffi::OsStr, path::Path, process::Command};
 
 use crate::{
-    backend::{Backend, Branch, Config, NomadRef, Remote},
     git_ref::GitRef,
     progress::{output_stdout, Progress, Run},
     snapshot::{PruneFrom, Snapshot},
+    types::{Branch, Config, NomadRef, Remote},
 };
 
 /// Attempt to run a git binary without impurities from the environment slipping in.
@@ -39,8 +39,8 @@ pub fn git_command<S: AsRef<OsStr>>(name: S) -> Command {
 /// both built-in and third party.
 mod namespace {
     use crate::{
-        backend::{Branch, Config, NomadRef},
         git_ref::GitRef,
+        types::{Branch, Config, NomadRef},
     };
 
     /// The main name that we declare to be ours and nobody elses. This lays claim to the section
@@ -147,8 +147,8 @@ mod namespace {
     #[cfg(test)]
     mod tests {
         use crate::{
-            backend::{Branch, Config, NomadRef},
             git_ref::GitRef,
+            types::{Branch, Config, NomadRef},
         };
 
         const USER: &str = "user0";
@@ -433,13 +433,8 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
         self.progress.run(Run::Notable, description, &mut command)?;
         Ok(())
     }
-}
 
-/// Implements nomad workflows over an ambient `git` binary.
-impl<'progress, 'name> Backend for GitBinary<'progress, 'name> {
-    type Ref = GitRef;
-
-    fn read_config(&self) -> Result<Option<Config>> {
+    pub fn read_nomad_config(&self) -> Result<Option<Config>> {
         let get = |k: &str| self.get_config(&namespace::config_key(k));
 
         let user = get("user")?;
@@ -454,7 +449,7 @@ impl<'progress, 'name> Backend for GitBinary<'progress, 'name> {
         }
     }
 
-    fn write_config(&self, config: &Config) -> Result<()> {
+    pub fn write_nomad_config(&self, config: &Config) -> Result<()> {
         let set = |k: &str, v: &str| self.set_config(&namespace::config_key(k), v);
 
         set("user", &config.user)?;
@@ -463,7 +458,7 @@ impl<'progress, 'name> Backend for GitBinary<'progress, 'name> {
         Ok(())
     }
 
-    fn snapshot(&self, config: &Config) -> Result<Snapshot<Self::Ref>> {
+    pub fn snapshot(&self, config: &Config) -> Result<Snapshot<GitRef>> {
         let refs = self.list_refs("Fetching all refs")?;
 
         let mut local_branches = HashSet::<Branch>::new();
@@ -482,7 +477,11 @@ impl<'progress, 'name> Backend for GitBinary<'progress, 'name> {
         Ok(Snapshot::new(config, local_branches, nomad_refs))
     }
 
-    fn fetch(&self, config: &Config, remote: &Remote) -> Result<HashSet<NomadRef<GitRef>>> {
+    pub fn fetch_nomad_refs(
+        &self,
+        config: &Config,
+        remote: &Remote,
+    ) -> Result<HashSet<NomadRef<GitRef>>> {
         self.fetch_refspecs(
             format!("Fetching branches from {}", remote.0),
             remote,
@@ -506,7 +505,7 @@ impl<'progress, 'name> Backend for GitBinary<'progress, 'name> {
             .collect())
     }
 
-    fn push(&self, config: &Config, remote: &Remote) -> Result<()> {
+    pub fn push_nomad_refs(&self, config: &Config, remote: &Remote) -> Result<()> {
         self.push_refspecs(
             format!("Pushing local branches to {}", remote.0),
             remote,
@@ -514,7 +513,7 @@ impl<'progress, 'name> Backend for GitBinary<'progress, 'name> {
         )
     }
 
-    fn prune<'b, Prune>(&self, remote: &Remote, prune: Prune) -> Result<()>
+    pub fn prune_nomad_refs<'b, Prune>(&self, remote: &Remote, prune: Prune) -> Result<()>
     where
         Prune: Iterator<Item = &'b PruneFrom<GitRef>>,
     {
@@ -707,7 +706,7 @@ mod test_backend {
     use crate::git_testing::{GitCommitId, GitRemote, INITIAL_BRANCH};
     use std::{collections::HashSet, iter::FromIterator};
 
-    use crate::backend::NomadRef;
+    use crate::types::NomadRef;
 
     /// Push should put local branches to remote `refs/nomad/{user}/{host}/{branch}`
     #[test]

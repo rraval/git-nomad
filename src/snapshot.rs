@@ -3,7 +3,7 @@ use std::{
     hash::Hash,
 };
 
-use crate::backend::{Branch, Config, NomadRef};
+use crate::types::{Branch, Config, NomadRef};
 
 /// A point in time view of refs we care about. [`Snapshot`] is only for local branches and refs
 /// and thus is scoped under a specific [`Config::user`].
@@ -130,7 +130,7 @@ mod tests {
         iter::{self, FromIterator},
     };
 
-    use crate::backend::Config;
+    use crate::types::Config;
 
     use super::{Branch, NomadRef, PruneFrom, Snapshot};
 

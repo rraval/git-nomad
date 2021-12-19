@@ -11,17 +11,17 @@ use clap::crate_version;
 use git_version::git_version;
 
 use crate::{
-    backend::{Backend, Config, Remote},
     git_binary::GitBinary,
     progress::{Progress, Run, Verbosity},
+    types::{Config, Remote},
 };
 
-mod backend;
 mod command;
 mod git_binary;
 mod git_ref;
 mod progress;
 mod snapshot;
+mod types;
 
 #[cfg(test)]
 mod git_testing;
@@ -146,7 +146,7 @@ fn main() -> Result<()> {
     }
 
     if let Some(matches) = matches.subcommand_matches("sync") {
-        return match git.read_config()? {
+        return match git.read_nomad_config()? {
             None => bail!("No configuration found, try `init` first"),
             Some(config) => {
                 let remote = Remote(string_value(matches, "remote")?);
@@ -156,14 +156,14 @@ fn main() -> Result<()> {
     }
 
     if matches.subcommand_matches("ls").is_some() {
-        return match git.read_config()? {
+        return match git.read_nomad_config()? {
             None => bail!("No configuration found, nothing to prune"),
             Some(config) => command::ls(&git, &config),
         };
     }
 
     if let Some(matches) = matches.subcommand_matches("prune") {
-        return match git.read_config()? {
+        return match git.read_nomad_config()? {
             None => bail!("No configuration found, nothing to prune"),
             Some(config) => {
                 let remote = Remote(string_value(matches, "remote")?);

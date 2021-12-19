@@ -3,23 +3,25 @@
 use anyhow::{bail, Result};
 
 use crate::{
-    backend::{Backend, Config, NomadRef, Remote},
+    git_binary::GitBinary,
+    git_ref::GitRef,
     progress::Progress,
     snapshot::{PruneFrom, Snapshot},
+    types::{Config, NomadRef, Remote},
 };
 
 /// Initialize a git clone to have branches managed by nomad.
 ///
 /// Will refuse to overwrite an already existing configuration.
-pub fn init<B: Backend>(progress: &Progress, backend: &B, new_config: &Config) -> Result<()> {
-    if let Some(existing_config) = backend.read_config()? {
+pub fn init(progress: &Progress, git: &GitBinary, new_config: &Config) -> Result<()> {
+    if let Some(existing_config) = git.read_nomad_config()? {
         bail!(
             "Found existing config, refusing to init again: {:#?}",
             existing_config
         );
     }
 
-    backend.write_config(new_config)?;
+    git.write_nomad_config(new_config)?;
     if progress.is_output_allowed() {
         println!("Wrote {:#?}", new_config);
     }
@@ -28,16 +30,11 @@ pub fn init<B: Backend>(progress: &Progress, backend: &B, new_config: &Config) -
 }
 
 /// Synchronize current local branches with nomad managed refs in the given remote.
-pub fn sync<B: Backend>(
-    progress: &Progress,
-    backend: &B,
-    config: &Config,
-    remote: &Remote,
-) -> Result<()> {
-    backend.push(config, remote)?;
-    let remote_nomad_refs = backend.fetch(config, remote)?;
-    let snapshot = backend.snapshot(config)?;
-    backend.prune(
+pub fn sync(progress: &Progress, git: &GitBinary, config: &Config, remote: &Remote) -> Result<()> {
+    git.push_nomad_refs(config, remote)?;
+    let remote_nomad_refs = git.fetch_nomad_refs(config, remote)?;
+    let snapshot = git.snapshot(config)?;
+    git.prune_nomad_refs(
         remote,
         snapshot
             .prune_deleted_branches(config, &remote_nomad_refs)
@@ -46,7 +43,7 @@ pub fn sync<B: Backend>(
 
     if progress.is_output_allowed() {
         println!();
-        ls(backend, config)?
+        ls(git, config)?
     }
 
     Ok(())
@@ -56,8 +53,8 @@ pub fn sync<B: Backend>(
 ///
 /// Does not respect [`Progress::is_output_allowed`] because output is the whole point of this
 /// command.
-pub fn ls<B: Backend>(backend: &B, config: &Config) -> Result<()> {
-    let snapshot = backend.snapshot(config)?;
+pub fn ls(git: &GitBinary, config: &Config) -> Result<()> {
+    let snapshot = git.snapshot(config)?;
 
     for (host, branches) in snapshot.sorted_hosts_and_branches() {
         println!("{}", host);
@@ -71,19 +68,14 @@ pub fn ls<B: Backend>(backend: &B, config: &Config) -> Result<()> {
 }
 
 /// Delete nomad managed refs returned by `to_prune`.
-pub fn prune<B: Backend, F>(
-    backend: &B,
-    config: &Config,
-    remote: &Remote,
-    to_prune: F,
-) -> Result<()>
+pub fn prune<F>(git: &GitBinary, config: &Config, remote: &Remote, to_prune: F) -> Result<()>
 where
-    F: Fn(Snapshot<B::Ref>) -> Vec<PruneFrom<B::Ref>>,
+    F: Fn(Snapshot<GitRef>) -> Vec<PruneFrom<GitRef>>,
 {
-    backend.fetch(config, remote)?;
-    let snapshot = backend.snapshot(config)?;
+    git.fetch_nomad_refs(config, remote)?;
+    let snapshot = git.snapshot(config)?;
     let prune = to_prune(snapshot);
-    backend.prune(remote, prune.iter())?;
+    git.prune_nomad_refs(remote, prune.iter())?;
     Ok(())
 }
 

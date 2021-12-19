@@ -8,9 +8,9 @@ repository = "https://github.com/rraval/git-nomad"
 license = "MIT"
 
 [dependencies]
-anyhow = "^1.0.45"
-clap = "^2.33.3"
+anyhow = "^1.0.51"
+clap = "^2.34.0"
 git-version = "^0.3.5"
 indicatif = "^0.16.2"
 tempfile = "^3.2.0"
-whoami = "^1.1.5"
+whoami = "^1.2.1"

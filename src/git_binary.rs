@@ -478,10 +478,7 @@ impl<'progress, 'name> Backend for GitBinary<'progress, 'name> {
             }
         }
 
-        Ok(Snapshot {
-            local_branches,
-            nomad_refs,
-        })
+        Ok(Snapshot::new(config, local_branches, nomad_refs))
     }
 
     fn fetch(&self, config: &Config, remote: &Remote) -> Result<HashSet<NomadRef<GitRef>>> {

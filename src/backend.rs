@@ -54,12 +54,16 @@ pub struct NomadRef<Ref> {
     pub ref_: Ref,
 }
 
-/// A point in time view of refs we care about.
+/// A point in time view of refs we care about. [`Snapshot`] is only for local branches and refs
+/// and thus is scoped under a specific [`Config::user`].
+#[allow(clippy::manual_non_exhaustive)]
 pub struct Snapshot<Ref> {
     /// The active branches in this clone that the user manipulates directly with `git branch` etc.
     pub local_branches: HashSet<Branch>,
     /// The refs that nomad manages to follow the local branches.
     pub nomad_refs: Vec<NomadRef<Ref>>,
+    /// Force all callers to go through [`Snapshot::new`] which can validate invariants.
+    _private: (),
 }
 
 /// Describes where a ref should be removed from.
@@ -70,6 +74,23 @@ pub enum PruneFrom<Ref> {
 }
 
 impl<Ref> Snapshot<Ref> {
+    /// Smart constructor that enforces the "scoped under a specific [`Config::user`]" invariant.
+    pub fn new(
+        config: &Config,
+        local_branches: HashSet<Branch>,
+        nomad_refs: Vec<NomadRef<Ref>>,
+    ) -> Self {
+        for nomad_ref in &nomad_refs {
+            assert_eq!(config.user, nomad_ref.user);
+        }
+
+        Snapshot {
+            local_branches,
+            nomad_refs,
+            _private: (),
+        }
+    }
+
     /// Return all nomad branches regardless of host.
     pub fn prune_all(self) -> Vec<PruneFrom<Ref>> {
         let Self { nomad_refs, .. } = self;
@@ -131,6 +152,7 @@ impl<Ref: Eq + Hash> Snapshot<Ref> {
         let Self {
             nomad_refs,
             local_branches,
+            ..
         } = self;
 
         let mut prune = Vec::<PruneFrom<Ref>>::new();
@@ -198,10 +220,14 @@ mod tests {
         }
     }
 
-    fn snapshot(local_branches: impl IntoIterator<Item = &'static str>) -> Snapshot<Ref> {
-        Snapshot {
-            local_branches: local_branches.into_iter().map(Branch::str).collect(),
-            nomad_refs: vec![
+    fn snapshot(
+        config: &Config,
+        local_branches: impl IntoIterator<Item = &'static str>,
+    ) -> Snapshot<Ref> {
+        Snapshot::new(
+            config,
+            local_branches.into_iter().map(Branch::str).collect(),
+            vec![
                 NomadRef {
                     user: "user0".to_string(),
                     host: "host0".to_string(),
@@ -221,7 +247,7 @@ mod tests {
                     ref_: Ref,
                 },
             ],
-        }
+        )
     }
 
     fn config() -> Config {
@@ -253,10 +279,9 @@ mod tests {
     /// In this case, we should prune nothing.
     #[test]
     fn snapshot_prune_does_nothing0() {
-        let prune = snapshot(["branch0", "branch1"]).prune_deleted_branches(
-            &config(),
-            &remote_nomad_refs([("user0", "host1", "branch1")]),
-        );
+        let config = &config();
+        let prune = snapshot(config, ["branch0", "branch1"])
+            .prune_deleted_branches(config, &remote_nomad_refs([("user0", "host1", "branch1")]));
 
         assert_eq!(prune, Vec::new(),);
     }
@@ -272,8 +297,9 @@ mod tests {
     /// In this case, we should prune nothing.
     #[test]
     fn snapshot_prune_does_nothing1() {
-        let prune = snapshot(["branch0", "branch1"]).prune_deleted_branches(
-            &config(),
+        let config = &config();
+        let prune = snapshot(config, ["branch0", "branch1"]).prune_deleted_branches(
+            config,
             &remote_nomad_refs([
                 ("user0", "host0", "branch0"),
                 ("user0", "host0", "branch1"),
@@ -295,13 +321,17 @@ mod tests {
     /// In this case, we should remove the nomad refs for the local branches that no longer exist.
     #[test]
     fn snapshot_prune_removes_local_missing_branches() {
-        let prune = snapshot([
-            "branch0",
-            // This branch has been removed
-            // "branch1",
-        ])
+        let config = &config();
+        let prune = snapshot(
+            config,
+            [
+                "branch0",
+                // This branch has been removed
+                // "branch1",
+            ],
+        )
         .prune_deleted_branches(
-            &config(),
+            config,
             &remote_nomad_refs([
                 ("user0", "host0", "branch0"),
                 ("user0", "host0", "branch1"),
@@ -332,8 +362,9 @@ mod tests {
     /// corresponding remote refs no longer exist.
     #[test]
     fn snapshot_prune_removes_remote_missing_branches() {
-        let prune = snapshot(["branch0", "branch1"]).prune_deleted_branches(
-            &config(),
+        let config = &config();
+        let prune = snapshot(config, ["branch0", "branch1"]).prune_deleted_branches(
+            config,
             &remote_nomad_refs([
                 ("user0", "host0", "branch0"),
                 ("user0", "host0", "branch1"),
@@ -356,7 +387,7 @@ mod tests {
     /// [`Snapshot::prune_all`] should remove all branches.
     #[test]
     fn snapshot_prune_all() {
-        let prune = snapshot(["branch0", "branch1"]).prune_all();
+        let prune = snapshot(&config(), ["branch0", "branch1"]).prune_all();
         assert_eq!(
             prune,
             vec![
@@ -385,8 +416,8 @@ mod tests {
     /// [`Snapshot::prune_all_by_hosts`] should only remove branches for specified hosts.
     #[test]
     fn snapshot_prune_hosts() {
-        let prune =
-            snapshot(["branch0", "branch1"]).prune_all_by_hosts(&iter::once("host0").collect());
+        let prune = snapshot(&config(), ["branch0", "branch1"])
+            .prune_all_by_hosts(&iter::once("host0").collect());
         assert_eq!(
             prune,
             vec![

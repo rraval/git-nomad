@@ -13,6 +13,11 @@ However, the output of the application is designed for humans, not machines, and
 
 ## [Unreleased]
 
+## [0.3.1]
+
+- Updates some minor dependencies.
+- Patch release to test the automated release workflow.
+
 ## [0.3.0]
 
 ### Changed

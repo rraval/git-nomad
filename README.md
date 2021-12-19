@@ -149,6 +149,15 @@ Using refs like this has advantages:
 
 ## Installation
 
+### On Linux or Mac OS X
+
+Releases on GitHub have prebuilt binary assets: https://github.com/rraval/git-nomad/releases
+
+1. Download the latest version for your OS.
+2. `gunzip` the downloaded file.
+3. Place the binary somewhere in your `$PATH`.
+4. Check that things work with `git nomad --version`.
+
 ### On NixOS / via Nix
 
 There is a [prototype Nix package available][nixpkg] but it has not been integrated into Nixpkgs yet.

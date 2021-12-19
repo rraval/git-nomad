@@ -838,6 +838,22 @@ mod test_backend {
         }
     }
 
+    fn nomad_refs(git: &GitBinary, config: &Config, prefix: &str) -> HashSet<String> {
+        git.list_refs(&config.host)
+            .unwrap()
+            .into_iter()
+            .filter_map(|r| r.name.strip_prefix(prefix).map(String::from))
+            .collect::<HashSet<_>>()
+    }
+
+    fn remote_nomad_refs(git: &GitBinary, config: &Config) -> HashSet<String> {
+        nomad_refs(git, config, &namespace::remote_ref(config, ""))
+    }
+
+    fn local_nomad_refs(git: &GitBinary, config: &Config) -> HashSet<String> {
+        nomad_refs(git, config, &namespace::local_ref(config, ""))
+    }
+
     fn ref_names(refs: &[GitRef]) -> HashSet<String> {
         refs.iter().map(|r| r.name.clone()).collect::<HashSet<_>>()
     }
@@ -945,36 +961,11 @@ mod test_backend {
     /// Pruning should delete refs in the local and remote.
     #[test]
     fn push_fetch_prune() {
-        let remote = GitRemote::init();
-        let local = remote.clone("local");
+        let origin = GitRemote::init();
+        let host0 = origin.clone("host0");
 
-        let remote_nomad_refs = || {
-            remote
-                .git
-                .list_refs("Remote refs")
-                .unwrap()
-                .into_iter()
-                .filter_map(|r| {
-                    r.name
-                        .strip_prefix(&namespace::remote_ref(&local.config, ""))
-                        .map(String::from)
-                })
-                .collect::<HashSet<_>>()
-        };
-
-        let local_nomad_refs = || {
-            local
-                .git
-                .list_refs("Local refs")
-                .unwrap()
-                .into_iter()
-                .filter_map(|r| {
-                    r.name
-                        .strip_prefix(&namespace::local_ref(&local.config, ""))
-                        .map(String::from)
-                })
-                .collect::<HashSet<_>>()
-        };
+        let origin_nomad_refs = || remote_nomad_refs(&origin.git, &host0.config);
+        let host0_nomad_refs = || local_nomad_refs(&host0.git, &host0.config);
 
         let empty_set = HashSet::new();
         let branch_set = {
@@ -984,22 +975,22 @@ mod test_backend {
         };
 
         // In the beginning, there are no nomad refs
-        assert_eq!(remote_nomad_refs(), empty_set);
-        assert_eq!(local_nomad_refs(), empty_set);
+        assert_eq!(origin_nomad_refs(), empty_set);
+        assert_eq!(host0_nomad_refs(), empty_set);
 
         // Pushing creates a remote nomad ref, but local remains empty
-        local.push();
-        assert_eq!(remote_nomad_refs(), branch_set);
-        assert_eq!(local_nomad_refs(), empty_set);
+        host0.push();
+        assert_eq!(origin_nomad_refs(), branch_set);
+        assert_eq!(host0_nomad_refs(), empty_set);
 
         // Fetching creates a local nomad ref
-        local.fetch();
-        assert_eq!(remote_nomad_refs(), branch_set);
-        assert_eq!(local_nomad_refs(), branch_set);
+        host0.fetch();
+        assert_eq!(origin_nomad_refs(), branch_set);
+        assert_eq!(host0_nomad_refs(), branch_set);
 
         // Pruning removes the ref remotely and locally
-        local.prune_local_and_remote([INITIAL_BRANCH]);
-        assert_eq!(remote_nomad_refs(), empty_set);
-        assert_eq!(local_nomad_refs(), empty_set);
+        host0.prune_local_and_remote([INITIAL_BRANCH]);
+        assert_eq!(origin_nomad_refs(), empty_set);
+        assert_eq!(host0_nomad_refs(), empty_set);
     }
 }

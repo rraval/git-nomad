@@ -7,10 +7,11 @@ use std::{
 use tempfile::{tempdir, TempDir};
 
 use crate::{
-    backend::{Backend, Branch, Config, NomadRef, PruneFrom, Remote},
+    backend::{Backend, Branch, Config, NomadRef, Remote},
     git_binary::{git_command, GitBinary},
     git_ref::GitRef,
     progress::{Progress, Run, Verbosity},
+    snapshot::PruneFrom,
 };
 
 const GIT: &str = "git";

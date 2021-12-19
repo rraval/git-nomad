@@ -3,8 +3,9 @@
 use anyhow::{bail, Result};
 
 use crate::{
-    backend::{Backend, Config, NomadRef, PruneFrom, Remote, Snapshot},
+    backend::{Backend, Config, NomadRef, Remote},
     progress::Progress,
+    snapshot::{PruneFrom, Snapshot},
 };
 
 /// Initialize a git clone to have branches managed by nomad.
@@ -91,9 +92,9 @@ mod test {
     use std::{collections::HashSet, iter::FromIterator};
 
     use crate::{
-        backend::Snapshot,
         command::prune,
         git_testing::{GitRemote, INITIAL_BRANCH, PROGRESS},
+        snapshot::Snapshot,
     };
 
     use super::sync;

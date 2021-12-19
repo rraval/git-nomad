@@ -21,6 +21,7 @@ mod command;
 mod git_binary;
 mod git_ref;
 mod progress;
+mod snapshot;
 
 #[cfg(test)]
 mod git_testing;

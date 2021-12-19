@@ -4,9 +4,10 @@ use anyhow::{bail, Result};
 use std::{collections::HashSet, ffi::OsStr, path::Path, process::Command};
 
 use crate::{
-    backend::{Backend, Branch, Config, NomadRef, PruneFrom, Remote, Snapshot},
+    backend::{Backend, Branch, Config, NomadRef, Remote},
     git_ref::GitRef,
     progress::{output_stdout, Progress, Run},
+    snapshot::{PruneFrom, Snapshot},
 };
 
 /// Attempt to run a git binary without impurities from the environment slipping in.

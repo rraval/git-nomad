@@ -22,6 +22,9 @@ mod git_binary;
 mod git_ref;
 mod progress;
 
+#[cfg(test)]
+mod git_testing;
+
 fn string_value(matches: &ArgMatches, name: &'static str) -> Result<String> {
     matches.value_of(name).context(name).map(String::from)
 }

@@ -150,9 +150,15 @@ impl<'a> GitClone<'a> {
             .unwrap();
     }
 
-    pub fn fetch(&self) -> HashSet<NomadRef<GitRef>> {
+    pub fn fetch(&self) {
         self.git
             .fetch_nomad_refs(&self.user, &self.remote())
+            .unwrap()
+    }
+
+    pub fn list(&self) -> impl Iterator<Item = NomadRef<GitRef>> {
+        self.git
+            .list_nomad_refs(&self.user, &self.remote())
             .unwrap()
     }
 

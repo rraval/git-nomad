@@ -471,17 +471,19 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
         Ok(Snapshot::new(user, local_branches, nomad_refs))
     }
 
-    pub fn fetch_nomad_refs(
-        &self,
-        user: &User,
-        remote: &Remote,
-    ) -> Result<HashSet<NomadRef<GitRef>>> {
+    pub fn fetch_nomad_refs(&self, user: &User, remote: &Remote) -> Result<()> {
         self.fetch_refspecs(
             format!("Fetching branches from {}", remote.0),
             remote,
             &[&namespace::fetch_refspec(user)],
-        )?;
+        )
+    }
 
+    pub fn list_nomad_refs(
+        &self,
+        user: &User,
+        remote: &Remote,
+    ) -> Result<impl Iterator<Item = NomadRef<GitRef>>> {
         // In an ideal world, we would be able to get the list of refs fetched directly from `git`.
         //
         // However, `git fetch` is a porcelain command and we don't want to get into parsing its
@@ -495,8 +497,7 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
 
         Ok(remote_refs
             .into_iter()
-            .filter_map(|ref_| NomadRef::<GitRef>::from_git_remote_ref(ref_).ok())
-            .collect())
+            .filter_map(|ref_| NomadRef::<GitRef>::from_git_remote_ref(ref_).ok()))
     }
 
     pub fn push_nomad_refs(&self, user: &User, host: &Host, remote: &Remote) -> Result<()> {
@@ -730,9 +731,9 @@ mod test_backend {
         assert_eq!(host1.nomad_refs(), HashSet::new());
 
         // After fetch, we should see the one host0 branch
+        host1.fetch();
         let nomad_refs = host1
-            .fetch()
-            .into_iter()
+            .list()
             .map(Into::into)
             .collect::<HashSet<NomadRef<GitCommitId>>>();
         assert_eq!(

@@ -31,7 +31,8 @@ pub fn init(git: &GitBinary, new_user: &User, new_host: &Host) -> Result<()> {
 /// Synchronize current local branches with nomad managed refs in the given remote.
 pub fn sync(git: &GitBinary, user: &User, host: &Host, remote: &Remote) -> Result<()> {
     git.push_nomad_refs(user, host, remote)?;
-    let remote_nomad_refs = git.fetch_nomad_refs(user, remote)?;
+    git.fetch_nomad_refs(user, remote)?;
+    let remote_nomad_refs = git.list_nomad_refs(user, remote)?.collect();
     let snapshot = git.snapshot(user)?;
     git.prune_nomad_refs(
         remote,

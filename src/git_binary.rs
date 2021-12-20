@@ -434,6 +434,10 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
         Ok(())
     }
 
+    pub fn is_output_allowed(&self) -> bool {
+        self.progress.is_output_allowed()
+    }
+
     pub fn read_nomad_config(&self) -> Result<Option<Config>> {
         let get = |k: &str| self.get_config(&namespace::config_key(k));
 

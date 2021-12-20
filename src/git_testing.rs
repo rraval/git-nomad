@@ -18,7 +18,7 @@ const GIT: &str = "git";
 const ORIGIN: &str = "origin";
 pub const INITIAL_BRANCH: &str = "master";
 const USER: &str = "user0";
-pub const PROGRESS: Progress = Progress::Verbose(Verbosity::CommandAndOutput);
+const PROGRESS: Progress = Progress::Verbose(Verbosity::CommandAndOutput);
 
 #[derive(PartialEq, Eq, Hash, Debug, Clone)]
 pub struct GitCommitId {
@@ -159,27 +159,25 @@ impl<'a> GitClone<'a> {
     }
 
     pub fn prune_local_and_remote<'b, B: IntoIterator<Item = &'b str>>(&self, branch_names: B) {
-        let prune_from = branch_names
-            .into_iter()
-            .map(|name| {
-                let nomad_ref = NomadRef::<()> {
-                    user: self.config.user.clone(),
-                    host: self.config.host.clone(),
-                    branch: Branch::str(name),
-                    ref_: (),
-                };
+        let prune_from = branch_names.into_iter().map(|name| {
+            let nomad_ref = NomadRef::<()> {
+                user: self.config.user.clone(),
+                host: self.config.host.clone(),
+                branch: Branch::str(name),
+                ref_: (),
+            };
 
-                let ref_name = nomad_ref.to_git_local_ref();
+            let ref_name = nomad_ref.to_git_local_ref();
 
-                let nomad_ref = NomadRef {
-                    user: nomad_ref.user,
-                    host: nomad_ref.host,
-                    branch: nomad_ref.branch,
-                    ref_: self.git.get_ref("", ref_name).unwrap(),
-                };
+            let nomad_ref = NomadRef {
+                user: nomad_ref.user,
+                host: nomad_ref.host,
+                branch: nomad_ref.branch,
+                ref_: self.git.get_ref("", ref_name).unwrap(),
+            };
 
-                PruneFrom::LocalAndRemote(nomad_ref)
-            });
+            PruneFrom::LocalAndRemote(nomad_ref)
+        });
 
         self.git
             .prune_nomad_refs(&self.remote(), prune_from)

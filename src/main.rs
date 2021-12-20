@@ -141,7 +141,7 @@ fn main() -> Result<()> {
         let host = string_value(matches, "host")?;
 
         let config = Config { user, host };
-        command::init(progress, &git, &config)?;
+        command::init(&git, &config)?;
         return Ok(());
     }
 
@@ -150,7 +150,7 @@ fn main() -> Result<()> {
             None => bail!("No configuration found, try `init` first"),
             Some(config) => {
                 let remote = Remote(string_value(matches, "remote")?);
-                command::sync(progress, &git, &config, &remote)
+                command::sync(&git, &config, &remote)
             }
         };
     }

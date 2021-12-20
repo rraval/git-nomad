@@ -5,7 +5,6 @@ use anyhow::{bail, Result};
 use crate::{
     git_binary::GitBinary,
     git_ref::GitRef,
-    progress::Progress,
     snapshot::{PruneFrom, Snapshot},
     types::{Config, NomadRef, Remote},
 };
@@ -13,7 +12,7 @@ use crate::{
 /// Initialize a git clone to have branches managed by nomad.
 ///
 /// Will refuse to overwrite an already existing configuration.
-pub fn init(progress: &Progress, git: &GitBinary, new_config: &Config) -> Result<()> {
+pub fn init(git: &GitBinary, new_config: &Config) -> Result<()> {
     if let Some(existing_config) = git.read_nomad_config()? {
         bail!(
             "Found existing config, refusing to init again: {:#?}",
@@ -22,7 +21,7 @@ pub fn init(progress: &Progress, git: &GitBinary, new_config: &Config) -> Result
     }
 
     git.write_nomad_config(new_config)?;
-    if progress.is_output_allowed() {
+    if git.is_output_allowed() {
         println!("Wrote {:#?}", new_config);
     }
 
@@ -30,7 +29,7 @@ pub fn init(progress: &Progress, git: &GitBinary, new_config: &Config) -> Result
 }
 
 /// Synchronize current local branches with nomad managed refs in the given remote.
-pub fn sync(progress: &Progress, git: &GitBinary, config: &Config, remote: &Remote) -> Result<()> {
+pub fn sync(git: &GitBinary, config: &Config, remote: &Remote) -> Result<()> {
     git.push_nomad_refs(config, remote)?;
     let remote_nomad_refs = git.fetch_nomad_refs(config, remote)?;
     let snapshot = git.snapshot(config)?;
@@ -41,7 +40,7 @@ pub fn sync(progress: &Progress, git: &GitBinary, config: &Config, remote: &Remo
             .into_iter(),
     )?;
 
-    if progress.is_output_allowed() {
+    if git.is_output_allowed() {
         println!();
         ls(git, config)?
     }
@@ -85,7 +84,7 @@ mod test {
 
     use crate::{
         command::prune,
-        git_testing::{GitRemote, INITIAL_BRANCH, PROGRESS},
+        git_testing::{GitRemote, INITIAL_BRANCH},
         snapshot::Snapshot,
     };
 
@@ -96,10 +95,10 @@ mod test {
         let origin = GitRemote::init();
 
         let host0 = origin.clone("host0");
-        sync(&PROGRESS, &host0.git, &host0.config, &host0.remote()).unwrap();
+        sync(&host0.git, &host0.config, &host0.remote()).unwrap();
 
         let host1 = origin.clone("host1");
-        sync(&PROGRESS, &host1.git, &host1.config, &host1.remote()).unwrap();
+        sync(&host1.git, &host1.config, &host1.remote()).unwrap();
 
         // both hosts have synced, the origin should have both refs
         assert_eq!(
@@ -128,10 +127,10 @@ mod test {
         let origin = GitRemote::init();
 
         let host0 = origin.clone("host0");
-        sync(&PROGRESS, &host0.git, &host0.config, &host0.remote()).unwrap();
+        sync(&host0.git, &host0.config, &host0.remote()).unwrap();
 
         let host1 = origin.clone("host1");
-        sync(&PROGRESS, &host1.git, &host1.config, &host1.remote()).unwrap();
+        sync(&host1.git, &host1.config, &host1.remote()).unwrap();
 
         // both hosts have synced, the origin should have both refs
         assert_eq!(

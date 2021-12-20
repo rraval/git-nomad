@@ -13,6 +13,9 @@ However, the output of the application is designed for humans, not machines, and
 
 ## [Unreleased]
 
+- An internal rewrite of the implementation to prevent entire categories of bugs like [#1][i1], [#2][i2], and [#3][i3] from sneaking in again.
+- End-to-end tests that validate the entire workflow.
+
 ### Fixed
 
 - [#2][i2]: A severe bug related to purging refs from other hosts, i.e. after you wish to stop using git-nomad.
@@ -67,3 +70,4 @@ An initial release with a reasonable complete implementation.
 
 [i1]: https://github.com/rraval/git-nomad/issues/1
 [i2]: https://github.com/rraval/git-nomad/issues/2
+[i3]: https://github.com/rraval/git-nomad/issues/3

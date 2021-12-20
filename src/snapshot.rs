@@ -1,9 +1,6 @@
-use std::{
-    collections::{HashMap, HashSet},
-    hash::Hash,
-};
+use std::collections::{HashMap, HashSet};
 
-use crate::types::{Branch, Host, NomadRef, User};
+use crate::types::{Branch, Host, NomadRef, RemoteNomadRefSet, User};
 
 /// A point in time view of refs we care about. [`Snapshot`] is only for local branches and refs
 /// and thus is scoped under a specific [`Config::user`].
@@ -40,6 +37,35 @@ impl<Ref> Snapshot<Ref> {
             nomad_refs,
             _private: (),
         }
+    }
+
+    /// Find nomad host branches that can be pruned because:
+    /// 1. The local branch they were based on no longer exists.
+    /// 2. The remote branch they were based on no longer exists.
+    pub fn prune_deleted_branches(
+        self,
+        host: &Host,
+        remote_nomad_refs: &RemoteNomadRefSet,
+    ) -> Vec<PruneFrom<Ref>> {
+        let Self {
+            nomad_refs,
+            local_branches,
+            ..
+        } = self;
+
+        let mut prune = Vec::<PruneFrom<Ref>>::new();
+
+        for nomad_ref in nomad_refs {
+            if &nomad_ref.host == host {
+                if !local_branches.contains(&nomad_ref.branch) {
+                    prune.push(PruneFrom::LocalAndRemote(nomad_ref));
+                }
+            } else if !remote_nomad_refs.contains(&nomad_ref) {
+                prune.push(PruneFrom::LocalOnly(nomad_ref));
+            }
+        }
+
+        prune
     }
 
     /// Return all nomad branches regardless of host.
@@ -91,42 +117,11 @@ impl<Ref> Snapshot<Ref> {
     }
 }
 
-impl<Ref: Eq + Hash> Snapshot<Ref> {
-    /// Find nomad host branches that can be pruned because:
-    /// 1. The local branch they were based on no longer exists.
-    /// 2. The remote branch they were based on no longer exists.
-    pub fn prune_deleted_branches(
-        self,
-        host: &Host,
-        remote_nomad_refs: &HashSet<NomadRef<Ref>>,
-    ) -> Vec<PruneFrom<Ref>> {
-        let Self {
-            nomad_refs,
-            local_branches,
-            ..
-        } = self;
-
-        let mut prune = Vec::<PruneFrom<Ref>>::new();
-
-        for nomad_ref in nomad_refs {
-            if &nomad_ref.host == host {
-                if !local_branches.contains(&nomad_ref.branch) {
-                    prune.push(PruneFrom::LocalAndRemote(nomad_ref));
-                }
-            } else if !remote_nomad_refs.contains(&nomad_ref) {
-                prune.push(PruneFrom::LocalOnly(nomad_ref));
-            }
-        }
-
-        prune
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::{collections::HashSet, iter::FromIterator};
 
-    use crate::types::{Host, User};
+    use crate::types::{Host, RemoteNomadRefSet, User};
 
     use super::{Branch, NomadRef, PruneFrom, Snapshot};
 
@@ -162,13 +157,12 @@ mod tests {
 
     fn remote_nomad_refs(
         collection: impl IntoIterator<Item = (&'static str, &'static str, &'static str)>,
-    ) -> HashSet<NomadRef<()>> {
-        HashSet::from_iter(collection.into_iter().map(|(user, host, branch)| NomadRef {
-            user: User::str(user),
-            host: Host::str(host),
-            branch: Branch::str(branch),
-            ref_: (),
-        }))
+    ) -> RemoteNomadRefSet {
+        RemoteNomadRefSet::from_iter(
+            collection.into_iter().map(|(user, host, branch)| {
+                (User::str(user), Host::str(host), Branch::str(branch))
+            }),
+        )
     }
 
     /// Sets up the scenario where:

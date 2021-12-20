@@ -85,21 +85,95 @@ mod test {
 
     use crate::{
         command::prune,
-        git_testing::{GitRemote, INITIAL_BRANCH},
+        git_testing::{GitClone, GitRemote, INITIAL_BRANCH},
         snapshot::Snapshot,
+        types::Branch,
     };
 
     use super::sync;
+
+    fn sync_host(host: &GitClone) {
+        sync(&host.git, &host.user, &host.host, &host.remote()).unwrap();
+    }
+
+    #[test]
+    fn issue_1() {
+        let origin = GitRemote::init();
+        let feature = &Branch::str("feature");
+
+        let host0 = origin.clone("user0", "host0");
+        sync_host(&host0);
+
+        let host1 = origin.clone("user0", "host1");
+        host1
+            .git
+            .create_branch("Start feature branch", feature)
+            .unwrap();
+        sync_host(&host1);
+
+        // both hosts have synced, the origin should have refs from both (including the one for the
+        // feature branch on host1)
+        assert_eq!(
+            origin.nomad_refs(),
+            HashSet::from_iter([
+                host0.get_nomad_ref(INITIAL_BRANCH).unwrap(),
+                host1.get_nomad_ref(INITIAL_BRANCH).unwrap(),
+                host1.get_nomad_ref("feature").unwrap(),
+            ])
+        );
+
+        // host0 hasn't observed host1 yet
+        assert_eq!(
+            host0.nomad_refs(),
+            HashSet::from_iter([host0.get_nomad_ref(INITIAL_BRANCH).unwrap(),])
+        );
+
+        // sync host0, which should observe host1 refs
+        sync_host(&host0);
+        assert_eq!(
+            host0.nomad_refs(),
+            HashSet::from_iter([
+                host0.get_nomad_ref(INITIAL_BRANCH).unwrap(),
+                host1.get_nomad_ref(INITIAL_BRANCH).unwrap(),
+                host1.get_nomad_ref("feature").unwrap(),
+            ])
+        );
+
+        // host1 deletes the branch and syncs, removing it from origin
+        host1
+            .git
+            .delete_branch("Abandon feature branch", feature)
+            .unwrap();
+        sync_host(&host1);
+
+        assert_eq!(
+            origin.nomad_refs(),
+            HashSet::from_iter([
+                host0.get_nomad_ref(INITIAL_BRANCH).unwrap(),
+                host1.get_nomad_ref(INITIAL_BRANCH).unwrap(),
+            ])
+        );
+
+        // host0 syncs and removes the ref for the deleted feature branch
+        sync_host(&host0);
+        assert_eq!(
+            host0.nomad_refs(),
+            HashSet::from_iter([
+                host0.get_nomad_ref(INITIAL_BRANCH).unwrap(),
+                host1.get_nomad_ref(INITIAL_BRANCH).unwrap(),
+            ])
+        );
+    }
 
     #[test]
     fn issue_2_other_host() {
         let origin = GitRemote::init();
 
         let host0 = origin.clone("user0", "host0");
-        sync(&host0.git, &host0.user, &host0.host, &host0.remote()).unwrap();
+        sync_host(&host0);
 
         let host1 = origin.clone("user0", "host1");
-        sync(&host1.git, &host0.user, &host1.host, &host1.remote()).unwrap();
+        sync_host(&host1);
 
         // both hosts have synced, the origin should have both refs
         assert_eq!(
@@ -128,10 +202,10 @@ mod test {
         let origin = GitRemote::init();
 
         let host0 = origin.clone("user0", "host0");
-        sync(&host0.git, &host0.user, &host0.host, &host0.remote()).unwrap();
+        sync_host(&host0);
 
         let host1 = origin.clone("user0", "host1");
-        sync(&host1.git, &host1.user, &host1.host, &host1.remote()).unwrap();
+        sync_host(&host1);
 
         // both hosts have synced, the origin should have both refs
         assert_eq!(

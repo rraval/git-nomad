@@ -1,3 +1,5 @@
+use std::{collections::HashSet, iter::FromIterator};
+
 /// A remote git repository identified by name, like `origin`.
 pub struct Remote(pub String);
 
@@ -53,4 +55,39 @@ pub struct NomadRef<Ref> {
     pub branch: Branch,
     /// Any additional data the [`Backend`] would like to carry around.
     pub ref_: Ref,
+}
+
+pub struct RemoteNomadRefSet {
+    set: HashSet<(User, Host, Branch)>,
+}
+
+impl RemoteNomadRefSet {
+    pub fn contains<Ref>(&self, nomad_ref: &NomadRef<Ref>) -> bool {
+        // FIXME: Doing this efficiently is a bit of a Rust puzzle
+        // https://users.rust-lang.org/t/using-hashset-contains-with-tuple-types-without-takeing-ownership-of-the-values/65455
+        // https://stackoverflow.com/questions/45786717/how-to-implement-hashmap-with-two-keys/45795699#45795699
+        self.set.contains(&(
+            nomad_ref.user.clone(),
+            nomad_ref.host.clone(),
+            nomad_ref.branch.clone(),
+        ))
+    }
+}
+
+impl FromIterator<(User, Host, Branch)> for RemoteNomadRefSet {
+    fn from_iter<T: IntoIterator<Item = (User, Host, Branch)>>(iter: T) -> Self {
+        let set = HashSet::from_iter(iter);
+        RemoteNomadRefSet { set }
+    }
+}
+
+impl<Ref> FromIterator<NomadRef<Ref>> for RemoteNomadRefSet {
+    fn from_iter<T: IntoIterator<Item = NomadRef<Ref>>>(iter: T) -> Self {
+        Self::from_iter(iter.into_iter().map(|nomad_ref| {
+            let NomadRef {
+                user, host, branch, ..
+            } = nomad_ref;
+            (user, host, branch)
+        }))
+    }
 }

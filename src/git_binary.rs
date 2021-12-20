@@ -424,6 +424,22 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
         Ok(())
     }
 
+    #[cfg(test)]
+    pub fn create_branch(&self, description: impl AsRef<str>, branch_name: &Branch) -> Result<()> {
+        let mut command = self.command();
+        command.args(&["branch", &branch_name.0]);
+        self.progress.run(Run::Notable, description, &mut command)?;
+        Ok(())
+    }
+
+    #[cfg(test)]
+    pub fn delete_branch(&self, description: impl AsRef<str>, branch_name: &Branch) -> Result<()> {
+        let mut command = self.command();
+        command.args(&["branch", "-d", &branch_name.0]);
+        self.progress.run(Run::Notable, description, &mut command)?;
+        Ok(())
+    }
+
     pub fn is_output_allowed(&self) -> bool {
         self.progress.is_output_allowed()
     }

@@ -13,7 +13,7 @@ use git_version::git_version;
 use crate::{
     git_binary::GitBinary,
     progress::{Progress, Run, Verbosity},
-    types::{Config, Remote},
+    types::{Host, Remote, User},
 };
 
 mod command;
@@ -137,20 +137,19 @@ fn main() -> Result<()> {
     )?;
 
     if let Some(matches) = matches.subcommand_matches("init") {
-        let user = string_value(matches, "user")?;
-        let host = string_value(matches, "host")?;
+        let user = User(string_value(matches, "user")?);
+        let host = Host(string_value(matches, "host")?);
 
-        let config = Config { user, host };
-        command::init(&git, &config)?;
+        command::init(&git, &user, &host)?;
         return Ok(());
     }
 
     if let Some(matches) = matches.subcommand_matches("sync") {
         return match git.read_nomad_config()? {
             None => bail!("No configuration found, try `init` first"),
-            Some(config) => {
+            Some((user, host)) => {
                 let remote = Remote(string_value(matches, "remote")?);
-                command::sync(&git, &config, &remote)
+                command::sync(&git, &user, &host, &remote)
             }
         };
     }
@@ -158,20 +157,20 @@ fn main() -> Result<()> {
     if matches.subcommand_matches("ls").is_some() {
         return match git.read_nomad_config()? {
             None => bail!("No configuration found, nothing to prune"),
-            Some(config) => command::ls(&git, &config),
+            Some((user, _)) => command::ls(&git, &user),
         };
     }
 
     if let Some(matches) = matches.subcommand_matches("prune") {
         return match git.read_nomad_config()? {
             None => bail!("No configuration found, nothing to prune"),
-            Some(config) => {
+            Some((user, _)) => {
                 let remote = Remote(string_value(matches, "remote")?);
                 if matches.is_present("all") {
-                    command::prune(&git, &config, &remote, |snapshot| snapshot.prune_all())
+                    command::prune(&git, &user, &remote, |snapshot| snapshot.prune_all())
                 } else if let Some(hosts) = matches.values_of("host") {
-                    let set = hosts.collect::<HashSet<_>>();
-                    command::prune(&git, &config, &remote, |snapshot| {
+                    let set = hosts.map(Host::str).collect::<HashSet<_>>();
+                    command::prune(&git, &user, &remote, |snapshot| {
                         snapshot.prune_all_by_hosts(&set)
                     })
                 } else {

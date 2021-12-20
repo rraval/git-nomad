@@ -11,13 +11,12 @@ use crate::{
     git_ref::GitRef,
     progress::{Progress, Run, Verbosity},
     snapshot::PruneFrom,
-    types::{Branch, Config, NomadRef, Remote},
+    types::{Branch, Host, NomadRef, Remote, User},
 };
 
 const GIT: &str = "git";
 const ORIGIN: &str = "origin";
 pub const INITIAL_BRANCH: &str = "master";
-const USER: &str = "user0";
 const PROGRESS: Progress = Progress::Verbose(Verbosity::CommandAndOutput);
 
 #[derive(PartialEq, Eq, Hash, Debug, Clone)]
@@ -86,7 +85,7 @@ impl GitRemote {
         }
     }
 
-    pub fn clone<'a>(&'a self, host: &str) -> GitClone<'a> {
+    pub fn clone<'a>(&'a self, user: &str, host: &str) -> GitClone<'a> {
         let clone_dir = {
             let mut dir = PathBuf::from(self.root_dir.path());
             dir.push("clones");
@@ -112,10 +111,8 @@ impl GitRemote {
         GitClone {
             _remote: self,
             _clone_dir: clone_dir,
-            config: Config {
-                user: USER.to_owned(),
-                host: host.to_owned(),
-            },
+            user: User::str(user),
+            host: Host::str(host),
             git,
         }
     }
@@ -137,7 +134,8 @@ impl GitRemote {
 pub struct GitClone<'a> {
     _remote: &'a GitRemote,
     _clone_dir: PathBuf,
-    pub config: Config,
+    pub user: User,
+    pub host: Host,
     pub git: GitBinary<'static, 'static>,
 }
 
@@ -148,21 +146,21 @@ impl<'a> GitClone<'a> {
 
     pub fn push(&self) {
         self.git
-            .push_nomad_refs(&self.config, &self.remote())
+            .push_nomad_refs(&self.user, &self.host, &self.remote())
             .unwrap();
     }
 
     pub fn fetch(&self) -> HashSet<NomadRef<GitRef>> {
         self.git
-            .fetch_nomad_refs(&self.config, &self.remote())
+            .fetch_nomad_refs(&self.user, &self.remote())
             .unwrap()
     }
 
     pub fn prune_local_and_remote<'b, B: IntoIterator<Item = &'b str>>(&self, branch_names: B) {
         let prune_from = branch_names.into_iter().map(|name| {
             let nomad_ref = NomadRef::<()> {
-                user: self.config.user.clone(),
-                host: self.config.host.clone(),
+                user: self.user.clone(),
+                host: self.host.clone(),
                 branch: Branch::str(name),
                 ref_: (),
             };
@@ -189,8 +187,8 @@ impl<'a> GitClone<'a> {
             .get_ref("", format!("refs/heads/{}", branch))
             .ok()
             .map(|git_ref| NomadRef {
-                user: self.config.user.clone(),
-                host: self.config.host.clone(),
+                user: self.user.clone(),
+                host: self.host.clone(),
                 branch: Branch::str(branch),
                 ref_: git_ref.into(),
             })
@@ -198,11 +196,11 @@ impl<'a> GitClone<'a> {
 
     pub fn nomad_refs(&self) -> HashSet<NomadRef<GitCommitId>> {
         self.git
-            .list_refs(&self.config.host)
+            .list_refs(&self.host.0)
             .unwrap()
             .into_iter()
             .filter_map(|git_ref| {
-                NomadRef::<GitRef>::from_git_local_ref(&self.config, git_ref)
+                NomadRef::<GitRef>::from_git_local_ref(&self.user, git_ref)
                     .ok()
                     .map(Into::into)
             })

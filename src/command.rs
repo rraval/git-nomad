@@ -6,13 +6,13 @@ use crate::{
     git_binary::GitBinary,
     git_ref::GitRef,
     snapshot::{PruneFrom, Snapshot},
-    types::{Config, NomadRef, Remote},
+    types::{Host, NomadRef, Remote, User},
 };
 
 /// Initialize a git clone to have branches managed by nomad.
 ///
 /// Will refuse to overwrite an already existing configuration.
-pub fn init(git: &GitBinary, new_config: &Config) -> Result<()> {
+pub fn init(git: &GitBinary, new_user: &User, new_host: &Host) -> Result<()> {
     if let Some(existing_config) = git.read_nomad_config()? {
         bail!(
             "Found existing config, refusing to init again: {:#?}",
@@ -20,29 +20,29 @@ pub fn init(git: &GitBinary, new_config: &Config) -> Result<()> {
         );
     }
 
-    git.write_nomad_config(new_config)?;
+    git.write_nomad_config(new_user, new_host)?;
     if git.is_output_allowed() {
-        println!("Wrote {:#?}", new_config);
+        println!("Initialized {} @ {}", new_user.0, new_host.0);
     }
 
     Ok(())
 }
 
 /// Synchronize current local branches with nomad managed refs in the given remote.
-pub fn sync(git: &GitBinary, config: &Config, remote: &Remote) -> Result<()> {
-    git.push_nomad_refs(config, remote)?;
-    let remote_nomad_refs = git.fetch_nomad_refs(config, remote)?;
-    let snapshot = git.snapshot(config)?;
+pub fn sync(git: &GitBinary, user: &User, host: &Host, remote: &Remote) -> Result<()> {
+    git.push_nomad_refs(user, host, remote)?;
+    let remote_nomad_refs = git.fetch_nomad_refs(user, remote)?;
+    let snapshot = git.snapshot(user)?;
     git.prune_nomad_refs(
         remote,
         snapshot
-            .prune_deleted_branches(config, &remote_nomad_refs)
+            .prune_deleted_branches(host, &remote_nomad_refs)
             .into_iter(),
     )?;
 
     if git.is_output_allowed() {
         println!();
-        ls(git, config)?
+        ls(git, user)?
     }
 
     Ok(())
@@ -52,11 +52,11 @@ pub fn sync(git: &GitBinary, config: &Config, remote: &Remote) -> Result<()> {
 ///
 /// Does not respect [`Progress::is_output_allowed`] because output is the whole point of this
 /// command.
-pub fn ls(git: &GitBinary, config: &Config) -> Result<()> {
-    let snapshot = git.snapshot(config)?;
+pub fn ls(git: &GitBinary, user: &User) -> Result<()> {
+    let snapshot = git.snapshot(user)?;
 
     for (host, branches) in snapshot.sorted_hosts_and_branches() {
-        println!("{}", host);
+        println!("{}", host.0);
 
         for NomadRef { ref_, .. } in branches {
             println!("  {}", ref_);
@@ -67,12 +67,12 @@ pub fn ls(git: &GitBinary, config: &Config) -> Result<()> {
 }
 
 /// Delete nomad managed refs returned by `to_prune`.
-pub fn prune<F>(git: &GitBinary, config: &Config, remote: &Remote, to_prune: F) -> Result<()>
+pub fn prune<F>(git: &GitBinary, user: &User, remote: &Remote, to_prune: F) -> Result<()>
 where
     F: Fn(Snapshot<GitRef>) -> Vec<PruneFrom<GitRef>>,
 {
-    git.fetch_nomad_refs(config, remote)?;
-    let snapshot = git.snapshot(config)?;
+    git.fetch_nomad_refs(user, remote)?;
+    let snapshot = git.snapshot(user)?;
     let prune = to_prune(snapshot);
     git.prune_nomad_refs(remote, prune.into_iter())?;
     Ok(())
@@ -94,11 +94,11 @@ mod test {
     fn issue_2_other_host() {
         let origin = GitRemote::init();
 
-        let host0 = origin.clone("host0");
-        sync(&host0.git, &host0.config, &host0.remote()).unwrap();
+        let host0 = origin.clone("user0", "host0");
+        sync(&host0.git, &host0.user, &host0.host, &host0.remote()).unwrap();
 
-        let host1 = origin.clone("host1");
-        sync(&host1.git, &host1.config, &host1.remote()).unwrap();
+        let host1 = origin.clone("user0", "host1");
+        sync(&host1.git, &host0.user, &host1.host, &host1.remote()).unwrap();
 
         // both hosts have synced, the origin should have both refs
         assert_eq!(
@@ -110,8 +110,8 @@ mod test {
         );
 
         // pruning refs for host0 from host1
-        prune(&host1.git, &host1.config, &host1.remote(), |snapshot| {
-            snapshot.prune_all_by_hosts(&HashSet::from_iter(["host0"]))
+        prune(&host1.git, &host1.user, &host1.remote(), |snapshot| {
+            snapshot.prune_all_by_hosts(&HashSet::from_iter([host0.host.clone()]))
         })
         .unwrap();
 
@@ -126,11 +126,11 @@ mod test {
     fn issue_2_all() {
         let origin = GitRemote::init();
 
-        let host0 = origin.clone("host0");
-        sync(&host0.git, &host0.config, &host0.remote()).unwrap();
+        let host0 = origin.clone("user0", "host0");
+        sync(&host0.git, &host0.user, &host0.host, &host0.remote()).unwrap();
 
-        let host1 = origin.clone("host1");
-        sync(&host1.git, &host1.config, &host1.remote()).unwrap();
+        let host1 = origin.clone("user0", "host1");
+        sync(&host1.git, &host1.user, &host1.host, &host1.remote()).unwrap();
 
         // both hosts have synced, the origin should have both refs
         assert_eq!(
@@ -144,7 +144,7 @@ mod test {
         // pruning refs for all hosts from host1
         prune(
             &host1.git,
-            &host1.config,
+            &host1.user,
             &host1.remote(),
             Snapshot::prune_all,
         )

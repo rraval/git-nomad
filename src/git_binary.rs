@@ -401,7 +401,7 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
                 description,
                 self.command()
                     .arg("ls-remote")
-                    .arg(&remote.0)
+                    .arg(&remote.0.as_ref())
                     .args(refspecs),
             )
             .and_then(output_stdout)?;

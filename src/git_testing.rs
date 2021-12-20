@@ -141,7 +141,7 @@ pub struct GitClone<'a> {
 
 impl<'a> GitClone<'a> {
     pub fn remote(&self) -> Remote {
-        Remote(ORIGIN.to_owned())
+        Remote::from(ORIGIN)
     }
 
     pub fn push(&self) {

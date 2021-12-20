@@ -26,8 +26,12 @@ mod types;
 #[cfg(test)]
 mod git_testing;
 
+fn str_value<'a>(matches: &'a ArgMatches, name: &'static str) -> Result<&'a str> {
+    matches.value_of(name).context(name)
+}
+
 fn string_value(matches: &ArgMatches, name: &'static str) -> Result<String> {
-    matches.value_of(name).context(name).map(String::from)
+    str_value(matches, name).map(String::from)
 }
 
 fn main() -> Result<()> {
@@ -148,7 +152,7 @@ fn main() -> Result<()> {
         return match git.read_nomad_config()? {
             None => bail!("No configuration found, try `init` first"),
             Some((user, host)) => {
-                let remote = Remote(string_value(matches, "remote")?);
+                let remote = Remote::from(str_value(matches, "remote")?);
                 command::sync(&git, &user, &host, &remote)
             }
         };
@@ -165,7 +169,7 @@ fn main() -> Result<()> {
         return match git.read_nomad_config()? {
             None => bail!("No configuration found, nothing to prune"),
             Some((user, _)) => {
-                let remote = Remote(string_value(matches, "remote")?);
+                let remote = Remote::from(str_value(matches, "remote")?);
                 if matches.is_present("all") {
                     command::prune(&git, &user, &remote, |snapshot| snapshot.prune_all())
                 } else if let Some(hosts) = matches.values_of("host") {

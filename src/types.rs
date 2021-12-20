@@ -1,19 +1,24 @@
 use std::{borrow::Cow, collections::HashSet, iter::FromIterator};
 
+macro_rules! impl_str_newtype {
+    ($typename:ident) => {
+        impl<'a> From<&'a str> for $typename<'a> {
+            fn from(s: &'a str) -> Self {
+                Self(Cow::from(s))
+            }
+        }
+
+        impl<'a> From<String> for $typename<'a> {
+            fn from(s: String) -> Self {
+                Self(Cow::from(s))
+            }
+        }
+    };
+}
+
 /// A remote git repository identified by name, like `origin`.
 pub struct Remote<'a>(pub Cow<'a, str>);
-
-impl<'a> From<&'a str> for Remote<'a> {
-    fn from(s: &'a str) -> Self {
-        Self(Cow::from(s))
-    }
-}
-
-impl<'a> From<String> for Remote<'a> {
-    fn from(s: String) -> Self {
-        Self(Cow::from(s))
-    }
-}
+impl_str_newtype!(Remote);
 
 /// The branch name part of a ref. `refs/head/master` would be `Branch("master".to_string())`.
 #[derive(Debug, PartialEq, Eq, Hash, Clone, PartialOrd, Ord)]

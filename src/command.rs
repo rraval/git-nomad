@@ -99,7 +99,7 @@ mod test {
     #[test]
     fn issue_1() {
         let origin = GitRemote::init();
-        let feature = &Branch::str("feature");
+        let feature = &Branch::from("feature");
 
         let host0 = origin.clone("user0", "host0");
         sync_host(&host0);

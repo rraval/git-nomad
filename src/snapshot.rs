@@ -7,9 +7,9 @@ use crate::types::{Branch, Host, NomadRef, RemoteNomadRefSet, User};
 #[allow(clippy::manual_non_exhaustive)]
 pub struct Snapshot<Ref> {
     /// The active branches in this clone that the user manipulates directly with `git branch` etc.
-    pub local_branches: HashSet<Branch>,
+    pub local_branches: HashSet<Branch<'static>>,
     /// The refs that nomad manages to follow the local branches.
-    pub nomad_refs: Vec<NomadRef<Ref>>,
+    pub nomad_refs: Vec<NomadRef<'static, Ref>>,
     /// Force all callers to go through [`Snapshot::new`] which can validate invariants.
     _private: (),
 }
@@ -17,16 +17,16 @@ pub struct Snapshot<Ref> {
 /// Describes where a ref should be removed from.
 #[derive(Debug, PartialEq, Eq)]
 pub enum PruneFrom<Ref> {
-    LocalOnly(NomadRef<Ref>),
-    LocalAndRemote(NomadRef<Ref>),
+    LocalOnly(NomadRef<'static, Ref>),
+    LocalAndRemote(NomadRef<'static, Ref>),
 }
 
 impl<Ref> Snapshot<Ref> {
     /// Smart constructor that enforces the "scoped under a specific [`Config::user`]" invariant.
     pub fn new(
         user: &User,
-        local_branches: HashSet<Branch>,
-        nomad_refs: Vec<NomadRef<Ref>>,
+        local_branches: HashSet<Branch<'static>>,
+        nomad_refs: Vec<NomadRef<'static, Ref>>,
     ) -> Self {
         for nomad_ref in &nomad_refs {
             assert_eq!(user, &nomad_ref.user);
@@ -93,7 +93,7 @@ impl<Ref> Snapshot<Ref> {
     }
 
     /// Return all [`NomadRef`]s grouped by host in sorted order.
-    pub fn sorted_hosts_and_branches(self) -> Vec<(Host, Vec<NomadRef<Ref>>)> {
+    pub fn sorted_hosts_and_branches(self) -> Vec<(Host, Vec<NomadRef<'static, Ref>>)> {
         let mut by_host = HashMap::<Host, Vec<NomadRef<Ref>>>::new();
         let Self { nomad_refs, .. } = self;
 
@@ -131,24 +131,24 @@ mod tests {
     ) -> Snapshot<()> {
         Snapshot::new(
             user,
-            local_branches.into_iter().map(Branch::str).collect(),
+            local_branches.into_iter().map(Branch::from).collect(),
             vec![
                 NomadRef {
                     user: user.clone(),
                     host: Host::str("host0"),
-                    branch: Branch::str("branch0"),
+                    branch: Branch::from("branch0"),
                     ref_: (),
                 },
                 NomadRef {
                     user: user.clone(),
                     host: Host::str("host0"),
-                    branch: Branch::str("branch1"),
+                    branch: Branch::from("branch1"),
                     ref_: (),
                 },
                 NomadRef {
                     user: user.clone(),
                     host: Host::str("host1"),
-                    branch: Branch::str("branch1"),
+                    branch: Branch::from("branch1"),
                     ref_: (),
                 },
             ],
@@ -160,7 +160,7 @@ mod tests {
     ) -> RemoteNomadRefSet {
         RemoteNomadRefSet::from_iter(
             collection.into_iter().map(|(user, host, branch)| {
-                (User::str(user), Host::str(host), Branch::str(branch))
+                (User::str(user), Host::str(host), Branch::from(branch))
             }),
         )
     }
@@ -240,7 +240,7 @@ mod tests {
             vec![PruneFrom::LocalAndRemote(NomadRef {
                 user: User::str("user0"),
                 host: Host::str("host0"),
-                branch: Branch::str("branch1"),
+                branch: Branch::from("branch1"),
                 ref_: (),
             })]
         );
@@ -273,7 +273,7 @@ mod tests {
             vec![PruneFrom::LocalOnly(NomadRef {
                 user: User::str("user0"),
                 host: Host::str("host1"),
-                branch: Branch::str("branch1"),
+                branch: Branch::from("branch1"),
                 ref_: (),
             })]
         );
@@ -289,19 +289,19 @@ mod tests {
                 PruneFrom::LocalAndRemote(NomadRef {
                     user: User::str("user0"),
                     host: Host::str("host0"),
-                    branch: Branch::str("branch0"),
+                    branch: Branch::from("branch0"),
                     ref_: (),
                 }),
                 PruneFrom::LocalAndRemote(NomadRef {
                     user: User::str("user0"),
                     host: Host::str("host0"),
-                    branch: Branch::str("branch1"),
+                    branch: Branch::from("branch1"),
                     ref_: (),
                 }),
                 PruneFrom::LocalAndRemote(NomadRef {
                     user: User::str("user0"),
                     host: Host::str("host1"),
-                    branch: Branch::str("branch1"),
+                    branch: Branch::from("branch1"),
                     ref_: (),
                 }),
             ],
@@ -319,13 +319,13 @@ mod tests {
                 PruneFrom::LocalAndRemote(NomadRef {
                     user: User::str("user0"),
                     host: Host::str("host0"),
-                    branch: Branch::str("branch0"),
+                    branch: Branch::from("branch0"),
                     ref_: (),
                 },),
                 PruneFrom::LocalAndRemote(NomadRef {
                     user: User::str("user0"),
                     host: Host::str("host0"),
-                    branch: Branch::str("branch1"),
+                    branch: Branch::from("branch1"),
                     ref_: (),
                 },),
             ],

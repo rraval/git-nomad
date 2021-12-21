@@ -31,8 +31,8 @@ impl From<GitRef> for GitCommitId {
     }
 }
 
-impl From<NomadRef<GitRef>> for NomadRef<GitCommitId> {
-    fn from(nomad_ref: NomadRef<GitRef>) -> Self {
+impl<'branch> From<NomadRef<'branch, GitRef>> for NomadRef<'branch, GitCommitId> {
+    fn from(nomad_ref: NomadRef<'branch, GitRef>) -> Self {
         Self {
             user: nomad_ref.user,
             host: nomad_ref.host,
@@ -167,7 +167,7 @@ impl<'a> GitClone<'a> {
             let nomad_ref = NomadRef::<()> {
                 user: self.user.clone(),
                 host: self.host.clone(),
-                branch: Branch::str(name),
+                branch: Branch::from(name.to_string()),
                 ref_: (),
             };
 
@@ -188,14 +188,17 @@ impl<'a> GitClone<'a> {
             .unwrap();
     }
 
-    pub fn get_nomad_ref(&self, branch: &str) -> Option<NomadRef<GitCommitId>> {
+    pub fn get_nomad_ref<'branch>(
+        &self,
+        branch: &'branch str,
+    ) -> Option<NomadRef<'branch, GitCommitId>> {
         self.git
             .get_ref("", format!("refs/heads/{}", branch))
             .ok()
             .map(|git_ref| NomadRef {
                 user: self.user.clone(),
                 host: self.host.clone(),
-                branch: Branch::str(branch),
+                branch: Branch::from(branch),
                 ref_: git_ref.into(),
             })
     }

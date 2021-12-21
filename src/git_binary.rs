@@ -83,7 +83,7 @@ mod namespace {
         )
     }
 
-    impl<Ref> NomadRef<Ref> {
+    impl<'branch, Ref> NomadRef<'branch, Ref> {
         /// A nomad ref in the local clone, which elides the user name for convenience.
         #[cfg(test)]
         pub fn to_git_local_ref(&self) -> String {
@@ -100,7 +100,7 @@ mod namespace {
         }
     }
 
-    impl NomadRef<GitRef> {
+    impl<'branch> NomadRef<'branch, GitRef> {
         pub fn from_git_local_ref(user: &User, git_ref: GitRef) -> Result<Self, GitRef> {
             let parts = git_ref.name.split('/').collect::<Vec<_>>();
             match parts.as_slice() {
@@ -112,7 +112,7 @@ mod namespace {
                     Ok(NomadRef {
                         user: user.clone(),
                         host: Host::str(host),
-                        branch: Branch::str(branch_name),
+                        branch: Branch::from(branch_name.to_string()),
                         ref_: git_ref,
                     })
                 }
@@ -131,7 +131,7 @@ mod namespace {
                     Ok(NomadRef {
                         user: User::str(user),
                         host: Host::str(host),
-                        branch: Branch::str(branch_name),
+                        branch: Branch::from(branch_name.to_string()),
                         ref_: git_ref,
                     })
                 }
@@ -158,7 +158,7 @@ mod namespace {
             let local_ref_name = NomadRef::<()> {
                 user: User::str(USER),
                 host: Host::str(HOST),
-                branch: Branch::str(BRANCH),
+                branch: Branch::from(BRANCH),
                 ref_: (),
             }
             .to_git_local_ref();
@@ -183,7 +183,7 @@ mod namespace {
             let remote_ref_name = NomadRef::<()> {
                 user: User::str(USER),
                 host: Host::str(HOST),
-                branch: Branch::str(BRANCH),
+                branch: Branch::from(BRANCH),
                 ref_: (),
             }
             .to_git_remote_ref();
@@ -476,7 +476,7 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
 
         for r in refs {
             if let Some(name) = r.name.strip_prefix("refs/heads/") {
-                local_branches.insert(Branch::str(name));
+                local_branches.insert(Branch::from(name.to_string()));
             }
 
             if let Ok(nomad_ref) = NomadRef::<GitRef>::from_git_local_ref(user, r) {

@@ -5,29 +5,29 @@ use crate::types::{Branch, Host, NomadRef, RemoteNomadRefSet, User};
 /// A point in time view of refs we care about. [`Snapshot`] is only for local branches and refs
 /// and thus is scoped under a specific [`Config::user`].
 #[allow(clippy::manual_non_exhaustive)]
-pub struct Snapshot<Ref> {
+pub struct Snapshot<'user, 'host, Ref> {
     /// The active branches in this clone that the user manipulates directly with `git branch` etc.
     pub local_branches: HashSet<Branch<'static>>,
     /// The refs that nomad manages to follow the local branches.
-    pub nomad_refs: Vec<NomadRef<'static, Ref>>,
+    pub nomad_refs: Vec<NomadRef<'user, 'host, 'static, Ref>>,
     /// Force all callers to go through [`Snapshot::new`] which can validate invariants.
     _private: (),
 }
 
 /// Describes where a ref should be removed from.
 #[derive(Debug, PartialEq, Eq)]
-pub enum PruneFrom<Ref> {
-    LocalOnly(NomadRef<'static, Ref>),
-    LocalAndRemote(NomadRef<'static, Ref>),
+pub enum PruneFrom<'user, 'host, Ref> {
+    LocalOnly(NomadRef<'user, 'host, 'static, Ref>),
+    LocalAndRemote(NomadRef<'user, 'host, 'static, Ref>),
 }
 
-impl<Ref> Snapshot<Ref> {
+impl<Ref> Snapshot<'_, '_, Ref> {
     /// Smart constructor that enforces the "scoped under a specific [`Config::user`]" invariant.
-    pub fn new(
-        user: &User,
+    pub fn new<'user>(
+        user: &'user User,
         local_branches: HashSet<Branch<'static>>,
-        nomad_refs: Vec<NomadRef<'static, Ref>>,
-    ) -> Self {
+        nomad_refs: Vec<NomadRef<'user, 'static, 'static, Ref>>,
+    ) -> Snapshot<'user, 'static, Ref> {
         for nomad_ref in &nomad_refs {
             assert_eq!(user, &nomad_ref.user);
         }
@@ -38,7 +38,9 @@ impl<Ref> Snapshot<Ref> {
             _private: (),
         }
     }
+}
 
+impl<'user, 'host, Ref> Snapshot<'user, 'host, Ref> {
     /// Find nomad host branches that can be pruned because:
     /// 1. The local branch they were based on no longer exists.
     /// 2. The remote branch they were based on no longer exists.
@@ -46,7 +48,7 @@ impl<Ref> Snapshot<Ref> {
         self,
         host: &Host,
         remote_nomad_refs: &RemoteNomadRefSet,
-    ) -> Vec<PruneFrom<Ref>> {
+    ) -> Vec<PruneFrom<'user, 'host, Ref>> {
         let Self {
             nomad_refs,
             local_branches,
@@ -69,7 +71,7 @@ impl<Ref> Snapshot<Ref> {
     }
 
     /// Return all nomad branches regardless of host.
-    pub fn prune_all(self) -> Vec<PruneFrom<Ref>> {
+    pub fn prune_all(self) -> Vec<PruneFrom<'user, 'host, Ref>> {
         let Self { nomad_refs, .. } = self;
         nomad_refs
             .into_iter()
@@ -78,7 +80,7 @@ impl<Ref> Snapshot<Ref> {
     }
 
     /// Return all nomad branches for specific hosts.
-    pub fn prune_all_by_hosts(self, hosts: &HashSet<Host>) -> Vec<PruneFrom<Ref>> {
+    pub fn prune_all_by_hosts(self, hosts: &HashSet<Host>) -> Vec<PruneFrom<'user, 'host, Ref>> {
         let Self { nomad_refs, .. } = self;
         nomad_refs
             .into_iter()
@@ -93,7 +95,9 @@ impl<Ref> Snapshot<Ref> {
     }
 
     /// Return all [`NomadRef`]s grouped by host in sorted order.
-    pub fn sorted_hosts_and_branches(self) -> Vec<(Host, Vec<NomadRef<'static, Ref>>)> {
+    pub fn sorted_hosts_and_branches(
+        self,
+    ) -> Vec<(Host<'host>, Vec<NomadRef<'user, 'host, 'static, Ref>>)> {
         let mut by_host = HashMap::<Host, Vec<NomadRef<Ref>>>::new();
         let Self { nomad_refs, .. } = self;
 
@@ -125,29 +129,29 @@ mod tests {
 
     use super::{Branch, NomadRef, PruneFrom, Snapshot};
 
-    fn snapshot(
-        user: &User,
+    fn snapshot<'user>(
+        user: &'user User,
         local_branches: impl IntoIterator<Item = &'static str>,
-    ) -> Snapshot<()> {
+    ) -> Snapshot<'user, 'static, ()> {
         Snapshot::new(
             user,
             local_branches.into_iter().map(Branch::from).collect(),
             vec![
                 NomadRef {
                     user: user.clone(),
-                    host: Host::str("host0"),
+                    host: Host::from("host0"),
                     branch: Branch::from("branch0"),
                     ref_: (),
                 },
                 NomadRef {
                     user: user.clone(),
-                    host: Host::str("host0"),
+                    host: Host::from("host0"),
                     branch: Branch::from("branch1"),
                     ref_: (),
                 },
                 NomadRef {
                     user: user.clone(),
-                    host: Host::str("host1"),
+                    host: Host::from("host1"),
                     branch: Branch::from("branch1"),
                     ref_: (),
                 },
@@ -160,7 +164,7 @@ mod tests {
     ) -> RemoteNomadRefSet {
         RemoteNomadRefSet::from_iter(
             collection.into_iter().map(|(user, host, branch)| {
-                (User::str(user), Host::str(host), Branch::from(branch))
+                (User::from(user), Host::from(host), Branch::from(branch))
             }),
         )
     }
@@ -176,8 +180,9 @@ mod tests {
     /// In this case, we should prune nothing.
     #[test]
     fn snapshot_prune_does_nothing0() {
-        let prune = snapshot(&User::str("user0"), ["branch0", "branch1"]).prune_deleted_branches(
-            &Host::str("host0"),
+        let user = &User::from("user0");
+        let prune = snapshot(user, ["branch0", "branch1"]).prune_deleted_branches(
+            &Host::from("host0"),
             &remote_nomad_refs([("user0", "host1", "branch1")]),
         );
 
@@ -195,8 +200,9 @@ mod tests {
     /// In this case, we should prune nothing.
     #[test]
     fn snapshot_prune_does_nothing1() {
-        let prune = snapshot(&User::str("user0"), ["branch0", "branch1"]).prune_deleted_branches(
-            &Host::str("host0"),
+        let user = &User::from("user0");
+        let prune = snapshot(user, ["branch0", "branch1"]).prune_deleted_branches(
+            &Host::from("host0"),
             &remote_nomad_refs([
                 ("user0", "host0", "branch0"),
                 ("user0", "host0", "branch1"),
@@ -218,8 +224,9 @@ mod tests {
     /// In this case, we should remove the nomad refs for the local branches that no longer exist.
     #[test]
     fn snapshot_prune_removes_local_missing_branches() {
+        let user = &User::from("user0");
         let prune = snapshot(
-            &User::str("user0"),
+            user,
             [
                 "branch0",
                 // This branch has been removed
@@ -227,7 +234,7 @@ mod tests {
             ],
         )
         .prune_deleted_branches(
-            &Host::str("host0"),
+            &Host::from("host0"),
             &remote_nomad_refs([
                 ("user0", "host0", "branch0"),
                 ("user0", "host0", "branch1"),
@@ -238,8 +245,8 @@ mod tests {
         assert_eq!(
             prune,
             vec![PruneFrom::LocalAndRemote(NomadRef {
-                user: User::str("user0"),
-                host: Host::str("host0"),
+                user: User::from("user0"),
+                host: Host::from("host0"),
                 branch: Branch::from("branch1"),
                 ref_: (),
             })]
@@ -258,8 +265,9 @@ mod tests {
     /// corresponding remote refs no longer exist.
     #[test]
     fn snapshot_prune_removes_remote_missing_branches() {
-        let prune = snapshot(&User::str("user0"), ["branch0", "branch1"]).prune_deleted_branches(
-            &Host::str("host0"),
+        let user = &User::from("user0");
+        let prune = snapshot(user, ["branch0", "branch1"]).prune_deleted_branches(
+            &Host::from("host0"),
             &remote_nomad_refs([
                 ("user0", "host0", "branch0"),
                 ("user0", "host0", "branch1"),
@@ -271,8 +279,8 @@ mod tests {
         assert_eq!(
             prune,
             vec![PruneFrom::LocalOnly(NomadRef {
-                user: User::str("user0"),
-                host: Host::str("host1"),
+                user: User::from("user0"),
+                host: Host::from("host1"),
                 branch: Branch::from("branch1"),
                 ref_: (),
             })]
@@ -282,25 +290,26 @@ mod tests {
     /// [`Snapshot::prune_all`] should remove all branches.
     #[test]
     fn snapshot_prune_all() {
-        let prune = snapshot(&User::str("user0"), ["branch0", "branch1"]).prune_all();
+        let user = &User::from("user0");
+        let prune = snapshot(user, ["branch0", "branch1"]).prune_all();
         assert_eq!(
             prune,
             vec![
                 PruneFrom::LocalAndRemote(NomadRef {
-                    user: User::str("user0"),
-                    host: Host::str("host0"),
+                    user: User::from("user0"),
+                    host: Host::from("host0"),
                     branch: Branch::from("branch0"),
                     ref_: (),
                 }),
                 PruneFrom::LocalAndRemote(NomadRef {
-                    user: User::str("user0"),
-                    host: Host::str("host0"),
+                    user: User::from("user0"),
+                    host: Host::from("host0"),
                     branch: Branch::from("branch1"),
                     ref_: (),
                 }),
                 PruneFrom::LocalAndRemote(NomadRef {
-                    user: User::str("user0"),
-                    host: Host::str("host1"),
+                    user: User::from("user0"),
+                    host: Host::from("host1"),
                     branch: Branch::from("branch1"),
                     ref_: (),
                 }),
@@ -311,20 +320,21 @@ mod tests {
     /// [`Snapshot::prune_all_by_hosts`] should only remove branches for specified hosts.
     #[test]
     fn snapshot_prune_hosts() {
-        let prune = snapshot(&User::str("user0"), ["branch0", "branch1"])
-            .prune_all_by_hosts(&HashSet::from_iter([Host::str("host0")]));
+        let user = &User::from("user0");
+        let prune = snapshot(user, ["branch0", "branch1"])
+            .prune_all_by_hosts(&HashSet::from_iter([Host::from("host0")]));
         assert_eq!(
             prune,
             vec![
                 PruneFrom::LocalAndRemote(NomadRef {
-                    user: User::str("user0"),
-                    host: Host::str("host0"),
+                    user: User::from("user0"),
+                    host: Host::from("host0"),
                     branch: Branch::from("branch0"),
                     ref_: (),
                 },),
                 PruneFrom::LocalAndRemote(NomadRef {
-                    user: User::str("user0"),
-                    host: Host::str("host0"),
+                    user: User::from("user0"),
+                    host: Host::from("host0"),
                     branch: Branch::from("branch1"),
                     ref_: (),
                 },),

@@ -31,8 +31,10 @@ impl From<GitRef> for GitCommitId {
     }
 }
 
-impl<'branch> From<NomadRef<'branch, GitRef>> for NomadRef<'branch, GitCommitId> {
-    fn from(nomad_ref: NomadRef<'branch, GitRef>) -> Self {
+impl<'user, 'host, 'branch> From<NomadRef<'user, 'host, 'branch, GitRef>>
+    for NomadRef<'user, 'host, 'branch, GitCommitId>
+{
+    fn from(nomad_ref: NomadRef<'user, 'host, 'branch, GitRef>) -> Self {
         Self {
             user: nomad_ref.user,
             host: nomad_ref.host,
@@ -85,7 +87,7 @@ impl GitRemote {
         }
     }
 
-    pub fn clone<'a>(&'a self, user: &str, host: &str) -> GitClone<'a> {
+    pub fn clone<'a>(&'a self, user: &'static str, host: &'static str) -> GitClone<'a> {
         let clone_dir = {
             let mut dir = PathBuf::from(self.root_dir.path());
             dir.push("clones");
@@ -111,8 +113,8 @@ impl GitRemote {
         GitClone {
             _remote: self,
             _clone_dir: clone_dir,
-            user: User::str(user),
-            host: Host::str(host),
+            user: User::from(user),
+            host: Host::from(host),
             git,
         }
     }
@@ -134,8 +136,8 @@ impl GitRemote {
 pub struct GitClone<'a> {
     _remote: &'a GitRemote,
     _clone_dir: PathBuf,
-    pub user: User,
-    pub host: Host,
+    pub user: User<'static>,
+    pub host: Host<'static>,
     pub git: GitBinary<'static, 'static>,
 }
 
@@ -189,9 +191,9 @@ impl<'a> GitClone<'a> {
     }
 
     pub fn get_nomad_ref<'branch>(
-        &self,
+        &'a self,
         branch: &'branch str,
-    ) -> Option<NomadRef<'branch, GitCommitId>> {
+    ) -> Option<NomadRef<'a, 'a, 'branch, GitCommitId>> {
         self.git
             .get_ref("", format!("refs/heads/{}", branch))
             .ok()

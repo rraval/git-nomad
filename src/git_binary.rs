@@ -83,7 +83,7 @@ mod namespace {
         )
     }
 
-    impl<'branch, Ref> NomadRef<'branch, Ref> {
+    impl<'user, 'host, 'branch, Ref> NomadRef<'user, 'host, 'branch, Ref> {
         /// A nomad ref in the local clone, which elides the user name for convenience.
         #[cfg(test)]
         pub fn to_git_local_ref(&self) -> String {
@@ -100,8 +100,11 @@ mod namespace {
         }
     }
 
-    impl<'branch> NomadRef<'branch, GitRef> {
-        pub fn from_git_local_ref(user: &User, git_ref: GitRef) -> Result<Self, GitRef> {
+    impl NomadRef<'_, '_, '_, GitRef> {
+        pub fn from_git_local_ref<'user>(
+            user: &'user User,
+            git_ref: GitRef,
+        ) -> Result<NomadRef<'user, 'static, 'static, GitRef>, GitRef> {
             let parts = git_ref.name.split('/').collect::<Vec<_>>();
             match parts.as_slice() {
                 ["refs", prefix, host, branch_name] => {
@@ -111,7 +114,7 @@ mod namespace {
 
                     Ok(NomadRef {
                         user: user.clone(),
-                        host: Host::str(host),
+                        host: Host::from(host.to_string()),
                         branch: Branch::from(branch_name.to_string()),
                         ref_: git_ref,
                     })
@@ -120,7 +123,9 @@ mod namespace {
             }
         }
 
-        pub fn from_git_remote_ref(git_ref: GitRef) -> Result<Self, GitRef> {
+        pub fn from_git_remote_ref(
+            git_ref: GitRef,
+        ) -> Result<NomadRef<'static, 'static, 'static, GitRef>, GitRef> {
             let parts = git_ref.name.split('/').collect::<Vec<_>>();
             match parts.as_slice() {
                 ["refs", prefix, user, host, branch_name] => {
@@ -129,8 +134,8 @@ mod namespace {
                     }
 
                     Ok(NomadRef {
-                        user: User::str(user),
-                        host: Host::str(host),
+                        user: User::from(user.to_string()),
+                        host: Host::from(host.to_string()),
                         branch: Branch::from(branch_name.to_string()),
                         ref_: git_ref,
                     })
@@ -156,8 +161,8 @@ mod namespace {
         #[test]
         fn test_to_and_from_local_ref() {
             let local_ref_name = NomadRef::<()> {
-                user: User::str(USER),
-                host: Host::str(HOST),
+                user: User::from(USER),
+                host: Host::from(HOST),
                 branch: Branch::from(BRANCH),
                 ref_: (),
             }
@@ -168,8 +173,8 @@ mod namespace {
                 name: local_ref_name,
             };
 
-            let nomad_ref =
-                NomadRef::<GitRef>::from_git_local_ref(&User::str(USER), local_git_ref).unwrap();
+            let user = &User::from(USER);
+            let nomad_ref = NomadRef::<GitRef>::from_git_local_ref(user, local_git_ref).unwrap();
 
             assert_eq!(&nomad_ref.user.0, USER);
             assert_eq!(&nomad_ref.host.0, HOST);
@@ -181,8 +186,8 @@ mod namespace {
         #[test]
         fn test_to_and_from_remote_ref() {
             let remote_ref_name = NomadRef::<()> {
-                user: User::str(USER),
-                host: Host::str(HOST),
+                user: User::from(USER),
+                host: Host::from(HOST),
                 branch: Branch::from(BRANCH),
                 ref_: (),
             }
@@ -447,8 +452,8 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
     pub fn read_nomad_config(&self) -> Result<Option<(User, Host)>> {
         let get = |k: &str| self.get_config(&namespace::config_key(k));
 
-        let user = get("user")?.map(User);
-        let host = get("host")?.map(Host);
+        let user = get("user")?.map(User::from);
+        let host = get("host")?.map(Host::from);
 
         match (user, host) {
             (Some(user), Some(host)) => Ok(Some((user, host))),
@@ -468,11 +473,11 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
         Ok(())
     }
 
-    pub fn snapshot(&self, user: &User) -> Result<Snapshot<GitRef>> {
+    pub fn snapshot<'user>(&self, user: &'user User) -> Result<Snapshot<'user, 'static, GitRef>> {
         let refs = self.list_refs("Fetching all refs")?;
 
         let mut local_branches = HashSet::<Branch>::new();
-        let mut nomad_refs = Vec::<NomadRef<GitRef>>::new();
+        let mut nomad_refs = Vec::<NomadRef<'static, 'static, 'static, GitRef>>::new();
 
         for r in refs {
             if let Some(name) = r.name.strip_prefix("refs/heads/") {
@@ -524,10 +529,10 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
         )
     }
 
-    pub fn prune_nomad_refs(
+    pub fn prune_nomad_refs<'user, 'host>(
         &self,
         remote: &Remote,
-        prune: impl Iterator<Item = PruneFrom<GitRef>>,
+        prune: impl Iterator<Item = PruneFrom<'user, 'host, GitRef>>,
     ) -> Result<()> {
         let mut refspecs = Vec::<String>::new();
         let mut refs = Vec::<GitRef>::new();

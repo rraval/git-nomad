@@ -68,9 +68,14 @@ pub fn ls(git: &GitBinary, user: &User) -> Result<()> {
 }
 
 /// Delete nomad managed refs returned by `to_prune`.
-pub fn prune<F>(git: &GitBinary, user: &User, remote: &Remote, to_prune: F) -> Result<()>
+pub fn prune<'user, F>(
+    git: &GitBinary,
+    user: &'user User,
+    remote: &Remote,
+    to_prune: F,
+) -> Result<()>
 where
-    F: Fn(Snapshot<GitRef>) -> Vec<PruneFrom<GitRef>>,
+    F: Fn(Snapshot<'user, 'static, GitRef>) -> Vec<PruneFrom<'user, 'static, GitRef>>,
 {
     git.fetch_nomad_refs(user, remote)?;
     let snapshot = git.snapshot(user)?;

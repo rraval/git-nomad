@@ -43,13 +43,9 @@ impl_possibly_clone!(Branch);
 /// This string is used when pushing branches to the remote so that multiple users can use
 /// nomad on that remote without stepping on each other.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct User(pub String);
-
-impl User {
-    pub fn str<S: AsRef<str>>(s: S) -> Self {
-        Self(s.as_ref().to_string())
-    }
-}
+pub struct User<'a>(pub Cow<'a, str>);
+impl_from_str!(User);
+impl_possibly_clone!(User);
 
 /// Represents "where" a given branch comes from. This value should be unique for every git
 /// clone belonging to a specific user.
@@ -60,21 +56,17 @@ impl User {
 /// This string is also used when pulling branches for all hosts of the current user
 /// and for detecting when branches have been deleted.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct Host(pub String);
-
-impl Host {
-    pub fn str<S: AsRef<str>>(s: S) -> Self {
-        Self(s.as_ref().to_string())
-    }
-}
+pub struct Host<'a>(pub Cow<'a, str>);
+impl_from_str!(Host);
+impl_possibly_clone!(Host);
 
 /// A ref representing a branch managed by nomad.
 #[derive(Debug, PartialEq, Eq, Hash)]
-pub struct NomadRef<'branch, Ref> {
+pub struct NomadRef<'user, 'host, 'branch, Ref> {
     /// The user this branch belongs to.
-    pub user: User,
+    pub user: User<'user>,
     /// The host this branch comes from.
-    pub host: Host,
+    pub host: Host<'host>,
     /// The branch name.
     pub branch: Branch<'branch>,
     /// Any additional data the [`Backend`] would like to carry around.
@@ -82,7 +74,7 @@ pub struct NomadRef<'branch, Ref> {
 }
 
 pub struct RemoteNomadRefSet {
-    set: HashSet<(User, Host, Branch<'static>)>,
+    set: HashSet<(User<'static>, Host<'static>, Branch<'static>)>,
 }
 
 impl RemoteNomadRefSet {
@@ -98,18 +90,27 @@ impl RemoteNomadRefSet {
     }
 }
 
-impl<'branch> FromIterator<(User, Host, Branch<'branch>)> for RemoteNomadRefSet {
-    fn from_iter<T: IntoIterator<Item = (User, Host, Branch<'branch>)>>(iter: T) -> Self {
-        let set = HashSet::from_iter(
-            iter.into_iter()
-                .map(|(user, host, branch)| (user, host, branch.possibly_clone())),
-        );
+impl<'user, 'host, 'branch> FromIterator<(User<'user>, Host<'host>, Branch<'branch>)>
+    for RemoteNomadRefSet
+{
+    fn from_iter<T: IntoIterator<Item = (User<'user>, Host<'host>, Branch<'branch>)>>(
+        iter: T,
+    ) -> Self {
+        let set = HashSet::from_iter(iter.into_iter().map(|(user, host, branch)| {
+            (
+                user.possibly_clone(),
+                host.possibly_clone(),
+                branch.possibly_clone(),
+            )
+        }));
         RemoteNomadRefSet { set }
     }
 }
 
-impl<'branch, Ref> FromIterator<NomadRef<'branch, Ref>> for RemoteNomadRefSet {
-    fn from_iter<T: IntoIterator<Item = NomadRef<'branch, Ref>>>(iter: T) -> Self {
+impl<'user, 'host, 'branch, Ref> FromIterator<NomadRef<'user, 'host, 'branch, Ref>>
+    for RemoteNomadRefSet
+{
+    fn from_iter<T: IntoIterator<Item = NomadRef<'user, 'host, 'branch, Ref>>>(iter: T) -> Self {
         Self::from_iter(iter.into_iter().map(|nomad_ref| {
             let NomadRef {
                 user, host, branch, ..

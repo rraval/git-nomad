@@ -30,10 +30,6 @@ fn str_value<'a>(matches: &'a ArgMatches, name: &'static str) -> Result<&'a str>
     matches.value_of(name).context(name)
 }
 
-fn string_value(matches: &ArgMatches, name: &'static str) -> Result<String> {
-    str_value(matches, name).map(String::from)
-}
-
 fn main() -> Result<()> {
     let default_user = whoami::username();
     let default_host = whoami::hostname();
@@ -141,8 +137,8 @@ fn main() -> Result<()> {
     )?;
 
     if let Some(matches) = matches.subcommand_matches("init") {
-        let user = User(string_value(matches, "user")?);
-        let host = Host(string_value(matches, "host")?);
+        let user = User::from(str_value(matches, "user")?);
+        let host = Host::from(str_value(matches, "host")?);
 
         command::init(&git, &user, &host)?;
         return Ok(());
@@ -173,7 +169,7 @@ fn main() -> Result<()> {
                 if matches.is_present("all") {
                     command::prune(&git, &user, &remote, |snapshot| snapshot.prune_all())
                 } else if let Some(hosts) = matches.values_of("host") {
-                    let set = hosts.map(Host::str).collect::<HashSet<_>>();
+                    let set = hosts.map(Host::from).collect::<HashSet<_>>();
                     command::prune(&git, &user, &remote, |snapshot| {
                         snapshot.prune_all_by_hosts(&set)
                     })

@@ -243,7 +243,7 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
                     .args(&["rev-parse", "--absolute-git-dir"]),
             )
             .and_then(output_stdout)
-            .map(LineArity::of)
+            .map(LineArity::from)
             .and_then(LineArity::one)?;
 
         Ok(GitBinary {
@@ -281,7 +281,7 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
                 ]),
             )
             .and_then(output_stdout)
-            .map(LineArity::of)
+            .map(LineArity::from)
             .and_then(LineArity::zero_or_one)
     }
 
@@ -367,7 +367,7 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
                     .args(&["show-ref", "--verify", ref_name.as_ref()]),
             )
             .and_then(output_stdout)
-            .map(LineArity::of)
+            .map(LineArity::from)
             .and_then(LineArity::one)
             .and_then(|line| GitRef::parse_show_ref_line(&line).map_err(Into::into))
     }
@@ -605,12 +605,12 @@ enum LineArity {
     Many(String),
 }
 
-impl LineArity {
-    /// Smart constructor to parse a [`LineArity`] from an arbitrary line.
+impl From<String> for LineArity {
+    /// Parse a [`LineArity`] from an arbitrary line.
     ///
     /// Coerces the empty line as [`LineArity::Zero`].
-    fn of(string: String) -> LineArity {
-        let mut lines = string.lines().map(String::from).collect::<Vec<_>>();
+    fn from(string: String) -> Self {
+        let mut lines = string.lines().take(2).collect::<Vec<_>>();
         let last = lines.pop();
 
         match last {
@@ -620,7 +620,7 @@ impl LineArity {
                     if last.is_empty() {
                         LineArity::Zero()
                     } else {
-                        LineArity::One(last)
+                        LineArity::One(last.to_owned())
                     }
                 } else {
                     LineArity::Many(string)
@@ -628,7 +628,9 @@ impl LineArity {
             }
         }
     }
+}
 
+impl LineArity {
     /// The caller expects the output to only have a single line.
     fn one(self) -> Result<String> {
         if let LineArity::One(line) = self {

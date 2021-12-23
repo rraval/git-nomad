@@ -15,6 +15,7 @@ However, the output of the application is designed for humans, not machines, and
 
 - An internal rewrite of the implementation to prevent entire categories of bugs like [#1][i1], [#2][i2], and [#3][i3] from sneaking in again.
 - End-to-end tests that validate the entire workflow.
+- Performance and memory optimizations.
 
 ### Fixed
 

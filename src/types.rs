@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::HashSet, iter::FromIterator};
+use std::{borrow::{Borrow, Cow}, collections::HashSet, iter::FromIterator};
 
 macro_rules! impl_from_str {
     ($typename:ident) => {
@@ -16,12 +16,19 @@ macro_rules! impl_from_str {
     };
 }
 
-macro_rules! impl_possibly_clone {
+macro_rules! impl_ownership {
     ($typename:ident) => {
-        impl<'a> $typename<'a> {
+        impl $typename<'_> {
             pub fn possibly_clone(self) -> $typename<'static> {
                 let owned = self.0.into_owned();
                 $typename(Cow::Owned(owned))
+            }
+        }
+
+        impl<'a> $typename<'a> {
+            pub fn always_borrow(&'a self) -> Self {
+                let y: &str = self.0.borrow();
+                Self::from(y)
             }
         }
     };
@@ -35,7 +42,7 @@ impl_from_str!(Remote);
 #[derive(Debug, PartialEq, Eq, Hash, Clone, PartialOrd, Ord)]
 pub struct Branch<'a>(pub Cow<'a, str>);
 impl_from_str!(Branch);
-impl_possibly_clone!(Branch);
+impl_ownership!(Branch);
 
 /// Represents "who" a given branch belongs to. This value should be shared by multiple git
 /// clones that belong to the same user.
@@ -45,7 +52,7 @@ impl_possibly_clone!(Branch);
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct User<'a>(pub Cow<'a, str>);
 impl_from_str!(User);
-impl_possibly_clone!(User);
+impl_ownership!(User);
 
 /// Represents "where" a given branch comes from. This value should be unique for every git
 /// clone belonging to a specific user.
@@ -58,7 +65,7 @@ impl_possibly_clone!(User);
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Host<'a>(pub Cow<'a, str>);
 impl_from_str!(Host);
-impl_possibly_clone!(Host);
+impl_ownership!(Host);
 
 /// A ref representing a branch managed by nomad.
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -79,13 +86,12 @@ pub struct RemoteNomadRefSet {
 
 impl RemoteNomadRefSet {
     pub fn contains<Ref>(&self, nomad_ref: &NomadRef<Ref>) -> bool {
-        // FIXME: Doing this efficiently is a bit of a Rust puzzle
         // https://users.rust-lang.org/t/using-hashset-contains-with-tuple-types-without-takeing-ownership-of-the-values/65455
         // https://stackoverflow.com/questions/45786717/how-to-implement-hashmap-with-two-keys/45795699#45795699
         self.set.contains(&(
-            nomad_ref.user.clone(),
-            nomad_ref.host.clone(),
-            nomad_ref.branch.clone(),
+            nomad_ref.user.always_borrow(),
+            nomad_ref.host.always_borrow(),
+            nomad_ref.branch.always_borrow(),
         ))
     }
 }

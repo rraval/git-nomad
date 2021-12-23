@@ -101,6 +101,8 @@ mod namespace {
     }
 
     impl NomadRef<'_, '_, '_, GitRef> {
+        /// Constructs a [`NomadRef`] from a git ref in the local clone, which elides the user name
+        /// for convenience.
         pub fn from_git_local_ref<'user>(
             user: &'user User,
             git_ref: GitRef,
@@ -123,6 +125,8 @@ mod namespace {
             }
         }
 
+        /// Constructs a [`NomadRef`] from a git ref in the remote, which includes the user as part
+        /// of the ref name.
         pub fn from_git_remote_ref(
             git_ref: GitRef,
         ) -> Result<NomadRef<'static, 'static, 'static, GitRef>, GitRef> {
@@ -160,7 +164,7 @@ mod namespace {
         /// [`NomadRef::to_git_local_ref`] (they are duals).
         #[test]
         fn test_to_and_from_local_ref() {
-            let local_ref_name = NomadRef::<()> {
+            let local_ref_name = NomadRef {
                 user: User::from(USER),
                 host: Host::from(HOST),
                 branch: Branch::from(BRANCH),
@@ -185,7 +189,7 @@ mod namespace {
         /// [`NomadRef::to_git_local_ref`] (they are duals).
         #[test]
         fn test_to_and_from_remote_ref() {
-            let remote_ref_name = NomadRef::<()> {
+            let remote_ref_name = NomadRef {
                 user: User::from(USER),
                 host: Host::from(HOST),
                 branch: Branch::from(BRANCH),
@@ -429,6 +433,7 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
         Ok(())
     }
 
+    /// Create a git branch named `branch_name`.
     #[cfg(test)]
     pub fn create_branch(&self, description: impl AsRef<str>, branch_name: &Branch) -> Result<()> {
         let mut command = self.command();
@@ -437,6 +442,7 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
         Ok(())
     }
 
+    /// Delete a git branch named `branch_name`.
     #[cfg(test)]
     pub fn delete_branch(&self, description: impl AsRef<str>, branch_name: &Branch) -> Result<()> {
         let mut command = self.command();
@@ -445,10 +451,12 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
         Ok(())
     }
 
+    /// Should higher level commands be producing output, or has the user requested quiet mode?
     pub fn is_output_allowed(&self) -> bool {
         self.progress.is_output_allowed()
     }
 
+    /// Extract the persistent nomad config from the local git clone.
     pub fn read_nomad_config(&self) -> Result<Option<(User, Host)>> {
         let get = |k: &str| self.get_config(&namespace::config_key(k));
 
@@ -464,6 +472,7 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
         }
     }
 
+    /// Persist a new nomad config for the local git clone.
     pub fn write_nomad_config(&self, user: &User, host: &Host) -> Result<()> {
         let set = |k: &str, v: &str| self.set_config(&namespace::config_key(k), v);
 
@@ -473,6 +482,8 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
         Ok(())
     }
 
+    /// Build a point in time snapshot for all refs that nomad cares about from the state in the
+    /// local git clone.
     pub fn snapshot<'user>(&self, user: &'user User) -> Result<Snapshot<'user, 'static, GitRef>> {
         let refs = self.list_refs("Fetching all refs")?;
 
@@ -492,6 +503,7 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
         Ok(Snapshot::new(user, local_branches, nomad_refs))
     }
 
+    /// Fetch all nomad managed refs from a given remote.
     pub fn fetch_nomad_refs(&self, user: &User, remote: &Remote) -> Result<()> {
         self.fetch_refspecs(
             format!("Fetching branches from {}", remote.0),
@@ -500,6 +512,10 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
         )
     }
 
+    /// List all nomad managed refs from a given remote.
+    ///
+    /// Separated from [`Self::fetch_nomad_refs`] because not all callers want to pay the overhead
+    /// of actually listing the fetched refs.
     pub fn list_nomad_refs(
         &self,
         user: &User,
@@ -521,6 +537,7 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
             .filter_map(|ref_| NomadRef::<GitRef>::from_git_remote_ref(ref_).ok()))
     }
 
+    /// Push local branches to nomad managed refs in the remote.
     pub fn push_nomad_refs(&self, user: &User, host: &Host, remote: &Remote) -> Result<()> {
         self.push_refspecs(
             format!("Pushing local branches to {}", remote.0),
@@ -529,6 +546,7 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
         )
     }
 
+    /// Delete the given nomad managed refs.
     pub fn prune_nomad_refs<'user, 'host>(
         &self,
         remote: &Remote,
@@ -643,6 +661,7 @@ mod test_impl {
 
     const PROGRESS: Progress = Progress::Verbose(Verbosity::CommandAndOutput);
 
+    /// Initializes a git repository in a temporary directory.
     fn git_init() -> Result<(String, TempDir)> {
         let name = "git".to_owned();
         let tmpdir = tempdir()?;

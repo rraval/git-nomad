@@ -19,6 +19,12 @@ const ORIGIN: &str = "origin";
 pub const INITIAL_BRANCH: &str = "master";
 const PROGRESS: Progress = Progress::Verbose(Verbosity::CommandAndOutput);
 
+/// Only stores the hexadecimal git commit ID.
+///
+/// Meant to be used as the `Ref` in a `NomadRef<Ref>`.
+///
+/// Useful for comparing just the commit IDs without caring what the [`GitRef::name`]` actually
+/// was.
 #[derive(PartialEq, Eq, Hash, Debug, Clone)]
 pub struct GitCommitId {
     commit_id: String,
@@ -44,6 +50,7 @@ impl<'user, 'host, 'branch> From<NomadRef<'user, 'host, 'branch, GitRef>>
     }
 }
 
+/// Simulates a git remote in a temporary directory.
 pub struct GitRemote {
     root_dir: TempDir,
     remote_dir: PathBuf,
@@ -51,6 +58,7 @@ pub struct GitRemote {
 }
 
 impl GitRemote {
+    /// Initializes a git remote in a temporary directory.
     pub fn init() -> GitRemote {
         let root_dir = tempdir().unwrap();
         let remote_dir = root_dir.path().join("remote");
@@ -87,6 +95,7 @@ impl GitRemote {
         }
     }
 
+    /// Creates a git clone that can act like a [`Host`].
     pub fn clone<'a>(&'a self, user: &'static str, host: &'static str) -> GitClone<'a> {
         let clone_dir = {
             let mut dir = PathBuf::from(self.root_dir.path());
@@ -119,6 +128,7 @@ impl GitRemote {
         }
     }
 
+    /// List all nomad managed refs in the remote.
     pub fn nomad_refs(&self) -> HashSet<NomadRef<GitCommitId>> {
         self.git
             .list_refs("")
@@ -133,6 +143,7 @@ impl GitRemote {
     }
 }
 
+/// Acts like a separate [`Host`] in a temporary directory.
 pub struct GitClone<'a> {
     _remote: &'a GitRemote,
     _clone_dir: PathBuf,
@@ -142,28 +153,33 @@ pub struct GitClone<'a> {
 }
 
 impl<'a> GitClone<'a> {
+    /// Get the [`Remote`] name to sync against.
     pub fn remote(&self) -> Remote {
         Remote::from(ORIGIN)
     }
 
+    /// Push all nomad managed refs to the remote.
     pub fn push(&self) {
         self.git
             .push_nomad_refs(&self.user, &self.host, &self.remote())
             .unwrap();
     }
 
+    /// Fetch all nomad managed refs from the remote.
     pub fn fetch(&self) {
         self.git
             .fetch_nomad_refs(&self.user, &self.remote())
             .unwrap()
     }
 
+    /// List all nomad managed refs in the current clone.
     pub fn list(&self) -> impl Iterator<Item = NomadRef<GitRef>> {
         self.git
             .list_nomad_refs(&self.user, &self.remote())
             .unwrap()
     }
 
+    /// Delete the nomad managed refs backed by `branch_names` from both the local and remote.
     pub fn prune_local_and_remote<'b, B: IntoIterator<Item = &'b str>>(&self, branch_names: B) {
         let prune_from = branch_names.into_iter().map(|name| {
             let nomad_ref = NomadRef::<()> {
@@ -190,6 +206,7 @@ impl<'a> GitClone<'a> {
             .unwrap();
     }
 
+    /// Resolve a specific nomad managed ref in the local clone by `branch` name.
     pub fn get_nomad_ref<'branch>(
         &'a self,
         branch: &'branch str,
@@ -205,6 +222,7 @@ impl<'a> GitClone<'a> {
             })
     }
 
+    /// Get all nomad managed refs in the local clone.
     pub fn nomad_refs(&self) -> HashSet<NomadRef<GitCommitId>> {
         self.git
             .list_refs(&self.host.0)

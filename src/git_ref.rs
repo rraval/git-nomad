@@ -53,6 +53,8 @@ fn is_not_empty<S: AsRef<str>>(str: &S) -> bool {
 }
 
 impl GitRef {
+    /// Utility to parse a `<ref_name><delimiter><commit_id>` line that git likes to output
+    /// for various commands.
     fn parse_char_delimited_line(line: &str, delimiter: char) -> Result<GitRef, GitRefParseError> {
         let mut parts = line.split(delimiter).map(String::from).collect::<Vec<_>>();
         let name = parts

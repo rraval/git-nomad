@@ -101,6 +101,12 @@ mod test {
         sync(&host.git, &host.user, &host.host, &host.remote()).unwrap();
     }
 
+    /// Syncing should pick up nomad refs from other hosts.
+    ///
+    /// When the other host deletes their branch (and thus deletes their nomad ref on the remote),
+    /// the equivalent local nomad ref for that host should also be deleted.
+    ///
+    /// See https://github.com/rraval/git-nomad/issues/1
     #[test]
     fn issue_1() {
         let origin = GitRemote::init();
@@ -170,6 +176,10 @@ mod test {
         );
     }
 
+    /// Explicitly pruning other hosts should delete both local and remote nomad refs for that
+    /// host.
+    ///
+    /// See https://github.com/rraval/git-nomad/issues/2
     #[test]
     fn issue_2_other_host() {
         let origin = GitRemote::init();
@@ -202,6 +212,10 @@ mod test {
         );
     }
 
+    /// Explicitly pruning everything should delete both local and remote refs for both the current
+    /// and other host on the remote.
+    ///
+    /// See https://github.com/rraval/git-nomad/issues/2
     #[test]
     fn issue_2_all() {
         let origin = GitRemote::init();

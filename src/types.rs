@@ -1,6 +1,11 @@
-use std::{borrow::{Borrow, Cow}, collections::HashSet, iter::FromIterator};
+use std::{
+    borrow::{Borrow, Cow},
+    collections::HashSet,
+    iter::FromIterator,
+};
 
-macro_rules! impl_from_str {
+/// Convenient [`From`] implementations for `Cow<'_, str>` based newtypes.
+macro_rules! impl_str_from {
     ($typename:ident) => {
         impl<'a> From<&'a str> for $typename<'a> {
             fn from(s: &'a str) -> Self {
@@ -16,8 +21,14 @@ macro_rules! impl_from_str {
     };
 }
 
-macro_rules! impl_ownership {
+/// Additional utility methods for `Cow<'_, str>` based newtypes.
+macro_rules! impl_str_ownership {
     ($typename:ident) => {
+        /// Takes ownership of non-`'static` borrowed data, possibly allocating a
+        /// `String` to do so.
+        ///
+        /// Convenient representation for types that want to stake ownership of the newtype without
+        /// exposing a generic lifetime of their own.
         impl $typename<'_> {
             pub fn possibly_clone(self) -> $typename<'static> {
                 let owned = self.0.into_owned();
@@ -25,6 +36,10 @@ macro_rules! impl_ownership {
             }
         }
 
+        /// Returns a copy of itself while guaranteeing zero allocations.
+        ///
+        /// Useful for standard containers that use the `Borrow + Hash + Eq` sleight of hand to
+        /// permit zero allocation lookups while still owning the underlying data.
         impl<'a> $typename<'a> {
             pub fn always_borrow(&'a self) -> Self {
                 let y: &str = self.0.borrow();
@@ -36,23 +51,23 @@ macro_rules! impl_ownership {
 
 /// A remote git repository identified by name, like `origin`.
 pub struct Remote<'a>(pub Cow<'a, str>);
-impl_from_str!(Remote);
+impl_str_from!(Remote);
 
-/// The branch name part of a ref. `refs/head/master` would be `Branch("master".to_string())`.
+/// The branch name part of a ref. `refs/head/master` would be `Branch::from("master")`.
 #[derive(Debug, PartialEq, Eq, Hash, Clone, PartialOrd, Ord)]
 pub struct Branch<'a>(pub Cow<'a, str>);
-impl_from_str!(Branch);
-impl_ownership!(Branch);
+impl_str_from!(Branch);
+impl_str_ownership!(Branch);
 
 /// Represents "who" a given branch belongs to. This value should be shared by multiple git
 /// clones that belong to the same user.
 ///
 /// This string is used when pushing branches to the remote so that multiple users can use
-/// nomad on that remote without stepping on each other.
+/// nomad on that remote without overwriting each others refs.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct User<'a>(pub Cow<'a, str>);
-impl_from_str!(User);
-impl_ownership!(User);
+impl_str_from!(User);
+impl_str_ownership!(User);
 
 /// Represents "where" a given branch comes from. This value should be unique for every git
 /// clone belonging to a specific user.
@@ -64,8 +79,8 @@ impl_ownership!(User);
 /// and for detecting when branches have been deleted.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Host<'a>(pub Cow<'a, str>);
-impl_from_str!(Host);
-impl_ownership!(Host);
+impl_str_from!(Host);
+impl_str_ownership!(Host);
 
 /// A ref representing a branch managed by nomad.
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -76,16 +91,24 @@ pub struct NomadRef<'user, 'host, 'branch, Ref> {
     pub host: Host<'host>,
     /// The branch name.
     pub branch: Branch<'branch>,
-    /// Any additional data the [`Backend`] would like to carry around.
+    /// Any additional internal data representing the underlying git ref.
     pub ref_: Ref,
 }
 
+/// A specialized container to represent nomad managed refs that a remote knows about.
 pub struct RemoteNomadRefSet {
     set: HashSet<(User<'static>, Host<'static>, Branch<'static>)>,
 }
 
 impl RemoteNomadRefSet {
+    /// Check whether the remote knows about a given [`NomadRef`].
+    ///
+    /// Note that the `Ref` part of `NomadRef<Ref>` is completely ignored, since we don't care
+    /// about the intrinsic git ref being pointed to, merely that the remote is still tracking a
+    /// nomad ref with the given user/host/branch.
     pub fn contains<Ref>(&self, nomad_ref: &NomadRef<Ref>) -> bool {
+        // Performs a lookup without allocating.
+        //
         // https://users.rust-lang.org/t/using-hashset-contains-with-tuple-types-without-takeing-ownership-of-the-values/65455
         // https://stackoverflow.com/questions/45786717/how-to-implement-hashmap-with-two-keys/45795699#45795699
         self.set.contains(&(

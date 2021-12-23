@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use crate::types::{Branch, Host, NomadRef, RemoteNomadRefSet, User};
 
 /// A point in time view of refs we care about. [`Snapshot`] is only for local branches and refs
-/// and thus is scoped under a specific [`Config::user`].
+/// and thus is scoped under a specific [`User`].
 #[allow(clippy::manual_non_exhaustive)]
 pub struct Snapshot<'user, 'host, Ref> {
     /// The active branches in this clone that the user manipulates directly with `git branch` etc.
@@ -22,7 +22,12 @@ pub enum PruneFrom<'user, 'host, Ref> {
 }
 
 impl<Ref> Snapshot<'_, '_, Ref> {
-    /// Smart constructor that enforces the "scoped under a specific [`Config::user`]" invariant.
+    /// Smart constructor that enforces the "scoped under a specific [`User`]" invariant.
+    ///
+    /// # Panics
+    ///
+    /// If `nomad_refs` points to a different [`User`] than the `user` passed in. This indicates
+    /// serious programmer error.
     pub fn new<'user>(
         user: &'user User,
         local_branches: HashSet<Branch<'static>>,

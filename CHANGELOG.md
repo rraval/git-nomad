@@ -17,6 +17,10 @@ However, the output of the application is designed for humans, not machines, and
 - End-to-end tests that validate the entire workflow.
 - Performance and memory optimizations.
 
+### Changed
+
+- [#4][i4]: The `prune` subcommand has been renamed to `purge`.
+
 ### Fixed
 
 - [#2][i2]: A severe bug related to purging refs from other hosts, i.e. after you wish to stop using git-nomad.
@@ -72,3 +76,4 @@ An initial release with a reasonable complete implementation.
 [i1]: https://github.com/rraval/git-nomad/issues/1
 [i2]: https://github.com/rraval/git-nomad/issues/2
 [i3]: https://github.com/rraval/git-nomad/issues/3
+[i4]: https://github.com/rraval/git-nomad/issues/4

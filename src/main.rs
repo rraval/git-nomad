@@ -94,7 +94,7 @@ fn main() -> Result<()> {
         )
         .subcommand(SubCommand::with_name("ls").about("List refs for all hosts"))
         .subcommand(
-            SubCommand::with_name("prune")
+            SubCommand::with_name("purge")
                 .about("Delete nomad refs locally and on the remote")
                 .arg(
                     Arg::with_name("all")
@@ -161,16 +161,16 @@ fn main() -> Result<()> {
         };
     }
 
-    if let Some(matches) = matches.subcommand_matches("prune") {
+    if let Some(matches) = matches.subcommand_matches("purge") {
         return match git.read_nomad_config()? {
             None => bail!("No configuration found, nothing to prune"),
             Some((user, _)) => {
                 let remote = Remote::from(str_value(matches, "remote")?);
                 if matches.is_present("all") {
-                    command::prune(&git, &user, &remote, |snapshot| snapshot.prune_all())
+                    command::purge(&git, &user, &remote, |snapshot| snapshot.prune_all())
                 } else if let Some(hosts) = matches.values_of("host") {
                     let set = hosts.map(Host::from).collect::<HashSet<_>>();
-                    command::prune(&git, &user, &remote, |snapshot| {
+                    command::purge(&git, &user, &remote, |snapshot| {
                         snapshot.prune_all_by_hosts(&set)
                     })
                 } else {

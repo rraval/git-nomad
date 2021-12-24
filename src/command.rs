@@ -68,7 +68,7 @@ pub fn ls(git: &GitBinary, user: &User) -> Result<()> {
 }
 
 /// Delete nomad managed refs returned by `to_prune`.
-pub fn prune<'user, F>(
+pub fn purge<'user, F>(
     git: &GitBinary,
     user: &'user User,
     remote: &Remote,
@@ -89,7 +89,7 @@ mod test {
     use std::{collections::HashSet, iter::FromIterator};
 
     use crate::{
-        command::prune,
+        command::purge,
         git_testing::{GitClone, GitRemote, INITIAL_BRANCH},
         snapshot::Snapshot,
         types::Branch,
@@ -200,7 +200,7 @@ mod test {
         );
 
         // pruning refs for host0 from host1
-        prune(&host1.git, &host1.user, &host1.remote(), |snapshot| {
+        purge(&host1.git, &host1.user, &host1.remote(), |snapshot| {
             snapshot.prune_all_by_hosts(&HashSet::from_iter([host0.host.clone()]))
         })
         .unwrap();
@@ -236,7 +236,7 @@ mod test {
         );
 
         // pruning refs for all hosts from host1
-        prune(
+        purge(
             &host1.git,
             &host1.user,
             &host1.remote(),

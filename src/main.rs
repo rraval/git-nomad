@@ -41,7 +41,10 @@ fn main() -> Result<()> {
     };
 
     let matches = App::new("git nomad")
-        .settings(&[AppSettings::SubcommandRequiredElseHelp])
+        .settings(&[
+              AppSettings::SubcommandRequiredElseHelp,
+              AppSettings::VersionlessSubcommands,
+        ])
         .name(crate_name!())
         .version(git_version!(
             prefix = "git:",
@@ -52,18 +55,21 @@ fn main() -> Result<()> {
         .about(crate_description!())
         .arg(
             Arg::with_name("git")
+                .global(true)
                 .long("git")
                 .default_value("git")
                 .help("Git binary to use"),
         )
         .arg(
             Arg::with_name("silent")
+                .global(true)
                 .short("s")
                 .long("silent")
                 .help("Silence all output"),
         )
         .arg(
             Arg::with_name("verbose")
+                .global(true)
                 .short("v")
                 .long("verbose")
                 .multiple(true)

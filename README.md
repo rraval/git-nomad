@@ -14,21 +14,7 @@ Synchronize work-in-progress git branches in a light weight fashion. Motivation:
 ## Usage
 
 [Install `git-nomad`](#installation) to make it available on your `$PATH`.
-
-Configure it for a specific git clone:
-
-```console
-# Needs to be run once for each clone on each machine.
-# Note that this defaults to your username and hostname.
-# See `--help` for overriding this explicitly.
-rraval@apollo:~/git-nomad$ git nomad init
-Wrote Config {
-    user: "rraval",
-    host: "apollo",
-}
-```
-
-Now hack away with your usual git workflow:
+Assume you're hacking away with your usual git workflow:
 
 ```console
 rraval@apollo:~/git-nomad$ git checkout -b feature
@@ -55,17 +41,6 @@ apollo
 ---
 
 At some future point, you wish to pick up development on a different machine:
-
-```console
-# Only needs to be run once per clone on each machine.
-rraval@boreas:~/git-nomad$ git nomad init
-Wrote Config {
-    user: "rraval",
-    host: "boreas",
-}
-```
-
-You can now run `sync` on this new machine as well:
 
 ```console
 rraval@boreas:~/git-nomad$ git nomad sync
@@ -116,7 +91,6 @@ boreas
 If you'd like to stop using `git-nomad` and clean up all the refs it has created:
 
 ```console
-# Needs to be run once per clone where `git nomad init` has been run.
 # See also the `prune --host` option.
 rraval@apollo:~/git-nomad$ git nomad prune --all
 Fetching branches from origin... 1s

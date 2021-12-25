@@ -20,6 +20,7 @@ However, the output of the application is designed for humans, not machines, and
 ### Changed
 
 - [#4][i4]: The `prune` subcommand has been renamed to `purge`.
+- [#5][i5]: The `init` subcommand no longer exists. Other subcommands like `sync` and `purge` take new options and read from the git configuration directly. Starting to use `git-nomad` now only requires one command (`sync`) instead of two (`init` then `sync`).
 
 ### Fixed
 
@@ -77,3 +78,4 @@ An initial release with a reasonable complete implementation.
 [i2]: https://github.com/rraval/git-nomad/issues/2
 [i3]: https://github.com/rraval/git-nomad/issues/3
 [i4]: https://github.com/rraval/git-nomad/issues/4
+[i5]: https://github.com/rraval/git-nomad/issues/5

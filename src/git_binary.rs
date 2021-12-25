@@ -261,23 +261,20 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
         command
     }
 
-    /// Wraps `git config` to read a single value from the local git repository.
-    ///
-    /// Explicitly ignores user level or global config to keep things nice and sealed.
-    fn get_config(&self, key: &str) -> Result<Option<String>> {
+    /// Wraps `git config` to read a single namespaced value.
+    pub fn get_config(&self, key: &str) -> Result<Option<String>> {
         self.progress
             .run(
                 Run::Trivial,
                 format!("Get config {}", key),
                 self.command().args(&[
                     "config",
-                    "--local",
                     // Use a default to prevent git from returning a non-zero exit code when the value does
                     // not exist.
                     "--default",
                     "",
                     "--get",
-                    key,
+                    &namespace::config_key(key),
                 ]),
             )
             .and_then(output_stdout)
@@ -285,13 +282,19 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
             .and_then(LineArity::zero_or_one)
     }
 
-    /// Wraps `git config` to write a single value to the local git repository.
+    /// Wraps `git config` to write a single namespaced value.
+    #[cfg(test)]
     fn set_config(&self, key: &str, value: &str) -> Result<()> {
         self.progress.run(
             Run::Trivial,
             format!("Set config {} = {}", key, value),
-            self.command()
-                .args(&["config", "--local", "--replace-all", key, value]),
+            self.command().args(&[
+                "config",
+                "--local",
+                "--replace-all",
+                &namespace::config_key(key),
+                value,
+            ]),
         )?;
         Ok(())
     }
@@ -454,32 +457,6 @@ impl<'progress, 'name> GitBinary<'progress, 'name> {
     /// Should higher level commands be producing output, or has the user requested quiet mode?
     pub fn is_output_allowed(&self) -> bool {
         self.progress.is_output_allowed()
-    }
-
-    /// Extract the persistent nomad config from the local git clone.
-    pub fn read_nomad_config(&self) -> Result<Option<(User, Host)>> {
-        let get = |k: &str| self.get_config(&namespace::config_key(k));
-
-        let user = get("user")?.map(User::from);
-        let host = get("host")?.map(Host::from);
-
-        match (user, host) {
-            (Some(user), Some(host)) => Ok(Some((user, host))),
-            (None, None) => Ok(None),
-            (user, host) => {
-                bail!("Partial configuration {:?} {:?}", user, host)
-            }
-        }
-    }
-
-    /// Persist a new nomad config for the local git clone.
-    pub fn write_nomad_config(&self, user: &User, host: &Host) -> Result<()> {
-        let set = |k: &str, v: &str| self.set_config(&namespace::config_key(k), v);
-
-        set("user", &user.0)?;
-        set("host", &host.0)?;
-
-        Ok(())
     }
 
     /// Build a point in time snapshot for all refs that nomad cares about from the state in the
@@ -729,8 +706,8 @@ mod test_impl {
         let (name, tmpdir) = git_init()?;
         let git = GitBinary::new(&PROGRESS, &name, tmpdir.path())?;
 
-        git.set_config("test.key", "testvalue")?;
-        let got = git.get_config("test.key")?;
+        git.set_config("key", "testvalue")?;
+        let got = git.get_config("key")?;
 
         assert_eq!(got, Some("testvalue".to_string()));
 

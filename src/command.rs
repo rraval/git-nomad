@@ -1,6 +1,6 @@
 //! High level user invoked workflows for nomad.
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 
 use crate::{
     git_binary::GitBinary,
@@ -8,25 +8,6 @@ use crate::{
     snapshot::{PruneFrom, Snapshot},
     types::{Host, NomadRef, Remote, User},
 };
-
-/// Initialize a git clone to have branches managed by nomad.
-///
-/// Will refuse to overwrite an already existing configuration.
-pub fn init(git: &GitBinary, new_user: &User, new_host: &Host) -> Result<()> {
-    if let Some(existing_config) = git.read_nomad_config()? {
-        bail!(
-            "Found existing config, refusing to init again: {:#?}",
-            existing_config
-        );
-    }
-
-    git.write_nomad_config(new_user, new_host)?;
-    if git.is_output_allowed() {
-        println!("Initialized {} @ {}", new_user.0, new_host.0);
-    }
-
-    Ok(())
-}
 
 /// Synchronize current local branches with nomad managed refs in the given remote.
 pub fn sync(git: &GitBinary, user: &User, host: &Host, remote: &Remote) -> Result<()> {

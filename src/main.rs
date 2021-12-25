@@ -32,6 +32,8 @@ mod types;
 #[cfg(test)]
 mod git_testing;
 
+const DEFAULT_REMOTE: Remote<'static> = Remote(Cow::Borrowed("origin"));
+
 fn main() -> anyhow::Result<()> {
     let default_user = User::from(whoami::username());
     let default_host = Host::from(whoami::hostname());
@@ -54,7 +56,7 @@ fn cli<'a>(
 ) -> clap::Result<ArgMatches<'a>> {
     let remote_arg = || {
         Arg::with_name("remote")
-            .default_value("origin")
+            .default_value(&DEFAULT_REMOTE.0)
             .help("Git remote to sync against")
     };
 
@@ -450,13 +452,7 @@ mod test_e2e {
 mod test_cli {
     use std::borrow::Cow;
 
-    use crate::{
-        cli,
-        command::Command,
-        git_testing::GitRemote,
-        specified_command,
-        types::{Host, Remote, User},
-    };
+    use crate::{DEFAULT_REMOTE, cli, command::Command, git_testing::GitRemote, specified_command, types::{Host, User}};
 
     #[test]
     fn sync() {
@@ -472,7 +468,7 @@ mod test_cli {
             Command::Sync {
                 user: Cow::Borrowed(&default_user),
                 host: Cow::Borrowed(&default_host),
-                remote: Remote::from("origin"),
+                remote: DEFAULT_REMOTE.clone(),
             }
         );
     }

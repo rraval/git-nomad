@@ -50,7 +50,7 @@ macro_rules! impl_str_ownership {
 }
 
 /// A remote git repository identified by name, like `origin`.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Remote<'a>(pub Cow<'a, str>);
 impl_str_from!(Remote);
 

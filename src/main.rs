@@ -1,6 +1,6 @@
-use std::{collections::HashSet, env::current_dir};
+use std::{borrow::Cow, env::current_dir};
 
-use anyhow::{bail, Context, Result};
+use anyhow::Result;
 use clap::{
     crate_authors, crate_description, crate_name, App, AppSettings, Arg, ArgGroup, ArgMatches,
     SubCommand,
@@ -9,9 +9,11 @@ use clap::{
 // usage disappear.
 #[allow(unused_imports)]
 use clap::crate_version;
+use command::Command;
 use git_version::git_version;
 
 use crate::{
+    command::PurgeFilter,
     git_binary::GitBinary,
     progress::{Progress, Run, Verbosity},
     types::{Host, Remote, User},
@@ -27,14 +29,8 @@ mod types;
 #[cfg(test)]
 mod git_testing;
 
-fn str_value<'a>(matches: &'a ArgMatches, name: &'static str) -> Result<&'a str> {
-    matches.value_of(name).context(name)
-}
-
-fn main() -> Result<()> {
-    let default_user = User::from(whoami::username());
-    let default_host = Host::from(whoami::hostname());
-
+/// Use [`clap`] to implement the intended command line interface.
+fn clap_args<'a>(default_user: &'a User<'a>, default_host: &'a Host<'a>) -> ArgMatches<'a> {
     let remote_arg = || {
         Arg::with_name("remote")
             .default_value("origin")
@@ -127,7 +123,12 @@ fn main() -> Result<()> {
             )
             .get_matches();
 
-    let progress = if matches.is_present("silent") {
+    matches
+}
+
+/// The [`Progress`] intended by the user via the CLI.
+fn specified_progress(matches: &ArgMatches) -> Progress {
+    if matches.is_present("silent") {
         Progress::Silent
     } else {
         match matches.occurrences_of("verbose") {
@@ -140,19 +141,40 @@ fn main() -> Result<()> {
             2 => Progress::Verbose(Verbosity::CommandOnly),
             _ => Progress::Verbose(Verbosity::CommandAndOutput),
         }
-    };
+    }
+}
 
-    let git = GitBinary::new(
+/// The [`GitBinary`] intended by the user via the CLI.
+///
+/// # Panics
+///
+/// If [`clap`] does not prevent certain assumed invalid states.
+fn specified_git<'a>(matches: &'a ArgMatches, progress: Progress) -> Result<GitBinary<'a>> {
+    GitBinary::new(
         progress,
-        matches.value_of("git").context("git")?,
+        matches
+            .value_of("git")
+            .expect("There should be a default value"),
         current_dir()?.as_path(),
-    )?;
+    )
+}
 
+/// The nomad workflow the user intends to execute via the CLI.
+///
+/// # Panics
+///
+/// If [`clap`] does not prevent certain assumed invalid states.
+fn specified_command<'a, 'user: 'a, 'host: 'a>(
+    matches: &'a ArgMatches,
+    default_user: &'user User<'user>,
+    default_host: &'host Host<'host>,
+    git: &GitBinary,
+) -> Result<Command<'a, 'a, 'a>> {
     let user = resolve(
-        &matches,
+        matches,
         "user",
         git.get_config("user")?.map(User::from),
-        default_user.always_borrow(),
+        default_user,
     );
 
     if let Some(matches) = matches.subcommand_matches("sync") {
@@ -160,30 +182,53 @@ fn main() -> Result<()> {
             matches,
             "host",
             git.get_config("host")?.map(Host::from),
-            default_host.always_borrow(),
+            default_host,
         );
-
-        let remote = Remote::from(str_value(matches, "remote")?);
-        command::sync(&git, &user, &host, &remote)?
+        let remote = Remote::from(
+            matches
+                .value_of("remote")
+                .expect("<remote> is a required argument"),
+        );
+        return Ok(Command::Sync { user, host, remote });
     }
 
     if matches.subcommand_matches("ls").is_some() {
-        command::ls(&git, &user)?
+        return Ok(Command::Ls { user });
     }
 
     if let Some(matches) = matches.subcommand_matches("purge") {
-        let remote = Remote::from(str_value(matches, "remote")?);
-        if matches.is_present("all") {
-            command::purge(&git, &user, &remote, |snapshot| snapshot.prune_all())?
+        let remote = Remote::from(
+            matches
+                .value_of("remote")
+                .expect("<remote> is a required argument"),
+        );
+        let purge_filter = if matches.is_present("all") {
+            PurgeFilter::All
         } else if let Some(hosts) = matches.values_of("host") {
-            let set = hosts.map(Host::from).collect::<HashSet<_>>();
-            command::purge(&git, &user, &remote, |snapshot| {
-                snapshot.prune_all_by_hosts(&set)
-            })?
+            PurgeFilter::Hosts(hosts.map(Host::from).collect())
         } else {
-            bail!("Must specify --all or --host");
-        }
+            panic!("ArgGroup should have verified that one of these parameters was present");
+        };
+
+        return Ok(Command::Purge {
+            user,
+            remote,
+            purge_filter,
+        });
     }
+
+    panic!("Subcommand is mandatory");
+}
+
+fn main() -> Result<()> {
+    let default_user = User::from(whoami::username());
+    let default_host = Host::from(whoami::hostname());
+
+    let matches = clap_args(&default_user, &default_host);
+    let progress = specified_progress(&matches);
+    let git = specified_git(&matches, progress)?;
+    let command = specified_command(&matches, &default_user, &default_host, &git)?;
+    command.execute(&git)?;
 
     Ok(())
 }
@@ -202,21 +247,193 @@ fn main() -> Result<()> {
 /// [`ArgMatches::value_of`] will do as we want.
 ///
 /// Otherwise, we roll our own logic for the (3) and (4) cases.
-fn resolve<'a, T: From<&'a str>>(
+fn resolve<'a, T: Clone + From<&'a str>>(
     matches: &'a ArgMatches,
     arg_name: &str,
     from_git_config: Option<T>,
-    from_os_default: T,
-) -> T {
+    from_os_default: &'a T,
+) -> Cow<'a, T> {
     if matches.is_present(arg_name) {
-        T::from(
+        Cow::Owned(T::from(
             matches
                 .value_of(arg_name)
                 .expect("is_present claimed there was a value"),
-        )
+        ))
     } else if let Some(value) = from_git_config {
-        value
+        Cow::Owned(value)
     } else {
-        from_os_default
+        Cow::Borrowed(from_os_default)
+    }
+}
+
+/// End-to-end workflow tests.
+#[cfg(test)]
+mod e2e {
+    use std::{borrow::Cow, collections::HashSet, iter::FromIterator};
+
+    use crate::{
+        command::{Command, PurgeFilter},
+        git_testing::{GitClone, GitRemote, INITIAL_BRANCH},
+        types::Branch,
+    };
+
+    fn sync_host(clone: &GitClone) {
+        Command::Sync {
+            user: Cow::Borrowed(&clone.user),
+            host: Cow::Borrowed(&clone.host),
+            remote: clone.remote(),
+        }
+        .execute(&clone.git)
+        .unwrap();
+    }
+
+    /// Syncing should pick up nomad refs from other hosts.
+    ///
+    /// When the other host deletes their branch (and thus deletes their nomad ref on the remote),
+    /// the equivalent local nomad ref for that host should also be deleted.
+    ///
+    /// See https://github.com/rraval/git-nomad/issues/1
+    #[test]
+    fn issue_1() {
+        let origin = GitRemote::init();
+        let feature = &Branch::from("feature");
+
+        let host0 = origin.clone("user0", "host0");
+        sync_host(&host0);
+
+        let host1 = origin.clone("user0", "host1");
+        host1
+            .git
+            .create_branch("Start feature branch", feature)
+            .unwrap();
+        sync_host(&host1);
+
+        // both hosts have synced, the origin should have refs from both (including the one for the
+        // feature branch on host1)
+        assert_eq!(
+            origin.nomad_refs(),
+            HashSet::from_iter([
+                host0.get_nomad_ref(INITIAL_BRANCH).unwrap(),
+                host1.get_nomad_ref(INITIAL_BRANCH).unwrap(),
+                host1.get_nomad_ref("feature").unwrap(),
+            ])
+        );
+
+        // host0 hasn't observed host1 yet
+        assert_eq!(
+            host0.nomad_refs(),
+            HashSet::from_iter([host0.get_nomad_ref(INITIAL_BRANCH).unwrap(),])
+        );
+
+        // sync host0, which should observe host1 refs
+        sync_host(&host0);
+        assert_eq!(
+            host0.nomad_refs(),
+            HashSet::from_iter([
+                host0.get_nomad_ref(INITIAL_BRANCH).unwrap(),
+                host1.get_nomad_ref(INITIAL_BRANCH).unwrap(),
+                host1.get_nomad_ref("feature").unwrap(),
+            ])
+        );
+
+        // host1 deletes the branch and syncs, removing it from origin
+        host1
+            .git
+            .delete_branch("Abandon feature branch", feature)
+            .unwrap();
+        sync_host(&host1);
+
+        assert_eq!(
+            origin.nomad_refs(),
+            HashSet::from_iter([
+                host0.get_nomad_ref(INITIAL_BRANCH).unwrap(),
+                host1.get_nomad_ref(INITIAL_BRANCH).unwrap(),
+            ])
+        );
+
+        // host0 syncs and removes the ref for the deleted feature branch
+        sync_host(&host0);
+        assert_eq!(
+            host0.nomad_refs(),
+            HashSet::from_iter([
+                host0.get_nomad_ref(INITIAL_BRANCH).unwrap(),
+                host1.get_nomad_ref(INITIAL_BRANCH).unwrap(),
+            ])
+        );
+    }
+
+    /// Explicitly pruning other hosts should delete both local and remote nomad refs for that
+    /// host.
+    ///
+    /// See https://github.com/rraval/git-nomad/issues/2
+    #[test]
+    fn issue_2_other_host() {
+        let origin = GitRemote::init();
+
+        let host0 = origin.clone("user0", "host0");
+        sync_host(&host0);
+
+        let host1 = origin.clone("user0", "host1");
+        sync_host(&host1);
+
+        // both hosts have synced, the origin should have both refs
+        assert_eq!(
+            origin.nomad_refs(),
+            HashSet::from_iter([
+                host0.get_nomad_ref(INITIAL_BRANCH).unwrap(),
+                host1.get_nomad_ref(INITIAL_BRANCH).unwrap(),
+            ])
+        );
+
+        // pruning refs for host0 from host1
+        Command::Purge {
+            user: Cow::Borrowed(&host1.user),
+            remote: host1.remote(),
+            purge_filter: PurgeFilter::Hosts(HashSet::from_iter([host0.host.always_borrow()])),
+        }
+        .execute(&host1.git)
+        .unwrap();
+
+        // the origin should only have refs for host1
+        assert_eq!(
+            origin.nomad_refs(),
+            HashSet::from_iter([host1.get_nomad_ref(INITIAL_BRANCH).unwrap(),])
+        );
+    }
+
+    /// Explicitly pruning everything should delete both local and remote refs for both the current
+    /// and other host on the remote.
+    ///
+    /// See https://github.com/rraval/git-nomad/issues/2
+    #[test]
+    fn issue_2_all() {
+        let origin = GitRemote::init();
+
+        let host0 = origin.clone("user0", "host0");
+        sync_host(&host0);
+
+        let host1 = origin.clone("user0", "host1");
+        sync_host(&host1);
+
+        // both hosts have synced, the origin should have both refs
+        assert_eq!(
+            origin.nomad_refs(),
+            HashSet::from_iter([
+                host0.get_nomad_ref(INITIAL_BRANCH).unwrap(),
+                host1.get_nomad_ref(INITIAL_BRANCH).unwrap(),
+            ])
+        );
+
+        // pruning refs for all hosts from host1
+        Command::Purge {
+            user: Cow::Borrowed(&host1.user),
+            remote: host1.remote(),
+            purge_filter: PurgeFilter::All,
+        }
+        .execute(&host1.git)
+        .unwrap();
+
+        // the origin should have no refs
+        assert_eq!(origin.nomad_refs(), HashSet::new(),);
     }
 }

@@ -91,8 +91,8 @@ boreas
 If you'd like to stop using `git-nomad` and clean up all the refs it has created:
 
 ```console
-# See also the `prune --host` option.
-rraval@apollo:~/git-nomad$ git nomad prune --all
+# See also the `purge --host` option.
+rraval@apollo:~/git-nomad$ git nomad purge --all
 Fetching branches from origin... 1s
 Listing branches at origin... 0s
 Pruning branches at origin... 2s

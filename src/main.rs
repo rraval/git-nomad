@@ -2,7 +2,8 @@ use std::{collections::HashSet, env::current_dir};
 
 use anyhow::{bail, Context, Result};
 use clap::{
-    crate_authors, crate_description, crate_name, App, AppSettings, Arg, ArgMatches, SubCommand,
+    crate_authors, crate_description, crate_name, App, AppSettings, Arg, ArgGroup, ArgMatches,
+    SubCommand,
 };
 // `crate_version!` is only used as a version fallback and thus macro expansion may make the only
 // usage disappear.
@@ -117,6 +118,11 @@ fn main() -> Result<()> {
                     .arg(host_arg().multiple(true).help(
                         "Delete refs for only the given host (can be specified multiple times)",
                     ))
+                    .group(
+                        ArgGroup::with_name("host_group")
+                            .args(&["all", "host"])
+                            .required(true),
+                    )
                     .arg(remote_arg()),
             )
             .get_matches();

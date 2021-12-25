@@ -54,7 +54,7 @@ impl<'user, 'host, 'branch> From<NomadRef<'user, 'host, 'branch, GitRef>>
 pub struct GitRemote {
     root_dir: TempDir,
     remote_dir: PathBuf,
-    git: GitBinary<'static>,
+    pub git: GitBinary<'static>,
 }
 
 impl GitRemote {

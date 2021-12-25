@@ -10,7 +10,7 @@ use crate::{
 };
 
 /// A boundary type that separates the CLI interface from high level nomad workflows.
-#[derive(PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Command<'user, 'host, 'remote> {
     Sync {
         user: Cow<'user, User<'user>>,
@@ -28,7 +28,7 @@ pub enum Command<'user, 'host, 'remote> {
 }
 
 /// How should local and remote refs be deleted during the `purge` workflow.
-#[derive(PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum PurgeFilter<'host> {
     /// Delete all nomad managed refs for the given [`User`].
     All,

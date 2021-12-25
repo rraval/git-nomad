@@ -1,6 +1,9 @@
-use std::{borrow::Cow, env::current_dir};
+use std::{
+    borrow::Cow,
+    env::{self, current_dir},
+    ffi::OsString,
+};
 
-use anyhow::Result;
 use clap::{
     crate_authors, crate_description, crate_name, App, AppSettings, Arg, ArgGroup, ArgMatches,
     SubCommand,
@@ -29,8 +32,26 @@ mod types;
 #[cfg(test)]
 mod git_testing;
 
+fn main() -> anyhow::Result<()> {
+    let default_user = User::from(whoami::username());
+    let default_host = Host::from(whoami::hostname());
+
+    let matches =
+        cli(&default_user, &default_host, &mut env::args_os()).unwrap_or_else(|e| e.exit());
+    let progress = specified_progress(&matches);
+    let git = specified_git(&matches, progress)?;
+    let command = specified_command(&matches, &default_user, &default_host, &git)?;
+    command.execute(&git)?;
+
+    Ok(())
+}
+
 /// Use [`clap`] to implement the intended command line interface.
-fn clap_args<'a>(default_user: &'a User<'a>, default_host: &'a Host<'a>) -> ArgMatches<'a> {
+fn cli<'a>(
+    default_user: &'a User<'a>,
+    default_host: &'a Host<'a>,
+    args: impl IntoIterator<Item = impl Into<OsString> + Clone>,
+) -> clap::Result<ArgMatches<'a>> {
     let remote_arg = || {
         Arg::with_name("remote")
             .default_value("origin")
@@ -44,86 +65,85 @@ fn clap_args<'a>(default_user: &'a User<'a>, default_host: &'a Host<'a>) -> ArgM
             .takes_value(true)
     };
 
-    let matches =
-        App::new("git nomad")
-            .settings(&[
-                AppSettings::SubcommandRequiredElseHelp,
-                AppSettings::VersionlessSubcommands,
-            ])
-            .name(crate_name!())
-            .version(git_version!(
-                prefix = "git:",
-                args = ["--tags", "--always", "--dirty=-modified"],
-                fallback = crate_version!(),
-            ))
-            .author(crate_authors!())
-            .about(crate_description!())
-            .arg(
-                Arg::with_name("git")
-                    .global(true)
-                    .long("git")
-                    .default_value("git")
-                    .help("Git binary to use"),
-            )
-            .arg(
-                Arg::with_name("silent")
-                    .global(true)
-                    .short("s")
-                    .long("silent")
-                    .help("Silence all output"),
-            )
-            .arg(
-                Arg::with_name("verbose")
-                    .global(true)
-                    .short("v")
-                    .long("verbose")
-                    .multiple(true)
-                    .help("Verbose output, repeat up to 3 times for increasing verbosity"),
-            )
-            .arg(
-                Arg::with_name("user")
-                    .global(true)
-                    .short("U")
-                    .long("user")
-                    .env("GIT_NOMAD_USER")
-                    .default_value(&default_user.0)
-                    .next_line_help(true)
-                    .help("User name, shared by multiple clones, unique per remote"),
-            )
-            .subcommand(
-                SubCommand::with_name("sync")
-                    .about("Sync local branches to remote")
-                    .arg(
-                        host_arg()
-                            .env("GIT_NOMAD_HOST")
-                            .next_line_help(true)
-                            .default_value(&default_host.0)
-                            .help("Host name to sync with, unique per clone"),
-                    )
-                    .arg(remote_arg()),
-            )
-            .subcommand(SubCommand::with_name("ls").about("List refs for all hosts"))
-            .subcommand(
-                SubCommand::with_name("purge")
-                    .about("Delete nomad refs locally and on the remote")
-                    .arg(
-                        Arg::with_name("all")
-                            .long("all")
-                            .help("Delete refs for all hosts"),
-                    )
-                    .arg(host_arg().multiple(true).help(
+    App::new("git nomad")
+        .settings(&[
+            AppSettings::SubcommandRequiredElseHelp,
+            AppSettings::VersionlessSubcommands,
+        ])
+        .name(crate_name!())
+        .version(git_version!(
+            prefix = "git:",
+            args = ["--tags", "--always", "--dirty=-modified"],
+            fallback = crate_version!(),
+        ))
+        .author(crate_authors!())
+        .about(crate_description!())
+        .arg(
+            Arg::with_name("git")
+                .global(true)
+                .long("git")
+                .default_value("git")
+                .help("Git binary to use"),
+        )
+        .arg(
+            Arg::with_name("silent")
+                .global(true)
+                .short("s")
+                .long("silent")
+                .help("Silence all output"),
+        )
+        .arg(
+            Arg::with_name("verbose")
+                .global(true)
+                .short("v")
+                .long("verbose")
+                .multiple(true)
+                .help("Verbose output, repeat up to 3 times for increasing verbosity"),
+        )
+        .arg(
+            Arg::with_name("user")
+                .global(true)
+                .short("U")
+                .long("user")
+                .env("GIT_NOMAD_USER")
+                .default_value(&default_user.0)
+                .next_line_help(true)
+                .help("User name, shared by multiple clones, unique per remote"),
+        )
+        .subcommand(
+            SubCommand::with_name("sync")
+                .about("Sync local branches to remote")
+                .arg(
+                    host_arg()
+                        .env("GIT_NOMAD_HOST")
+                        .next_line_help(true)
+                        .default_value(&default_host.0)
+                        .help("Host name to sync with, unique per clone"),
+                )
+                .arg(remote_arg()),
+        )
+        .subcommand(SubCommand::with_name("ls").about("List refs for all hosts"))
+        .subcommand(
+            SubCommand::with_name("purge")
+                .about("Delete nomad refs locally and on the remote")
+                .arg(
+                    Arg::with_name("all")
+                        .long("all")
+                        .help("Delete refs for all hosts"),
+                )
+                .arg(
+                    host_arg().multiple(true).help(
                         "Delete refs for only the given host (can be specified multiple times)",
-                    ))
-                    .group(
-                        ArgGroup::with_name("host_group")
-                            .args(&["all", "host"])
-                            .required(true),
-                    )
-                    .arg(remote_arg()),
-            )
-            .get_matches();
-
-    matches
+                    ),
+                )
+                .group(
+                    ArgGroup::with_name("host_group")
+                        .args(&["all", "host"])
+                        .required(true),
+                )
+                .arg(remote_arg()),
+        )
+        .get_matches_from_safe(args)
 }
 
 /// The [`Progress`] intended by the user via the CLI.
@@ -149,7 +169,7 @@ fn specified_progress(matches: &ArgMatches) -> Progress {
 /// # Panics
 ///
 /// If [`clap`] does not prevent certain assumed invalid states.
-fn specified_git<'a>(matches: &'a ArgMatches, progress: Progress) -> Result<GitBinary<'a>> {
+fn specified_git<'a>(matches: &'a ArgMatches, progress: Progress) -> anyhow::Result<GitBinary<'a>> {
     GitBinary::new(
         progress,
         matches
@@ -169,7 +189,7 @@ fn specified_command<'a, 'user: 'a, 'host: 'a>(
     default_user: &'user User<'user>,
     default_host: &'host Host<'host>,
     git: &GitBinary,
-) -> Result<Command<'a, 'a, 'a>> {
+) -> anyhow::Result<Command<'a, 'a, 'a>> {
     let user = resolve(
         matches,
         "user",
@@ -220,19 +240,6 @@ fn specified_command<'a, 'user: 'a, 'host: 'a>(
     panic!("Subcommand is mandatory");
 }
 
-fn main() -> Result<()> {
-    let default_user = User::from(whoami::username());
-    let default_host = Host::from(whoami::hostname());
-
-    let matches = clap_args(&default_user, &default_host);
-    let progress = specified_progress(&matches);
-    let git = specified_git(&matches, progress)?;
-    let command = specified_command(&matches, &default_user, &default_host, &git)?;
-    command.execute(&git)?;
-
-    Ok(())
-}
-
 /// Extract user arguments in order of preference:
 ///
 /// 1. Passed in as direct CLI options
@@ -268,7 +275,7 @@ fn resolve<'a, T: Clone + From<&'a str>>(
 
 /// End-to-end workflow tests.
 #[cfg(test)]
-mod e2e {
+mod test_e2e {
     use std::{borrow::Cow, collections::HashSet, iter::FromIterator};
 
     use crate::{
@@ -435,5 +442,38 @@ mod e2e {
 
         // the origin should have no refs
         assert_eq!(origin.nomad_refs(), HashSet::new(),);
+    }
+}
+
+/// CLI invocation tests
+#[cfg(test)]
+mod test_cli {
+    use std::borrow::Cow;
+
+    use crate::{
+        cli,
+        command::Command,
+        git_testing::GitRemote,
+        specified_command,
+        types::{Host, Remote, User},
+    };
+
+    #[test]
+    fn sync() {
+        let default_user = User::from("default_user");
+        let default_host = Host::from("default_host");
+        let matches = cli(&default_user, &default_host, &["git-nomad", "sync"]).unwrap();
+        let remote = GitRemote::init();
+        let command =
+            specified_command(&matches, &default_user, &default_host, &remote.git).unwrap();
+
+        assert_eq!(
+            command,
+            Command::Sync {
+                user: Cow::Borrowed(&default_user),
+                host: Cow::Borrowed(&default_host),
+                remote: Remote::from("origin"),
+            }
+        );
     }
 }

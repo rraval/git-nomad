@@ -115,7 +115,7 @@ mod namespace {
                     }
 
                     Ok(NomadRef {
-                        user: user.clone(),
+                        user: user.always_borrow(),
                         host: Host::from(host.to_string()),
                         branch: Branch::from(branch_name.to_string()),
                         ref_: git_ref,
@@ -213,9 +213,10 @@ mod namespace {
 
 /// Implements repository manipulations by delegating to some ambient `git` binary that exists
 /// somewhere on the system.
-pub struct GitBinary<'progress, 'name> {
+#[derive(PartialEq, Eq)]
+pub struct GitBinary<'name> {
     /// Used to actually execute commands while reporting progress to the user.
-    progress: &'progress Progress,
+    progress: Progress,
 
     /// The name of the `git` binary to use. Implemented on top of [`Command::new`], so
     /// non-absolute paths are looked up against `$PATH`.
@@ -225,14 +226,10 @@ pub struct GitBinary<'progress, 'name> {
     git_dir: String,
 }
 
-impl<'progress, 'name> GitBinary<'progress, 'name> {
+impl<'name> GitBinary<'name> {
     /// Create a new [`GitBinary`] by finding the `.git` dir relative to `cwd`, which implements
     /// the usual git rules of searching ancestor directories.
-    pub fn new(
-        progress: &'progress Progress,
-        name: &'name str,
-        cwd: &Path,
-    ) -> Result<GitBinary<'progress, 'name>> {
+    pub fn new(progress: Progress, name: &'name str, cwd: &Path) -> Result<GitBinary<'name>> {
         let name = name.as_ref();
         let git_dir = progress
             .run(
@@ -663,7 +660,7 @@ mod test_impl {
     fn toplevel_at_root() -> Result<()> {
         let (name, tmpdir) = git_init()?;
 
-        let git = GitBinary::new(&PROGRESS, &name, tmpdir.path())?;
+        let git = GitBinary::new(PROGRESS, &name, tmpdir.path())?;
         assert_eq!(
             Some(git.git_dir.as_str()),
             tmpdir.path().join(".git").to_str()
@@ -679,7 +676,7 @@ mod test_impl {
         let subdir = tmpdir.path().join("subdir");
         create_dir(&subdir)?;
 
-        let git = GitBinary::new(&PROGRESS, &name, subdir.as_path())?;
+        let git = GitBinary::new(PROGRESS, &name, subdir.as_path())?;
         assert_eq!(
             Some(git.git_dir.as_str()),
             tmpdir.path().join(".git").to_str(),
@@ -692,7 +689,7 @@ mod test_impl {
     #[test]
     fn read_empty_config() -> Result<()> {
         let (name, tmpdir) = git_init()?;
-        let git = GitBinary::new(&PROGRESS, &name, tmpdir.path())?;
+        let git = GitBinary::new(PROGRESS, &name, tmpdir.path())?;
 
         let got = git.get_config("test.key")?;
         assert_eq!(got, None);
@@ -704,7 +701,7 @@ mod test_impl {
     #[test]
     fn write_then_read_config() -> Result<()> {
         let (name, tmpdir) = git_init()?;
-        let git = GitBinary::new(&PROGRESS, &name, tmpdir.path())?;
+        let git = GitBinary::new(PROGRESS, &name, tmpdir.path())?;
 
         git.set_config("key", "testvalue")?;
         let got = git.get_config("key")?;

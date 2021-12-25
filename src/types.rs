@@ -50,11 +50,12 @@ macro_rules! impl_str_ownership {
 }
 
 /// A remote git repository identified by name, like `origin`.
+#[derive(PartialEq, Eq)]
 pub struct Remote<'a>(pub Cow<'a, str>);
 impl_str_from!(Remote);
 
 /// The branch name part of a ref. `refs/head/master` would be `Branch::from("master")`.
-#[derive(Debug, PartialEq, Eq, Hash, Clone, PartialOrd, Ord)]
+#[derive(Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Branch<'a>(pub Cow<'a, str>);
 impl_str_from!(Branch);
 impl_str_ownership!(Branch);
@@ -64,7 +65,7 @@ impl_str_ownership!(Branch);
 ///
 /// This string is used when pushing branches to the remote so that multiple users can use
 /// nomad on that remote without overwriting each others refs.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct User<'a>(pub Cow<'a, str>);
 impl_str_from!(User);
 impl_str_ownership!(User);
@@ -77,10 +78,18 @@ impl_str_ownership!(User);
 ///
 /// This string is also used when pulling branches for all hosts of the current user
 /// and for detecting when branches have been deleted.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Host<'a>(pub Cow<'a, str>);
 impl_str_from!(Host);
 impl_str_ownership!(Host);
+
+impl Host<'_> {
+    /// Does the equivalent of `#[derive(Clone)]` but under a different name to encourage callers
+    /// to use `[Self::always_borrow]`.
+    pub fn always_clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
 
 /// A ref representing a branch managed by nomad.
 #[derive(Debug, PartialEq, Eq, Hash)]

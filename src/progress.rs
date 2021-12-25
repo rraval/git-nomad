@@ -6,7 +6,7 @@ use anyhow::{bail, Context, Result};
 use indicatif::{ProgressBar, ProgressStyle};
 
 /// Significance of the command being run to the overall workflow.
-#[derive(PartialOrd, PartialEq, Eq, Ord)]
+#[derive(Clone, Copy, PartialOrd, PartialEq, Eq, Ord)]
 pub enum Run {
     /// An insignificant command that requires additional `--verbose` flags to be visible.
     Trivial,
@@ -15,6 +15,7 @@ pub enum Run {
 }
 
 /// How verbose should `--verbose` be?
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Verbosity {
     /// Prints the command and arguments as it executes them.
     CommandOnly,
@@ -23,6 +24,7 @@ pub enum Verbosity {
 }
 
 /// Responsible for timely communication of program state to the user.
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Progress {
     /// No progress messages whatsoever, the user only cares about the exit code.
     Silent,

@@ -54,7 +54,7 @@ impl<'user, 'host, 'branch> From<NomadRef<'user, 'host, 'branch, GitRef>>
 pub struct GitRemote {
     root_dir: TempDir,
     remote_dir: PathBuf,
-    git: GitBinary<'static, 'static>,
+    git: GitBinary<'static>,
 }
 
 impl GitRemote {
@@ -86,7 +86,7 @@ impl GitRemote {
             git(&["commit", "-m", "commit0"]);
         }
 
-        let git = GitBinary::new(&PROGRESS, GIT, &remote_dir).unwrap();
+        let git = GitBinary::new(PROGRESS, GIT, &remote_dir).unwrap();
 
         GitRemote {
             root_dir,
@@ -117,7 +117,7 @@ impl GitRemote {
             )
             .unwrap();
 
-        let git = GitBinary::new(&PROGRESS, GIT, &clone_dir).unwrap();
+        let git = GitBinary::new(PROGRESS, GIT, &clone_dir).unwrap();
 
         GitClone {
             _remote: self,
@@ -149,7 +149,7 @@ pub struct GitClone<'a> {
     _clone_dir: PathBuf,
     pub user: User<'static>,
     pub host: Host<'static>,
-    pub git: GitBinary<'static, 'static>,
+    pub git: GitBinary<'static>,
 }
 
 impl<'a> GitClone<'a> {
@@ -180,11 +180,11 @@ impl<'a> GitClone<'a> {
     }
 
     /// Delete the nomad managed refs backed by `branch_names` from both the local and remote.
-    pub fn prune_local_and_remote<'b, B: IntoIterator<Item = &'b str>>(&self, branch_names: B) {
+    pub fn prune_local_and_remote<'b, B: IntoIterator<Item = &'b str>>(&'a self, branch_names: B) {
         let prune_from = branch_names.into_iter().map(|name| {
             let nomad_ref = NomadRef::<()> {
-                user: self.user.clone(),
-                host: self.host.clone(),
+                user: self.user.always_borrow(),
+                host: self.host.always_borrow(),
                 branch: Branch::from(name.to_string()),
                 ref_: (),
             };
@@ -215,8 +215,8 @@ impl<'a> GitClone<'a> {
             .get_ref("", format!("refs/heads/{}", branch))
             .ok()
             .map(|git_ref| NomadRef {
-                user: self.user.clone(),
-                host: self.host.clone(),
+                user: self.user.always_borrow(),
+                host: self.host.always_borrow(),
                 branch: Branch::from(branch),
                 ref_: git_ref.into(),
             })

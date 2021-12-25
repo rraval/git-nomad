@@ -108,7 +108,7 @@ impl<'user, 'host, Ref> Snapshot<'user, 'host, Ref> {
 
         for nomad_ref in nomad_refs {
             by_host
-                .entry(nomad_ref.host.clone())
+                .entry(nomad_ref.host.always_clone())
                 .or_insert_with(Vec::new)
                 .push(nomad_ref);
         }
@@ -143,19 +143,19 @@ mod tests {
             local_branches.into_iter().map(Branch::from).collect(),
             vec![
                 NomadRef {
-                    user: user.clone(),
+                    user: user.always_borrow(),
                     host: Host::from("host0"),
                     branch: Branch::from("branch0"),
                     ref_: (),
                 },
                 NomadRef {
-                    user: user.clone(),
+                    user: user.always_borrow(),
                     host: Host::from("host0"),
                     branch: Branch::from("branch1"),
                     ref_: (),
                 },
                 NomadRef {
-                    user: user.clone(),
+                    user: user.always_borrow(),
                     host: Host::from("host1"),
                     branch: Branch::from("branch1"),
                     ref_: (),

@@ -182,7 +182,7 @@ mod test {
 
         // pruning refs for host0 from host1
         purge(&host1.git, &host1.user, &host1.remote(), |snapshot| {
-            snapshot.prune_all_by_hosts(&HashSet::from_iter([host0.host.clone()]))
+            snapshot.prune_all_by_hosts(&HashSet::from_iter([host0.host.always_borrow()]))
         })
         .unwrap();
 

@@ -127,20 +127,18 @@ fn main() -> Result<()> {
             )
             .get_matches();
 
-    let progress = &{
-        if matches.is_present("silent") {
-            Progress::Silent
-        } else {
-            match matches.occurrences_of("verbose") {
-                0 => Progress::Standard {
-                    significance_at_least: Run::Notable,
-                },
-                1 => Progress::Standard {
-                    significance_at_least: Run::Trivial,
-                },
-                2 => Progress::Verbose(Verbosity::CommandOnly),
-                _ => Progress::Verbose(Verbosity::CommandAndOutput),
-            }
+    let progress = if matches.is_present("silent") {
+        Progress::Silent
+    } else {
+        match matches.occurrences_of("verbose") {
+            0 => Progress::Standard {
+                significance_at_least: Run::Notable,
+            },
+            1 => Progress::Standard {
+                significance_at_least: Run::Trivial,
+            },
+            2 => Progress::Verbose(Verbosity::CommandOnly),
+            _ => Progress::Verbose(Verbosity::CommandAndOutput),
         }
     };
 

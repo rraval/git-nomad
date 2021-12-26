@@ -46,15 +46,20 @@ pub struct Verbosity {
 
 impl Default for Verbosity {
     fn default() -> Self {
+        Self::standard()
+    }
+}
+
+impl Verbosity {
+    // workaround for `Default::default` not being able to be a `const fn`.
+    const fn standard() -> Self {
         Self {
             display_workflow: false,
             significance: SignificanceVerbosity::OnlyNotable,
             command: CommandVerbosity::Spinner,
         }
     }
-}
 
-impl Verbosity {
     pub const fn verbose() -> Self {
         Self {
             display_workflow: true,
@@ -194,35 +199,48 @@ fn run_with_invocation_and_output<S: AsRef<str>>(
 
 #[cfg(test)]
 mod test {
-    macro_rules! test_run {
-        {$name:ident} => {
-            mod $name {
-                use std::process::Command;
+    use std::process::Command;
 
-                use crate::verbosity::{output_stdout, $name};
+    use crate::verbosity::{run_notable, run_silent};
 
-                #[test]
-                fn test() {
-                    let output = $name(
-                        "echo",
-                        Command::new("echo").arg("foo"),
-                    ).and_then(output_stdout).unwrap();
+    use super::{output_stdout, run_trivial, Verbosity};
 
-                    assert_eq!(output, "foo\n");
-                }
-            }
-        };
+    const ALL_VERBOSITIES: &[Option<Verbosity>] = &[
+        None,
+        Some(Verbosity::standard()),
+        Some(Verbosity::verbose()),
+        Some(Verbosity::max()),
+    ];
 
-        {$name:ident, $($rest:ident),+} => {
-            test_run! { $name }
-            test_run! { $($rest),+ }
-        };
+    #[test]
+    fn test_trivial_success() {
+        for verbosity in ALL_VERBOSITIES {
+            println!("{:?}", verbosity);
+            let output = run_trivial(*verbosity, "echo", Command::new("echo").arg("foo"))
+                .and_then(output_stdout)
+                .unwrap();
+            assert_eq!(output, "foo\n");
+        }
     }
 
-    test_run! {
-        run_silent,
-        run_spinner,
-        run_with_invocation,
-        run_with_invocation_and_output
+    #[test]
+    fn test_notable_success() {
+        for verbosity in ALL_VERBOSITIES {
+            println!("{:?}", verbosity);
+            let output = run_notable(*verbosity, "echo", Command::new("echo").arg("foo"))
+                .and_then(output_stdout)
+                .unwrap();
+            assert_eq!(output, "foo\n");
+        }
+    }
+
+    #[test]
+    fn test_failure() {
+        let output = run_silent("failure", &mut Command::new("false"));
+        assert!(output.is_err());
+        match output {
+            Ok(_) => unreachable!(),
+            Err(e) => assert!(e.to_string().contains("false")), // the command that was invoked
+        }
     }
 }

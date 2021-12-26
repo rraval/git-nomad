@@ -111,7 +111,7 @@ Git branches are implemented on top of [a more general scheme called `refs`][git
 - `refs/tags/*` represent tags.
 - `refs/remotes/*` represent remote branches.
 
-`git-nomad` works directly with refs to implement [its own light weight synchronization scheme][sync]:
+`git-nomad` works directly with refs to implement its own light weight synchronization scheme:
 
 1. Push local `refs/heads/*` to remote `refs/nomad/{user}/{host}/*`. This allows multiple users on multiple hosts to all use `git-nomad` on the same remote without overwriting data.
 2. Fetch remote `refs/nomad/{user}/*` to local `refs/nomad/*`. This makes all the host refs for a given user available in a local clone.
@@ -157,5 +157,4 @@ There are a few ways to make this project better:
 [git-cafs]: https://git-scm.com/book/en/v2/Git-Internals-Git-Objects
 [git-refs]: https://git-scm.com/book/en/v2/Git-Internals-Git-References
 [new-issue]: https://github.com/rraval/git-nomad/issues/new
-[nixpkg]: https://github.com/rraval/nix/blob/master/git-nomad.nix
-[sync]: https://github.com/rraval/git-nomad/blob/master/src/command.rs
+[nixpkg]: https://github.com/rraval/nix/blob/master/box/packages/git-nomad.nix

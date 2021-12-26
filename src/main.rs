@@ -636,6 +636,60 @@ mod test_cli {
         }
     }
 
+    #[test]
+    fn ls() {
+        let cli_test = CliTest::default();
+        assert_eq!(
+            cli_test.remote(&["ls"]).workflow(),
+            Workflow::Ls {
+                user: Cow::Borrowed(&cli_test.default_user),
+            },
+        );
+    }
+
+    #[test]
+    fn ls_explicit_beats_env() {
+        let cli_test = CliTest::default();
+        assert_eq!(
+            cli_test
+                .remote(&["ls", "-U", "explicit_user"])
+                .set_env(ENV_USER, "env_user")
+                .workflow(),
+            Workflow::Ls {
+                user: Cow::Owned(User::from("explicit_user")),
+            },
+        );
+    }
+
+    #[test]
+    fn ls_env_beats_config() {
+        let cli_test = CliTest::default();
+        assert_eq!(
+            cli_test
+                .remote(&["ls"])
+                .set_env(ENV_USER, "env_user")
+                .set_config(CONFIG_USER, "config_user")
+                .workflow(),
+            Workflow::Ls {
+                user: Cow::Owned(User::from("env_user")),
+            },
+        );
+    }
+
+    #[test]
+    fn ls_config_beats_default() {
+        let cli_test = CliTest::default();
+        assert_eq!(
+            cli_test
+                .remote(&["ls"])
+                .set_config(CONFIG_USER, "config_user")
+                .workflow(),
+            Workflow::Ls {
+                user: Cow::Owned(User::from("config_user")),
+            },
+        );
+    }
+
     /// Invoke `sync` with explicit `user` and `host`
     #[test]
     fn sync_explicit() {

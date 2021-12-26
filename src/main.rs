@@ -40,7 +40,7 @@ fn main() -> anyhow::Result<()> {
     let matches =
         cli(&default_user, &default_host, &mut env::args_os()).unwrap_or_else(|e| e.exit());
     let verbosity = specified_verbosity(&matches);
-    let git = specified_git(&matches, verbosity)?;
+    let git = GitBinary::new(verbosity, specified_git(&matches), current_dir()?.as_path())?;
     let workflow = specified_workflow(&matches, &default_user, &default_host, &git)?;
 
     if let Some(verbosity) = verbosity {
@@ -181,17 +181,10 @@ fn specified_verbosity(matches: &ArgMatches) -> Option<Verbosity> {
 /// # Panics
 ///
 /// If [`clap`] does not prevent certain assumed invalid states.
-fn specified_git<'a>(
-    matches: &'a ArgMatches,
-    verbosity: Option<Verbosity>,
-) -> anyhow::Result<GitBinary<'a>> {
-    GitBinary::new(
-        verbosity,
-        matches
-            .value_of("git")
-            .expect("There should be a default value"),
-        current_dir()?.as_path(),
-    )
+fn specified_git<'a>(matches: &'a ArgMatches) -> &'a str {
+    matches
+        .value_of("git")
+        .expect("There should be a default value")
 }
 
 /// The nomad workflow the user intends to execute via the CLI.
@@ -470,7 +463,7 @@ mod test_cli {
     use crate::{
         cli,
         git_testing::GitRemote,
-        specified_workflow,
+        specified_git, specified_workflow,
         types::{Host, User},
         workflow::Workflow,
         DEFAULT_REMOTE,
@@ -504,6 +497,7 @@ mod test_cli {
         }
     }
 
+    /// Should print help and stop processing if no subcommand is specified.
     #[test]
     fn subcommand_is_required() {
         let cli_test = CliTest::default();
@@ -516,6 +510,16 @@ mod test_cli {
             },
             ErrorKind::MissingArgumentOrSubcommand,
         );
+    }
+
+    /// `--git` before/after the subcommand.
+    #[test]
+    fn git_option() {
+        for args in &[&["--git", "foo", "ls"], &["ls", "--git", "foo"]] {
+            let cli_test = CliTest::default();
+            let matches = cli_test.matches(*args).unwrap();
+            assert_eq!(specified_git(&matches), "foo");
+        }
     }
 
     #[test]

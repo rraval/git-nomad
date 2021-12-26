@@ -1,6 +1,6 @@
 # git-nomad
 
-![Issues](https://img.shields.io/github/issues/rraval/git-nomad) ![Latest Release](https://img.shields.io/github/v/release/rraval/git-nomad) ![License](https://img.shields.io/github/license/rraval/git-nomad)
+![Coverage](https://img.shields.io/coveralls/github/rraval/git-nomad) ![Issues](https://img.shields.io/github/issues/rraval/git-nomad) ![Latest Release](https://img.shields.io/github/v/release/rraval/git-nomad) ![License](https://img.shields.io/github/license/rraval/git-nomad)
 
 > ⚠ This application is still in its prototype phase. Really bad things like data loss should not be possible and there's decent test coverage of the core workflows. That said, backwards incompatible iterations in response to public feedback are still on the table. [Help make things better...](#contributing)
 

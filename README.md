@@ -11,16 +11,18 @@ Synchronize work-in-progress git branches in a light weight fashion. Motivation:
 - You want all the efficiency and synchronization benefits of having a git clone available, meaning external syncing tools like Dropbox or network mounts are right out.
 - You want this synchronization to work out-of-the-box with popular third party remote hosts like GitHub.
 
+[![asciicast](https://asciinema.org/a/458630.svg)](https://asciinema.org/a/458630?autoplay=1)
+
 ## Usage
 
 [Install `git-nomad`](#installation) to make it available on your `$PATH`.
 Assume you're hacking away with your usual git workflow:
 
 ```console
-rraval@apollo:~/git-nomad$ git checkout -b feature
-rraval@apollo:~/git-nomad$ touch new_file
-rraval@apollo:~/git-nomad$ git add .
-rraval@apollo:~/git-nomad$ git commit -m "new file"
+rraval@desktop:~/git-nomad$ git checkout -b feature
+rraval@desktop:~/git-nomad$ touch new_file
+rraval@desktop:~/git-nomad$ git add .
+rraval@desktop:~/git-nomad$ git commit -m "new file"
 ```
 
 Whenever you like, you can push the state of your local branches with:
@@ -28,14 +30,14 @@ Whenever you like, you can push the state of your local branches with:
 ```console
 # Synchronizes with a remote called `origin` by default.
 # See `--help` for overriding this explicitly.
-rraval@apollo:~/git-nomad$ git nomad sync
-Pushing local branches to origin... 2s
-Fetching branches from origin... 1s
-Listing branches at origin... 0s
+rraval@desktop:~/git-nomad$ git nomad sync
+Pushing local branches to origin... 3s
+Fetching branches from origin... 0s
+Listing branches at origin... 3s
 
-apollo
-  refs/nomad/apollo/feature -> e02800d10b11ae03a93e43b8f7fc17b70dfe7acf
-  refs/nomad/apollo/master -> fe8bf41bbaf201c0506b60677f03a23da2873fdc
+desktop
+  refs/nomad/desktop/feature -> c340cd55853339e4d039746495cdb80cd9e46123
+  refs/nomad/desktop/master -> 267719fb8448cc1cbef2c35a638610573779f2ac
 ```
 
 ---
@@ -43,47 +45,47 @@ apollo
 At some future point, you wish to pick up development on a different machine:
 
 ```console
-rraval@boreas:~/git-nomad$ git nomad sync
-Pushing local branches to origin... 1s
+rraval@laptop:~/git-nomad$ git nomad sync
+Pushing local branches to origin... 2s
 Fetching branches from origin... 1s
-Listing branches at origin... 0s
+Listing branches at origin... 2s
 
-apollo
-  refs/nomad/apollo/feature -> e02800d10b11ae03a93e43b8f7fc17b70dfe7acf
-  refs/nomad/apollo/master -> fe8bf41bbaf201c0506b60677f03a23da2873fdc
-boreas
-  refs/nomad/boreas/master -> fe8bf41bbaf201c0506b60677f03a23da2873fdc
+desktop
+  refs/nomad/desktop/feature -> 1a101799507ba67d822b97105aafa0ac91ce5183
+  refs/nomad/desktop/master -> 267719fb8448cc1cbef2c35a638610573779f2ac
+laptop
+  refs/nomad/laptop/master -> 267719fb8448cc1cbef2c35a638610573779f2ac
 ```
 
 Which prints out refs to use to pick up where you left off:
 
 ```console
-rraval@boreas:~/git-nomad$ git checkout -b feature refs/nomad/apollo/feature
-# Hack away where you left off on apollo
+rraval@laptop:~/git-nomad$ git checkout -b feature refs/nomad/desktop/feature
+# Hack away where you left off on desktop
 ```
 
 ---
 
-Let's say that the `boreas` machine is where development is happening now, so
-you go back to `apollo` to throw away the now outdated branch:
+Let's say that the `laptop` machine is where development is happening now, so
+you go back to `desktop` to throw away the now outdated branch:
 
 ```console
-rraval@apollo:~/git-nomad$ git checkout master
-rraval@apollo:~/git-nomad$ git branch -D feature
-Deleted branch feature (was e02800d).
+rraval@desktop:~/git-nomad$ git checkout master
+rraval@desktop:~/git-nomad$ git branch -D feature
+Deleted branch feature (was 1a10179).
 
-rraval@apollo:~/git-nomad$ git nomad sync
-Pushing local branches to origin... 1s
+rraval@desktop:~/git-nomad$ git nomad sync
+Pushing local branches to origin... 2s
 Fetching branches from origin... 1s
 Listing branches at origin... 0s
-Pruning branches at origin... 2s
-  Delete refs/nomad/apollo/feature (was e02800d10b11ae03a93e43b8f7fc17b70dfe7acf)... 0s
+Pruning branches at origin... 0s
+  Delete refs/nomad/desktop/feature (was 1a101799507ba67d822b97105aafa0ac91ce5183)... 0s
 
-apollo
-  refs/nomad/apollo/master -> fe8bf41bbaf201c0506b60677f03a23da2873fdc
-boreas
-  refs/nomad/boreas/feature -> 3187d762ca557bfa741bc07d47e0b7f8c1777400
-  refs/nomad/boreas/master -> fe8bf41bbaf201c0506b60677f03a23da2873fdc
+desktop
+  refs/nomad/desktop/master -> 267719fb8448cc1cbef2c35a638610573779f2ac
+laptop
+  refs/nomad/laptop/feature -> dedf3f9d3ad279a401877b351c3ec13aa47cbbd4
+  refs/nomad/laptop/master -> 267719fb8448cc1cbef2c35a638610573779f2ac
 ```
 
 ---
@@ -92,13 +94,13 @@ If you'd like to stop using `git-nomad` and clean up all the refs it has created
 
 ```console
 # See also the `purge --host` option.
-rraval@apollo:~/git-nomad$ git nomad purge --all
+rraval@desktop:~/git-nomad$ git nomad purge --all
 Fetching branches from origin... 1s
 Listing branches at origin... 0s
 Pruning branches at origin... 2s
-  Delete refs/nomad/apollo/master (was fe8bf41bbaf201c0506b60677f03a23da2873fdc)... 0s
-  Delete refs/nomad/boreas/feature (was 3187d762ca557bfa741bc07d47e0b7f8c1777400)... 0s
-  Delete refs/nomad/boreas/master (was fe8bf41bbaf201c0506b60677f03a23da2873fdc)... 0s
+  Delete refs/nomad/desktop/master (was 267719fb8448cc1cbef2c35a638610573779f2ac)... 0s
+  Delete refs/nomad/laptop/feature (was dedf3f9d3ad279a401877b351c3ec13aa47cbbd4)... 0s
+  Delete refs/nomad/laptop/master (was 267719fb8448cc1cbef2c35a638610573779f2ac)... 0s
 ```
 
 ## How it works

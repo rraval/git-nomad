@@ -11,7 +11,7 @@ use crate::{
 
 /// A boundary type that separates the CLI interface from high level nomad workflows.
 #[derive(Debug, PartialEq, Eq)]
-pub enum Command<'user, 'host, 'remote> {
+pub enum Workflow<'user, 'host, 'remote> {
     Sync {
         user: Cow<'user, User<'user>>,
         host: Cow<'host, Host<'host>>,
@@ -36,7 +36,7 @@ pub enum PurgeFilter<'host> {
     Hosts(HashSet<Host<'host>>),
 }
 
-impl<'user> Command<'user, '_, '_> {
+impl<'user> Workflow<'user, '_, '_> {
     /// Imperatively execute the workflow.
     pub fn execute(self, git: &GitBinary) -> Result<()> {
         match self {

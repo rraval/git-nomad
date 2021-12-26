@@ -12,22 +12,21 @@ use clap::{
 // usage disappear.
 #[allow(unused_imports)]
 use clap::crate_version;
-use command::Command;
 use git_version::git_version;
 
 use crate::{
-    command::PurgeFilter,
     git_binary::GitBinary,
     progress::{Progress, Run, Verbosity},
     types::{Host, Remote, User},
+    workflow::{PurgeFilter, Workflow},
 };
 
-mod command;
 mod git_binary;
 mod git_ref;
 mod progress;
 mod snapshot;
 mod types;
+mod workflow;
 
 #[cfg(test)]
 mod git_testing;
@@ -42,8 +41,8 @@ fn main() -> anyhow::Result<()> {
         cli(&default_user, &default_host, &mut env::args_os()).unwrap_or_else(|e| e.exit());
     let progress = specified_progress(&matches);
     let git = specified_git(&matches, progress)?;
-    let command = specified_command(&matches, &default_user, &default_host, &git)?;
-    command.execute(&git)?;
+    let workflow = specified_workflow(&matches, &default_user, &default_host, &git)?;
+    workflow.execute(&git)?;
 
     Ok(())
 }
@@ -186,12 +185,12 @@ fn specified_git<'a>(matches: &'a ArgMatches, progress: Progress) -> anyhow::Res
 /// # Panics
 ///
 /// If [`clap`] does not prevent certain assumed invalid states.
-fn specified_command<'a, 'user: 'a, 'host: 'a>(
+fn specified_workflow<'a, 'user: 'a, 'host: 'a>(
     matches: &'a ArgMatches,
     default_user: &'user User<'user>,
     default_host: &'host Host<'host>,
     git: &GitBinary,
-) -> anyhow::Result<Command<'a, 'a, 'a>> {
+) -> anyhow::Result<Workflow<'a, 'a, 'a>> {
     let user = resolve(
         matches,
         "user",
@@ -211,11 +210,11 @@ fn specified_command<'a, 'user: 'a, 'host: 'a>(
                 .value_of("remote")
                 .expect("<remote> is a required argument"),
         );
-        return Ok(Command::Sync { user, host, remote });
+        return Ok(Workflow::Sync { user, host, remote });
     }
 
     if matches.subcommand_matches("ls").is_some() {
-        return Ok(Command::Ls { user });
+        return Ok(Workflow::Ls { user });
     }
 
     if let Some(matches) = matches.subcommand_matches("purge") {
@@ -232,7 +231,7 @@ fn specified_command<'a, 'user: 'a, 'host: 'a>(
             panic!("ArgGroup should have verified that one of these parameters was present");
         };
 
-        return Ok(Command::Purge {
+        return Ok(Workflow::Purge {
             user,
             remote,
             purge_filter,
@@ -281,13 +280,13 @@ mod test_e2e {
     use std::{borrow::Cow, collections::HashSet, iter::FromIterator};
 
     use crate::{
-        command::{Command, PurgeFilter},
         git_testing::{GitClone, GitRemote, INITIAL_BRANCH},
         types::Branch,
+        workflow::{PurgeFilter, Workflow},
     };
 
     fn sync_host(clone: &GitClone) {
-        Command::Sync {
+        Workflow::Sync {
             user: Cow::Borrowed(&clone.user),
             host: Cow::Borrowed(&clone.host),
             remote: clone.remote(),
@@ -395,7 +394,7 @@ mod test_e2e {
         );
 
         // pruning refs for host0 from host1
-        Command::Purge {
+        Workflow::Purge {
             user: Cow::Borrowed(&host1.user),
             remote: host1.remote(),
             purge_filter: PurgeFilter::Hosts(HashSet::from_iter([host0.host.always_borrow()])),
@@ -434,7 +433,7 @@ mod test_e2e {
         );
 
         // pruning refs for all hosts from host1
-        Command::Purge {
+        Workflow::Purge {
             user: Cow::Borrowed(&host1.user),
             remote: host1.remote(),
             purge_filter: PurgeFilter::All,
@@ -456,10 +455,10 @@ mod test_cli {
 
     use crate::{
         cli,
-        command::Command,
         git_testing::GitRemote,
-        specified_command,
+        specified_workflow,
         types::{Host, User},
+        workflow::Workflow,
         DEFAULT_REMOTE,
     };
 
@@ -470,18 +469,15 @@ mod test_cli {
 
     impl CliTest {
         fn matches<'a>(&'a self, args: &[&str]) -> clap::Result<ArgMatches<'a>> {
-            let mut command = vec!["git-nomad"];
-            command.extend_from_slice(args);
-            cli(&self.default_user, &self.default_host, &command)
+            let mut vec = vec!["git-nomad"];
+            vec.extend_from_slice(args);
+            cli(&self.default_user, &self.default_host, &vec)
         }
 
-        fn command<'a>(&'a self, matches: &'a ArgMatches<'a>) -> Command<'a, 'a, 'a> {
+        fn workflow<'a>(&'a self, matches: &'a ArgMatches<'a>) -> Workflow<'a, 'a, 'a> {
             let remote = GitRemote::init();
-            let command =
-                specified_command(matches, &self.default_user, &self.default_host, &remote.git)
-                    .unwrap();
-
-            command
+            specified_workflow(matches, &self.default_user, &self.default_host, &remote.git)
+                .unwrap()
         }
     }
 
@@ -514,8 +510,8 @@ mod test_cli {
         let matches = cli_test.matches(&["sync"]).unwrap();
 
         assert_eq!(
-            cli_test.command(&matches),
-            Command::Sync {
+            cli_test.workflow(&matches),
+            Workflow::Sync {
                 user: Cow::Borrowed(&cli_test.default_user),
                 host: Cow::Borrowed(&cli_test.default_host),
                 remote: DEFAULT_REMOTE.clone(),

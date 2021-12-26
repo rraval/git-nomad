@@ -191,3 +191,38 @@ fn run_with_invocation_and_output<S: AsRef<str>>(
 
     Ok(output)
 }
+
+#[cfg(test)]
+mod test {
+    macro_rules! test_run {
+        {$name:ident} => {
+            mod $name {
+                use std::process::Command;
+
+                use crate::verbosity::{output_stdout, $name};
+
+                #[test]
+                fn test() {
+                    let output = $name(
+                        "echo",
+                        Command::new("echo").arg("foo"),
+                    ).and_then(output_stdout).unwrap();
+
+                    assert_eq!(output, "foo\n");
+                }
+            }
+        };
+
+        {$name:ident, $($rest:ident),+} => {
+            test_run! { $name }
+            test_run! { $($rest),+ }
+        };
+    }
+
+    test_run! {
+        run_silent,
+        run_spinner,
+        run_with_invocation,
+        run_with_invocation_and_output
+    }
+}

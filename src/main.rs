@@ -456,7 +456,7 @@ mod test_cli {
         cli,
         git_testing::GitRemote,
         specified_git, specified_verbosity, specified_workflow,
-        types::{Host, User},
+        types::{Host, Remote, User},
         verbosity::Verbosity,
         workflow::Workflow,
         DEFAULT_REMOTE,
@@ -568,8 +568,59 @@ mod test_cli {
         }
     }
 
+    /// Invoke `sync` with explicit `user` and `host`
     #[test]
-    fn sync() {
+    fn sync_explicit() {
+        for args in &[
+            &["--user", "user0", "sync", "--host", "host0", "remote"] as &[&str],
+            &["sync", "-U", "user0", "-H", "host0", "remote"],
+        ] {
+            println!("{:?}", args);
+            let cli_test = CliTest::default();
+            let matches = cli_test.matches(*args).unwrap();
+            assert_eq!(
+                cli_test.workflow(&matches),
+                Workflow::Sync {
+                    user: Cow::Owned(User::from("user0")),
+                    host: Cow::Owned(Host::from("host0")),
+                    remote: Remote::from("remote"),
+                },
+            );
+        }
+    }
+
+    /// Invoke `sync` with `user` and `host` coming from `git config`.
+    #[test]
+    #[should_panic] // FIXME
+    fn sync_config() {
+        let cli_test = CliTest::default();
+        let matches = cli_test.matches(&["sync"]).unwrap();
+
+        let remote = GitRemote::init();
+        remote.git.set_config("user", "user0").unwrap();
+        remote.git.set_config("host", "host0").unwrap();
+
+        let workflow = specified_workflow(
+            &matches,
+            &cli_test.default_user,
+            &cli_test.default_host,
+            &remote.git,
+        )
+        .unwrap();
+
+        assert_eq!(
+            workflow,
+            Workflow::Sync {
+                user: Cow::Owned(User::from("user0")),
+                host: Cow::Owned(Host::from("host0")),
+                remote: DEFAULT_REMOTE.clone(),
+            }
+        );
+    }
+
+    /// Invoke `sync` with defaults.
+    #[test]
+    fn sync_default() {
         let cli_test = CliTest::default();
         let matches = cli_test.matches(&["sync"]).unwrap();
 

@@ -283,7 +283,7 @@ impl<'name> GitBinary<'name> {
 
     /// Wraps `git config` to write a single namespaced value.
     #[cfg(test)]
-    fn set_config(&self, key: &str, value: &str) -> Result<()> {
+    pub fn set_config(&self, key: &str, value: &str) -> Result<()> {
         run_trivial(
             self.verbosity,
             format!("Set config {} = {}", key, value),

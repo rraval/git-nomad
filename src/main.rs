@@ -4,6 +4,7 @@ use std::{
     ffi::OsString,
 };
 
+use anyhow::bail;
 use clap::{
     crate_authors, crate_description, crate_name, App, AppSettings, Arg, ArgGroup, ArgMatches,
     SubCommand,
@@ -32,6 +33,8 @@ mod workflow;
 mod git_testing;
 
 const DEFAULT_REMOTE: Remote<'static> = Remote(Cow::Borrowed("origin"));
+const ENV_USER: &str = "GIT_NOMAD_USER";
+const ENV_HOST: &str = "GIT_NOMAD_HOST";
 
 fn main() -> anyhow::Result<()> {
     let default_user = User::from(whoami::username());
@@ -41,7 +44,7 @@ fn main() -> anyhow::Result<()> {
         cli(&default_user, &default_host, &mut env::args_os()).unwrap_or_else(|e| e.exit());
     let verbosity = specified_verbosity(&matches);
     let git = GitBinary::new(verbosity, specified_git(&matches), current_dir()?.as_path())?;
-    let workflow = specified_workflow(&matches, &default_user, &default_host, &git)?;
+    let workflow = specified_workflow(&matches, &env::var, &default_user, &default_host, &git)?;
 
     if let Some(verbosity) = verbosity {
         if verbosity.display_workflow {
@@ -114,7 +117,7 @@ fn cli<'a>(
                 .global(true)
                 .short("U")
                 .long("user")
-                .env("GIT_NOMAD_USER")
+                .env(ENV_USER)
                 .default_value(&default_user.0)
                 .next_line_help(true)
                 .help("User name, shared by multiple clones, unique per remote"),
@@ -124,7 +127,7 @@ fn cli<'a>(
                 .about("Sync local branches to remote")
                 .arg(
                     host_arg()
-                        .env("GIT_NOMAD_HOST")
+                        .env(ENV_HOST)
                         .next_line_help(true)
                         .default_value(&default_host.0)
                         .help("Host name to sync with, unique per clone"),
@@ -186,6 +189,7 @@ fn specified_git<'a>(matches: &'a ArgMatches) -> &'a str {
 /// If [`clap`] does not prevent certain assumed invalid states.
 fn specified_workflow<'a, 'user: 'a, 'host: 'a>(
     matches: &'a ArgMatches,
+    get_value_from_env: &impl Fn(&'static str) -> Result<String, env::VarError>,
     default_user: &'user User<'user>,
     default_host: &'host Host<'host>,
     git: &GitBinary,
@@ -193,17 +197,21 @@ fn specified_workflow<'a, 'user: 'a, 'host: 'a>(
     let user = resolve(
         matches,
         "user",
+        &get_value_from_env,
+        ENV_USER,
         git.get_config("user")?.map(User::from),
         default_user,
-    );
+    )?;
 
     if let Some(matches) = matches.subcommand_matches("sync") {
         let host = resolve(
             matches,
             "host",
+            &get_value_from_env,
+            ENV_HOST,
             git.get_config("host")?.map(Host::from),
             default_host,
-        );
+        )?;
         let remote = Remote::from(
             matches
                 .value_of("remote")
@@ -246,31 +254,45 @@ fn specified_workflow<'a, 'user: 'a, 'host: 'a>(
 /// 2. Specified as an environment variable
 /// 3. Specified in `git config`
 /// 4. A default from querying the operating system
-///
-/// [`clap`] supports (1), (2), and (4), but because we need to insert (3), we cannot simply rely
-/// on [`ArgMatches::value_of`].
-///
-/// Instead, we rely on [`ArgMatches::is_present`], which will be true for (1) and (2) and thus
-/// [`ArgMatches::value_of`] will do as we want.
-///
-/// Otherwise, we roll our own logic for the (3) and (4) cases.
-fn resolve<'a, T: Clone + From<&'a str>>(
+fn resolve<'a, T: Clone + From<&'a str> + From<String>>(
     matches: &'a ArgMatches,
     arg_name: &str,
+    get_value_from_env: &impl Fn(&'static str) -> Result<String, env::VarError>,
+    env_key: &'static str,
     from_git_config: Option<T>,
     from_os_default: &'a T,
-) -> Cow<'a, T> {
-    if matches.is_present(arg_name) {
-        Cow::Owned(T::from(
+) -> anyhow::Result<Cow<'a, T>> {
+    // clap doesn't support distinguishing between a value that comes from
+    // an environment variable (2) or from a default (4); both cases are identical for the purposes
+    // of `ArgMatches::occurrences_of` and `ArgMatches::is_present`.
+
+    // Case (1), only use clap when the argument was explicitly specified.
+    if matches.occurrences_of(arg_name) > 0 {
+        return Ok(Cow::Owned(T::from(
             matches
                 .value_of(arg_name)
-                .expect("is_present claimed there was a value"),
-        ))
-    } else if let Some(value) = from_git_config {
-        Cow::Owned(value)
-    } else {
-        Cow::Borrowed(from_os_default)
+                .expect("occurrences_of claimed there was a value"),
+        )));
     }
+
+    // Case (2), but report specified but malformed values as an error.
+    match get_value_from_env(env_key) {
+        Ok(value) => return Ok(Cow::Owned(T::from(value))),
+        Err(e) => match e {
+            env::VarError::NotPresent => (),
+            env::VarError::NotUnicode(payload) => {
+                bail!("{} is not unicode, found {:?}", env_key, payload);
+            }
+        },
+    }
+
+    // Case (3)
+    if let Some(value) = from_git_config {
+        return Ok(Cow::Owned(value));
+    }
+
+    // Case (4)
+    Ok(Cow::Borrowed(from_os_default))
 }
 
 /// End-to-end workflow tests.
@@ -448,7 +470,7 @@ mod test_e2e {
 /// CLI invocation tests
 #[cfg(test)]
 mod test_cli {
-    use std::borrow::Cow;
+    use std::{borrow::Cow, collections::HashMap, env};
 
     use clap::{ArgMatches, ErrorKind};
 
@@ -459,12 +481,13 @@ mod test_cli {
         types::{Host, Remote, User},
         verbosity::Verbosity,
         workflow::Workflow,
-        DEFAULT_REMOTE,
+        DEFAULT_REMOTE, ENV_HOST, ENV_USER,
     };
 
     struct CliTest {
         default_user: User<'static>,
         default_host: Host<'static>,
+        env: HashMap<String, String>,
     }
 
     impl CliTest {
@@ -476,8 +499,29 @@ mod test_cli {
 
         fn workflow<'a>(&'a self, matches: &'a ArgMatches<'a>) -> Workflow<'a, 'a, 'a> {
             let remote = GitRemote::init();
-            specified_workflow(matches, &self.default_user, &self.default_host, &remote.git)
-                .unwrap()
+            specified_workflow(
+                matches,
+                &self.get_value_from_env(),
+                &self.default_user,
+                &self.default_host,
+                &remote.git,
+            )
+            .unwrap()
+        }
+
+        fn set_env<K: Into<String>, V: Into<String>>(&mut self, key: K, value: V) {
+            self.env.insert(key.into(), value.into());
+        }
+
+        fn get_value_from_env(
+            &self,
+        ) -> impl Fn(&'static str) -> Result<String, env::VarError> + '_ {
+            move |key| {
+                self.env
+                    .get(key)
+                    .map(String::from)
+                    .ok_or(env::VarError::NotPresent)
+            }
         }
     }
 
@@ -486,6 +530,7 @@ mod test_cli {
             Self {
                 default_user: User::from("default_user"),
                 default_host: Host::from("default_host"),
+                env: HashMap::new(),
             }
         }
     }
@@ -589,9 +634,25 @@ mod test_cli {
         }
     }
 
+    /// Invoke `sync` with `user` and `host` coming from the environment.
+    #[test]
+    fn sync_env() {
+        let mut cli_test = CliTest::default();
+        cli_test.set_env(ENV_USER, "user0");
+        cli_test.set_env(ENV_HOST, "host0");
+        let matches = cli_test.matches(&["sync", "remote"]).unwrap();
+        assert_eq!(
+            cli_test.workflow(&matches),
+            Workflow::Sync {
+                user: Cow::Owned(User::from("user0")),
+                host: Cow::Owned(Host::from("host0")),
+                remote: Remote::from("remote"),
+            },
+        );
+    }
+
     /// Invoke `sync` with `user` and `host` coming from `git config`.
     #[test]
-    #[should_panic] // FIXME
     fn sync_config() {
         let cli_test = CliTest::default();
         let matches = cli_test.matches(&["sync"]).unwrap();
@@ -602,6 +663,7 @@ mod test_cli {
 
         let workflow = specified_workflow(
             &matches,
+            &cli_test.get_value_from_env(),
             &cli_test.default_user,
             &cli_test.default_host,
             &remote.git,

@@ -112,7 +112,7 @@ fn cli<'a>(
                 .short("v")
                 .long("verbose")
                 .multiple(true)
-                .help("Verbose output, repeat up to 3 times for increasing verbosity"),
+                .help("Verbose output, repeat up to 2 times for increasing verbosity"),
         )
         .arg(
             Arg::with_name("user")

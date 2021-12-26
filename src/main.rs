@@ -146,7 +146,7 @@ fn cli<'a>(
                         .help("Delete refs for all hosts"),
                 )
                 .arg(
-                    host_arg().multiple(true).help(
+                    host_arg().multiple(true).number_of_values(1).help(
                         "Delete refs for only the given host (can be specified multiple times)",
                     ),
                 )
@@ -472,7 +472,12 @@ mod test_e2e {
 /// CLI invocation tests
 #[cfg(test)]
 mod test_cli {
-    use std::{borrow::Cow, collections::HashMap, env};
+    use std::{
+        borrow::Cow,
+        collections::{HashMap, HashSet},
+        env,
+        iter::FromIterator,
+    };
 
     use clap::{ArgMatches, ErrorKind};
 
@@ -482,7 +487,7 @@ mod test_cli {
         specified_git, specified_verbosity, specified_workflow,
         types::{Host, Remote, User},
         verbosity::Verbosity,
-        workflow::Workflow,
+        workflow::{PurgeFilter, Workflow},
         CONFIG_HOST, CONFIG_USER, DEFAULT_REMOTE, ENV_HOST, ENV_USER,
     };
 
@@ -756,6 +761,44 @@ mod test_cli {
                 user: Cow::Borrowed(&cli_test.default_user),
                 host: Cow::Borrowed(&cli_test.default_host),
                 remote: DEFAULT_REMOTE.clone(),
+            }
+        );
+    }
+
+    #[test]
+    fn purge_all() {
+        let cli_test = CliTest::default();
+        assert_eq!(
+            cli_test.remote(&["purge", "--all"]).workflow(),
+            Workflow::Purge {
+                user: Cow::Borrowed(&cli_test.default_user),
+                remote: DEFAULT_REMOTE.clone(),
+                purge_filter: PurgeFilter::All,
+            }
+        );
+    }
+
+    #[test]
+    fn purge_hosts() {
+        let cli_test = CliTest::default();
+        assert_eq!(
+            cli_test
+                .remote(&[
+                    "purge",
+                    "--host=host0",
+                    "--host",
+                    "host1",
+                    "-H",
+                    "host2",
+                    "remote"
+                ])
+                .workflow(),
+            Workflow::Purge {
+                user: Cow::Borrowed(&cli_test.default_user),
+                remote: Remote::from("remote"),
+                purge_filter: PurgeFilter::Hosts(HashSet::from_iter(
+                    ["host0", "host1", "host2"].map(Host::from)
+                )),
             }
         );
     }

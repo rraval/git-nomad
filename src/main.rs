@@ -13,19 +13,19 @@ use clap::{
 #[allow(unused_imports)]
 use clap::crate_version;
 use git_version::git_version;
+use verbosity::{CommandVerbosity, SignificanceVerbosity, Verbosity};
 
 use crate::{
     git_binary::GitBinary,
-    progress::{Progress, Run, Verbosity},
     types::{Host, Remote, User},
     workflow::{PurgeFilter, Workflow},
 };
 
 mod git_binary;
 mod git_ref;
-mod progress;
 mod snapshot;
 mod types;
+mod verbosity;
 mod workflow;
 
 #[cfg(test)]
@@ -39,9 +39,17 @@ fn main() -> anyhow::Result<()> {
 
     let matches =
         cli(&default_user, &default_host, &mut env::args_os()).unwrap_or_else(|e| e.exit());
-    let progress = specified_progress(&matches);
-    let git = specified_git(&matches, progress)?;
+    let verbosity = specified_verbosity(&matches);
+    let git = specified_git(&matches, verbosity)?;
     let workflow = specified_workflow(&matches, &default_user, &default_host, &git)?;
+
+    if let Some(verbosity) = verbosity {
+        if verbosity.display_workflow {
+            eprintln!();
+            eprintln!("Workflow: {:?}", workflow);
+        }
+    }
+
     workflow.execute(&git)?;
 
     Ok(())
@@ -147,20 +155,23 @@ fn cli<'a>(
         .get_matches_from_safe(args)
 }
 
-/// The [`Progress`] intended by the user via the CLI.
-fn specified_progress(matches: &ArgMatches) -> Progress {
+/// The [`Verbosity`] intended by the user via the CLI.
+fn specified_verbosity(matches: &ArgMatches) -> Option<Verbosity> {
     if matches.is_present("silent") {
-        Progress::Silent
+        None
     } else {
         match matches.occurrences_of("verbose") {
-            0 => Progress::Standard {
-                significance_at_least: Run::Notable,
-            },
-            1 => Progress::Standard {
-                significance_at_least: Run::Trivial,
-            },
-            2 => Progress::Verbose(Verbosity::CommandOnly),
-            _ => Progress::Verbose(Verbosity::CommandAndOutput),
+            0 => Some(Verbosity {
+                display_workflow: false,
+                significance: SignificanceVerbosity::OnlyNotable,
+                command: CommandVerbosity::Spinner,
+            }),
+            1 => Some(Verbosity {
+                display_workflow: true,
+                significance: SignificanceVerbosity::All,
+                command: CommandVerbosity::Invocation,
+            }),
+            _ => Some(Verbosity::max()),
         }
     }
 }
@@ -170,9 +181,12 @@ fn specified_progress(matches: &ArgMatches) -> Progress {
 /// # Panics
 ///
 /// If [`clap`] does not prevent certain assumed invalid states.
-fn specified_git<'a>(matches: &'a ArgMatches, progress: Progress) -> anyhow::Result<GitBinary<'a>> {
+fn specified_git<'a>(
+    matches: &'a ArgMatches,
+    verbosity: Option<Verbosity>,
+) -> anyhow::Result<GitBinary<'a>> {
     GitBinary::new(
-        progress,
+        verbosity,
         matches
             .value_of("git")
             .expect("There should be a default value"),

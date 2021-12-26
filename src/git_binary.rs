@@ -5,9 +5,9 @@ use std::{collections::HashSet, ffi::OsStr, path::Path, process::Command};
 
 use crate::{
     git_ref::GitRef,
-    progress::{output_stdout, Progress, Run},
     snapshot::{PruneFrom, Snapshot},
     types::{Branch, Host, NomadRef, Remote, User},
+    verbosity::{is_output_allowed, output_stdout, run_notable, run_trivial, Verbosity},
 };
 
 /// Attempt to run a git binary without impurities from the environment slipping in.
@@ -216,7 +216,7 @@ mod namespace {
 #[derive(PartialEq, Eq)]
 pub struct GitBinary<'name> {
     /// Used to actually execute commands while reporting progress to the user.
-    progress: Progress,
+    verbosity: Option<Verbosity>,
 
     /// The name of the `git` binary to use. Implemented on top of [`Command::new`], so
     /// non-absolute paths are looked up against `$PATH`.
@@ -229,22 +229,25 @@ pub struct GitBinary<'name> {
 impl<'name> GitBinary<'name> {
     /// Create a new [`GitBinary`] by finding the `.git` dir relative to `cwd`, which implements
     /// the usual git rules of searching ancestor directories.
-    pub fn new(progress: Progress, name: &'name str, cwd: &Path) -> Result<GitBinary<'name>> {
+    pub fn new(
+        verbosity: Option<Verbosity>,
+        name: &'name str,
+        cwd: &Path,
+    ) -> Result<GitBinary<'name>> {
         let name = name.as_ref();
-        let git_dir = progress
-            .run(
-                Run::Trivial,
-                "Resolving .git directory",
-                git_command(name)
-                    .current_dir(cwd)
-                    .args(&["rev-parse", "--absolute-git-dir"]),
-            )
-            .and_then(output_stdout)
-            .map(LineArity::from)
-            .and_then(LineArity::one)?;
+        let git_dir = run_trivial(
+            verbosity,
+            "Resolving .git directory",
+            git_command(name)
+                .current_dir(cwd)
+                .args(&["rev-parse", "--absolute-git-dir"]),
+        )
+        .and_then(output_stdout)
+        .map(LineArity::from)
+        .and_then(LineArity::one)?;
 
         Ok(GitBinary {
-            progress,
+            verbosity,
             name,
             git_dir,
         })
@@ -260,30 +263,29 @@ impl<'name> GitBinary<'name> {
 
     /// Wraps `git config` to read a single namespaced value.
     pub fn get_config(&self, key: &str) -> Result<Option<String>> {
-        self.progress
-            .run(
-                Run::Trivial,
-                format!("Get config {}", key),
-                self.command().args(&[
-                    "config",
-                    // Use a default to prevent git from returning a non-zero exit code when the value does
-                    // not exist.
-                    "--default",
-                    "",
-                    "--get",
-                    &namespace::config_key(key),
-                ]),
-            )
-            .and_then(output_stdout)
-            .map(LineArity::from)
-            .and_then(LineArity::zero_or_one)
+        run_trivial(
+            self.verbosity,
+            format!("Get config {}", key),
+            self.command().args(&[
+                "config",
+                // Use a default to prevent git from returning a non-zero exit code when the value does
+                // not exist.
+                "--default",
+                "",
+                "--get",
+                &namespace::config_key(key),
+            ]),
+        )
+        .and_then(output_stdout)
+        .map(LineArity::from)
+        .and_then(LineArity::zero_or_one)
     }
 
     /// Wraps `git config` to write a single namespaced value.
     #[cfg(test)]
     fn set_config(&self, key: &str, value: &str) -> Result<()> {
-        self.progress.run(
-            Run::Trivial,
+        run_trivial(
+            self.verbosity,
             format!("Set config {} = {}", key, value),
             self.command().args(&[
                 "config",
@@ -313,8 +315,8 @@ impl<'name> GitBinary<'name> {
         RefSpec: AsRef<OsStr>,
     {
         assert!(!refspecs.is_empty());
-        self.progress.run(
-            Run::Notable,
+        run_notable(
+            self.verbosity,
             description,
             self.command().args(&["fetch", &remote.0]).args(refspecs),
         )?;
@@ -338,8 +340,8 @@ impl<'name> GitBinary<'name> {
         RefSpec: AsRef<OsStr>,
     {
         assert!(!refspecs.is_empty());
-        self.progress.run(
-            Run::Notable,
+        run_notable(
+            self.verbosity,
             description,
             self.command()
                 .args(&["push", "--no-verify", &remote.0])
@@ -359,17 +361,16 @@ impl<'name> GitBinary<'name> {
         Description: AsRef<str>,
         RefName: AsRef<str>,
     {
-        self.progress
-            .run(
-                Run::Trivial,
-                description,
-                self.command()
-                    .args(&["show-ref", "--verify", ref_name.as_ref()]),
-            )
-            .and_then(output_stdout)
-            .map(LineArity::from)
-            .and_then(LineArity::one)
-            .and_then(|line| GitRef::parse_show_ref_line(&line).map_err(Into::into))
+        run_trivial(
+            self.verbosity,
+            description,
+            self.command()
+                .args(&["show-ref", "--verify", ref_name.as_ref()]),
+        )
+        .and_then(output_stdout)
+        .map(LineArity::from)
+        .and_then(LineArity::one)
+        .and_then(|line| GitRef::parse_show_ref_line(&line).map_err(Into::into))
     }
 
     /// List all the non-HEAD refs in the repository as `GitRef`s.
@@ -377,9 +378,7 @@ impl<'name> GitBinary<'name> {
     where
         Description: AsRef<str>,
     {
-        let output = self
-            .progress
-            .run(Run::Trivial, description, self.command().arg("show-ref"))
+        let output = run_trivial(self.verbosity, description, self.command().arg("show-ref"))
             .and_then(output_stdout)?;
         output
             .lines()
@@ -403,17 +402,15 @@ impl<'name> GitBinary<'name> {
         RefSpec: AsRef<OsStr>,
     {
         assert!(!refspecs.is_empty());
-        let output = self
-            .progress
-            .run(
-                Run::Notable,
-                description,
-                self.command()
-                    .arg("ls-remote")
-                    .arg(&remote.0.as_ref())
-                    .args(refspecs),
-            )
-            .and_then(output_stdout)?;
+        let output = run_notable(
+            self.verbosity,
+            description,
+            self.command()
+                .arg("ls-remote")
+                .arg(&remote.0.as_ref())
+                .args(refspecs),
+        )
+        .and_then(output_stdout)?;
         output
             .lines()
             .map(|line| GitRef::parse_ls_remote_line(line).map_err(Into::into))
@@ -429,7 +426,7 @@ impl<'name> GitBinary<'name> {
     {
         let mut command = self.command();
         command.args(&["update-ref", "-d", &git_ref.name, &git_ref.commit_id]);
-        self.progress.run(Run::Notable, description, &mut command)?;
+        run_notable(self.verbosity, description, &mut command)?;
         Ok(())
     }
 
@@ -438,7 +435,7 @@ impl<'name> GitBinary<'name> {
     pub fn create_branch(&self, description: impl AsRef<str>, branch_name: &Branch) -> Result<()> {
         let mut command = self.command();
         command.args(&["branch", &branch_name.0]);
-        self.progress.run(Run::Notable, description, &mut command)?;
+        run_notable(self.verbosity, description, &mut command)?;
         Ok(())
     }
 
@@ -447,13 +444,13 @@ impl<'name> GitBinary<'name> {
     pub fn delete_branch(&self, description: impl AsRef<str>, branch_name: &Branch) -> Result<()> {
         let mut command = self.command();
         command.args(&["branch", "-d", &branch_name.0]);
-        self.progress.run(Run::Notable, description, &mut command)?;
+        run_notable(self.verbosity, description, &mut command)?;
         Ok(())
     }
 
     /// Should higher level commands be producing output, or has the user requested quiet mode?
     pub fn is_output_allowed(&self) -> bool {
-        self.progress.is_output_allowed()
+        is_output_allowed(self.verbosity)
     }
 
     /// Build a point in time snapshot for all refs that nomad cares about from the state in the
@@ -630,20 +627,18 @@ mod test_impl {
 
     use tempfile::{tempdir, TempDir};
 
-    use crate::progress::{Progress, Run, Verbosity};
+    use crate::{git_testing::VERBOSITY, verbosity::run_notable};
 
     use super::{git_command, GitBinary};
     use anyhow::Result;
-
-    const PROGRESS: Progress = Progress::Verbose(Verbosity::CommandAndOutput);
 
     /// Initializes a git repository in a temporary directory.
     fn git_init() -> Result<(String, TempDir)> {
         let name = "git".to_owned();
         let tmpdir = tempdir()?;
 
-        PROGRESS.run(
-            Run::Notable,
+        run_notable(
+            VERBOSITY,
             "",
             git_command(&name).current_dir(tmpdir.path()).args(&[
                 "init",
@@ -660,7 +655,7 @@ mod test_impl {
     fn toplevel_at_root() -> Result<()> {
         let (name, tmpdir) = git_init()?;
 
-        let git = GitBinary::new(PROGRESS, &name, tmpdir.path())?;
+        let git = GitBinary::new(VERBOSITY, &name, tmpdir.path())?;
         assert_eq!(
             Some(git.git_dir.as_str()),
             tmpdir.path().join(".git").to_str()
@@ -676,7 +671,7 @@ mod test_impl {
         let subdir = tmpdir.path().join("subdir");
         create_dir(&subdir)?;
 
-        let git = GitBinary::new(PROGRESS, &name, subdir.as_path())?;
+        let git = GitBinary::new(VERBOSITY, &name, subdir.as_path())?;
         assert_eq!(
             Some(git.git_dir.as_str()),
             tmpdir.path().join(".git").to_str(),
@@ -689,7 +684,7 @@ mod test_impl {
     #[test]
     fn read_empty_config() -> Result<()> {
         let (name, tmpdir) = git_init()?;
-        let git = GitBinary::new(PROGRESS, &name, tmpdir.path())?;
+        let git = GitBinary::new(VERBOSITY, &name, tmpdir.path())?;
 
         let got = git.get_config("test.key")?;
         assert_eq!(got, None);
@@ -701,7 +696,7 @@ mod test_impl {
     #[test]
     fn write_then_read_config() -> Result<()> {
         let (name, tmpdir) = git_init()?;
-        let git = GitBinary::new(PROGRESS, &name, tmpdir.path())?;
+        let git = GitBinary::new(VERBOSITY, &name, tmpdir.path())?;
 
         git.set_config("key", "testvalue")?;
         let got = git.get_config("key")?;

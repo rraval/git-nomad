@@ -9,15 +9,15 @@ use tempfile::{tempdir, TempDir};
 use crate::{
     git_binary::{git_command, GitBinary},
     git_ref::GitRef,
-    progress::{Progress, Run, Verbosity},
     snapshot::PruneFrom,
     types::{Branch, Host, NomadRef, Remote, User},
+    verbosity::{run_notable, Verbosity},
 };
 
 const GIT: &str = "git";
 const ORIGIN: &str = "origin";
 pub const INITIAL_BRANCH: &str = "master";
-const PROGRESS: Progress = Progress::Verbose(Verbosity::CommandAndOutput);
+pub const VERBOSITY: Option<Verbosity> = Some(Verbosity::max());
 
 /// Only stores the hexadecimal git commit ID.
 ///
@@ -67,13 +67,12 @@ impl GitRemote {
             let remote_dir = remote_dir.as_path();
 
             let git = |args: &[&str]| {
-                PROGRESS
-                    .run(
-                        Run::Notable,
-                        "",
-                        git_command(GIT).current_dir(remote_dir).args(args),
-                    )
-                    .unwrap();
+                run_notable(
+                    VERBOSITY,
+                    "",
+                    git_command(GIT).current_dir(remote_dir).args(args),
+                )
+                .unwrap();
             };
 
             create_dir(remote_dir).unwrap();
@@ -86,7 +85,7 @@ impl GitRemote {
             git(&["commit", "-m", "commit0"]);
         }
 
-        let git = GitBinary::new(PROGRESS, GIT, &remote_dir).unwrap();
+        let git = GitBinary::new(VERBOSITY, GIT, &remote_dir).unwrap();
 
         GitRemote {
             root_dir,
@@ -104,20 +103,19 @@ impl GitRemote {
             dir
         };
 
-        PROGRESS
-            .run(
-                Run::Notable,
-                "",
-                git_command(GIT)
-                    .current_dir(&self.root_dir)
-                    .arg("clone")
-                    .args(&["--origin", ORIGIN])
-                    .arg(&self.remote_dir)
-                    .arg(&clone_dir),
-            )
-            .unwrap();
+        run_notable(
+            VERBOSITY,
+            "",
+            git_command(GIT)
+                .current_dir(&self.root_dir)
+                .arg("clone")
+                .args(&["--origin", ORIGIN])
+                .arg(&self.remote_dir)
+                .arg(&clone_dir),
+        )
+        .unwrap();
 
-        let git = GitBinary::new(PROGRESS, GIT, &clone_dir).unwrap();
+        let git = GitBinary::new(VERBOSITY, GIT, &clone_dir).unwrap();
 
         GitClone {
             _remote: self,

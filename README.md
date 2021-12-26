@@ -150,7 +150,7 @@ cargo install git-nomad
 
 There are a few ways to make this project better:
 
-1. Try it and [file issues][new-issue] when things break. Use the `-vvv` flag to capture all information about the commands that were run.
+1. Try it and [file issues][new-issue] when things break. Use the `-vv` flag to capture all information about the commands that were run.
 2. Build packages for various operating systems.
 
 [cargo]: https://www.rust-lang.org/tools/install

@@ -452,22 +452,72 @@ mod test_e2e {
 mod test_cli {
     use std::borrow::Cow;
 
-    use crate::{DEFAULT_REMOTE, cli, command::Command, git_testing::GitRemote, specified_command, types::{Host, User}};
+    use clap::{ArgMatches, ErrorKind};
+
+    use crate::{
+        cli,
+        command::Command,
+        git_testing::GitRemote,
+        specified_command,
+        types::{Host, User},
+        DEFAULT_REMOTE,
+    };
+
+    struct CliTest {
+        default_user: User<'static>,
+        default_host: Host<'static>,
+    }
+
+    impl CliTest {
+        fn matches<'a>(&'a self, args: &[&str]) -> clap::Result<ArgMatches<'a>> {
+            let mut command = vec!["git-nomad"];
+            command.extend_from_slice(args);
+            cli(&self.default_user, &self.default_host, &command)
+        }
+
+        fn command<'a>(&'a self, matches: &'a ArgMatches<'a>) -> Command<'a, 'a, 'a> {
+            let remote = GitRemote::init();
+            let command =
+                specified_command(matches, &self.default_user, &self.default_host, &remote.git)
+                    .unwrap();
+
+            command
+        }
+    }
+
+    impl Default for CliTest {
+        fn default() -> Self {
+            Self {
+                default_user: User::from("default_user"),
+                default_host: Host::from("default_host"),
+            }
+        }
+    }
+
+    #[test]
+    fn subcommand_is_required() {
+        let cli_test = CliTest::default();
+        let matches = cli_test.matches(&[]);
+        assert!(matches.is_err());
+        assert_eq!(
+            match matches {
+                Ok(_) => unreachable!(),
+                Err(e) => e.kind,
+            },
+            ErrorKind::MissingArgumentOrSubcommand,
+        );
+    }
 
     #[test]
     fn sync() {
-        let default_user = User::from("default_user");
-        let default_host = Host::from("default_host");
-        let matches = cli(&default_user, &default_host, &["git-nomad", "sync"]).unwrap();
-        let remote = GitRemote::init();
-        let command =
-            specified_command(&matches, &default_user, &default_host, &remote.git).unwrap();
+        let cli_test = CliTest::default();
+        let matches = cli_test.matches(&["sync"]).unwrap();
 
         assert_eq!(
-            command,
+            cli_test.command(&matches),
             Command::Sync {
-                user: Cow::Borrowed(&default_user),
-                host: Cow::Borrowed(&default_host),
+                user: Cow::Borrowed(&cli_test.default_user),
+                host: Cow::Borrowed(&cli_test.default_host),
                 remote: DEFAULT_REMOTE.clone(),
             }
         );

@@ -35,6 +35,8 @@ mod git_testing;
 const DEFAULT_REMOTE: Remote<'static> = Remote(Cow::Borrowed("origin"));
 const ENV_USER: &str = "GIT_NOMAD_USER";
 const ENV_HOST: &str = "GIT_NOMAD_HOST";
+const CONFIG_USER: &str = "user";
+const CONFIG_HOST: &str = "host";
 
 fn main() -> anyhow::Result<()> {
     let default_user = User::from(whoami::username());
@@ -199,7 +201,7 @@ fn specified_workflow<'a, 'user: 'a, 'host: 'a>(
         "user",
         &get_value_from_env,
         ENV_USER,
-        git.get_config("user")?.map(User::from),
+        git.get_config(CONFIG_USER)?.map(User::from),
         default_user,
     )?;
 
@@ -209,7 +211,7 @@ fn specified_workflow<'a, 'user: 'a, 'host: 'a>(
             "host",
             &get_value_from_env,
             ENV_HOST,
-            git.get_config("host")?.map(Host::from),
+            git.get_config(CONFIG_HOST)?.map(Host::from),
             default_host,
         )?;
         let remote = Remote::from(
@@ -481,13 +483,12 @@ mod test_cli {
         types::{Host, Remote, User},
         verbosity::Verbosity,
         workflow::Workflow,
-        DEFAULT_REMOTE, ENV_HOST, ENV_USER,
+        CONFIG_HOST, CONFIG_USER, DEFAULT_REMOTE, ENV_HOST, ENV_USER,
     };
 
     struct CliTest {
         default_user: User<'static>,
         default_host: Host<'static>,
-        env: HashMap<String, String>,
     }
 
     impl CliTest {
@@ -497,20 +498,27 @@ mod test_cli {
             cli(&self.default_user, &self.default_host, &vec)
         }
 
-        fn workflow<'a>(&'a self, matches: &'a ArgMatches<'a>) -> Workflow<'a, 'a, 'a> {
-            let remote = GitRemote::init();
-            specified_workflow(
-                matches,
-                &self.get_value_from_env(),
-                &self.default_user,
-                &self.default_host,
-                &remote.git,
-            )
-            .unwrap()
+        fn remote(&self, args: &[&str]) -> CliTestRemote {
+            CliTestRemote {
+                test: self,
+                matches: self.matches(args).unwrap(),
+                remote: GitRemote::init(),
+                env: HashMap::new(),
+            }
         }
+    }
 
-        fn set_env<K: Into<String>, V: Into<String>>(&mut self, key: K, value: V) {
+    struct CliTestRemote<'a> {
+        test: &'a CliTest,
+        matches: ArgMatches<'a>,
+        remote: GitRemote,
+        env: HashMap<String, String>,
+    }
+
+    impl<'a> CliTestRemote<'a> {
+        fn set_env<K: Into<String>, V: Into<String>>(&mut self, key: K, value: V) -> &mut Self {
             self.env.insert(key.into(), value.into());
+            self
         }
 
         fn get_value_from_env(
@@ -523,6 +531,22 @@ mod test_cli {
                     .ok_or(env::VarError::NotPresent)
             }
         }
+
+        fn set_config(&self, key: &str, value: &str) -> &Self {
+            self.remote.git.set_config(key, value).unwrap();
+            self
+        }
+
+        fn workflow(&self) -> Workflow<'_, '_, '_> {
+            specified_workflow(
+                &self.matches,
+                &self.get_value_from_env(),
+                &self.test.default_user,
+                &self.test.default_host,
+                &self.remote.git,
+            )
+            .unwrap()
+        }
     }
 
     impl Default for CliTest {
@@ -530,7 +554,6 @@ mod test_cli {
             Self {
                 default_user: User::from("default_user"),
                 default_host: Host::from("default_host"),
-                env: HashMap::new(),
             }
         }
     }
@@ -622,9 +645,8 @@ mod test_cli {
         ] {
             println!("{:?}", args);
             let cli_test = CliTest::default();
-            let matches = cli_test.matches(*args).unwrap();
             assert_eq!(
-                cli_test.workflow(&matches),
+                cli_test.remote(*args).workflow(),
                 Workflow::Sync {
                     user: Cow::Owned(User::from("user0")),
                     host: Cow::Owned(Host::from("host0")),
@@ -637,12 +659,13 @@ mod test_cli {
     /// Invoke `sync` with `user` and `host` coming from the environment.
     #[test]
     fn sync_env() {
-        let mut cli_test = CliTest::default();
-        cli_test.set_env(ENV_USER, "user0");
-        cli_test.set_env(ENV_HOST, "host0");
-        let matches = cli_test.matches(&["sync", "remote"]).unwrap();
+        let cli_test = CliTest::default();
         assert_eq!(
-            cli_test.workflow(&matches),
+            cli_test
+                .remote(&["sync", "remote"])
+                .set_env(ENV_USER, "user0")
+                .set_env(ENV_HOST, "host0")
+                .workflow(),
             Workflow::Sync {
                 user: Cow::Owned(User::from("user0")),
                 host: Cow::Owned(Host::from("host0")),
@@ -655,23 +678,12 @@ mod test_cli {
     #[test]
     fn sync_config() {
         let cli_test = CliTest::default();
-        let matches = cli_test.matches(&["sync"]).unwrap();
-
-        let remote = GitRemote::init();
-        remote.git.set_config("user", "user0").unwrap();
-        remote.git.set_config("host", "host0").unwrap();
-
-        let workflow = specified_workflow(
-            &matches,
-            &cli_test.get_value_from_env(),
-            &cli_test.default_user,
-            &cli_test.default_host,
-            &remote.git,
-        )
-        .unwrap();
-
         assert_eq!(
-            workflow,
+            cli_test
+                .remote(&["sync"])
+                .set_config(CONFIG_USER, "user0")
+                .set_config(CONFIG_HOST, "host0")
+                .workflow(),
             Workflow::Sync {
                 user: Cow::Owned(User::from("user0")),
                 host: Cow::Owned(Host::from("host0")),
@@ -684,10 +696,8 @@ mod test_cli {
     #[test]
     fn sync_default() {
         let cli_test = CliTest::default();
-        let matches = cli_test.matches(&["sync"]).unwrap();
-
         assert_eq!(
-            cli_test.workflow(&matches),
+            cli_test.remote(&["sync"]).workflow(),
             Workflow::Sync {
                 user: Cow::Borrowed(&cli_test.default_user),
                 host: Cow::Borrowed(&cli_test.default_host),

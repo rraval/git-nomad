@@ -237,7 +237,7 @@ fn specified_workflow<'a, 'user: 'a, 'host: 'a>(
         } else if let Some(hosts) = matches.values_of("host") {
             PurgeFilter::Hosts(hosts.map(Host::from).collect())
         } else {
-            panic!("ArgGroup should have verified that one of these parameters was present");
+            unreachable!("ArgGroup should have verified that one of these parameters was present");
         };
 
         return Ok(Workflow::Purge {
@@ -247,7 +247,7 @@ fn specified_workflow<'a, 'user: 'a, 'host: 'a>(
         });
     }
 
-    panic!("Subcommand is mandatory");
+    unreachable!("Subcommand is mandatory");
 }
 
 /// Extract user arguments in order of preference:

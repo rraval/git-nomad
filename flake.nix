@@ -13,10 +13,8 @@
   in eachSystem (pkgs: {
     devShell = pkgs.mkShell {
       buildInputs = with pkgs; [
-        act
         cargo
         cargo-outdated
-        cargo-tarpaulin
         clippy
         gdb
         rust-analyzer

@@ -13,7 +13,7 @@ use clap::{
 #[allow(unused_imports)]
 use clap::crate_version;
 use git_version::git_version;
-use verbosity::{CommandVerbosity, SignificanceVerbosity, Verbosity};
+use verbosity::Verbosity;
 
 use crate::{
     git_binary::GitBinary,
@@ -161,16 +161,8 @@ fn specified_verbosity(matches: &ArgMatches) -> Option<Verbosity> {
         None
     } else {
         match matches.occurrences_of("verbose") {
-            0 => Some(Verbosity {
-                display_workflow: false,
-                significance: SignificanceVerbosity::OnlyNotable,
-                command: CommandVerbosity::Spinner,
-            }),
-            1 => Some(Verbosity {
-                display_workflow: true,
-                significance: SignificanceVerbosity::All,
-                command: CommandVerbosity::Invocation,
-            }),
+            0 => Some(Verbosity::default()),
+            1 => Some(Verbosity::verbose()),
             _ => Some(Verbosity::max()),
         }
     }
@@ -463,8 +455,9 @@ mod test_cli {
     use crate::{
         cli,
         git_testing::GitRemote,
-        specified_git, specified_workflow,
+        specified_git, specified_verbosity, specified_workflow,
         types::{Host, User},
+        verbosity::Verbosity,
         workflow::Workflow,
         DEFAULT_REMOTE,
     };
@@ -516,9 +509,62 @@ mod test_cli {
     #[test]
     fn git_option() {
         for args in &[&["--git", "foo", "ls"], &["ls", "--git", "foo"]] {
+            println!("{:?}", args);
             let cli_test = CliTest::default();
             let matches = cli_test.matches(*args).unwrap();
             assert_eq!(specified_git(&matches), "foo");
+        }
+    }
+
+    #[test]
+    fn silent_verbosity() {
+        for args in &[
+            &["--silent", "ls"],
+            &["-s", "ls"],
+            &["ls", "--silent"],
+            &["ls", "-s"],
+        ] {
+            println!("{:?}", args);
+            let cli_test = CliTest::default();
+            let matches = cli_test.matches(*args).unwrap();
+            assert_eq!(specified_verbosity(&matches), None);
+        }
+    }
+
+    #[test]
+    fn default_verbosity() {
+        let cli_test = CliTest::default();
+        let matches = cli_test.matches(&["ls"]).unwrap();
+        assert_eq!(specified_verbosity(&matches), Some(Verbosity::default()));
+    }
+
+    #[test]
+    fn verbose_verbosity() {
+        for args in &[
+            &["--verbose", "ls"],
+            &["-v", "ls"],
+            &["ls", "--verbose"],
+            &["ls", "-v"],
+        ] {
+            println!("{:?}", args);
+            let cli_test = CliTest::default();
+            let matches = cli_test.matches(*args).unwrap();
+            assert_eq!(specified_verbosity(&matches), Some(Verbosity::verbose()));
+        }
+    }
+
+    #[test]
+    fn max_verbosity() {
+        for args in &[
+            &["--verbose", "--verbose", "ls"] as &[&str],
+            &["ls", "-vv"],
+            &["ls", "-v", "--verbose"],
+            &["ls", "-vv", "-vv"],
+        ] {
+            println!("{:?}", args);
+            let cli_test = CliTest::default();
+            let matches = cli_test.matches(*args).unwrap();
+            assert_eq!(specified_verbosity(&matches), Some(Verbosity::max()));
         }
     }
 

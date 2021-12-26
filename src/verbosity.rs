@@ -6,7 +6,7 @@ use anyhow::{bail, Context, Result};
 use indicatif::{ProgressBar, ProgressStyle};
 
 /// What commands to display during workflow execution.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SignificanceVerbosity {
     /// Only slow or otherwise important commands will be displayed.
     OnlyNotable,
@@ -15,7 +15,7 @@ pub enum SignificanceVerbosity {
 }
 
 /// How much output to display about invoked commands.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CommandVerbosity {
     /// Show a pretty spinner with a description.
     Spinner,
@@ -36,7 +36,7 @@ impl CommandVerbosity {
 }
 
 /// Responsible for timely communication of program state to the user.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Verbosity {
     /// Show an internal representation of the workflow about to be invoked.
     pub display_workflow: bool,
@@ -44,8 +44,26 @@ pub struct Verbosity {
     pub command: CommandVerbosity,
 }
 
+impl Default for Verbosity {
+    fn default() -> Self {
+        Self {
+            display_workflow: false,
+            significance: SignificanceVerbosity::OnlyNotable,
+            command: CommandVerbosity::Spinner,
+        }
+    }
+}
+
 impl Verbosity {
-    pub const fn max() -> Verbosity {
+    pub const fn verbose() -> Self {
+        Self {
+            display_workflow: true,
+            significance: SignificanceVerbosity::All,
+            command: CommandVerbosity::Invocation,
+        }
+    }
+
+    pub const fn max() -> Self {
         Self {
             display_workflow: true,
             significance: SignificanceVerbosity::All,

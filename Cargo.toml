@@ -9,7 +9,7 @@ license = "MIT"
 
 [dependencies]
 anyhow = "^1.0.52"
-clap = "^2.34.0"
+clap = {version = "^3.0.5", features = ["cargo", "color", "env", "suggestions", "wrap_help"]}
 git-version = "^0.3.5"
 indicatif = "^0.16.2"
 tempfile = "^3.2.0"

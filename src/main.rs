@@ -7,7 +7,6 @@ use std::{
 use anyhow::bail;
 use clap::{
     crate_authors, crate_description, crate_name, App, AppSettings, Arg, ArgGroup, ArgMatches,
-    SubCommand,
 };
 use clap::crate_version;
 use git_version::git_version;
@@ -58,20 +57,20 @@ fn main() -> anyhow::Result<()> {
 }
 
 /// Use [`clap`] to implement the intended command line interface.
-fn cli<'a>(
-    default_user: &'a User<'a>,
-    default_host: &'a Host<'a>,
+fn cli(
+    default_user: &User,
+    default_host: &Host,
     args: impl IntoIterator<Item = impl Into<OsString> + Clone>,
-) -> clap::Result<ArgMatches<'a>> {
+) -> clap::Result<ArgMatches> {
     let remote_arg = || {
-        Arg::with_name("remote")
+        Arg::new("remote")
             .default_value(&DEFAULT_REMOTE.0)
             .help("Git remote to sync against")
     };
 
     let host_arg = || {
-        Arg::with_name("host")
-            .short("H")
+        Arg::new("host")
+            .short('H')
             .long("host")
             .takes_value(true)
     };
@@ -80,10 +79,7 @@ fn cli<'a>(
     let _fallback_version = crate_version!();
 
     App::new("git nomad")
-        .settings(&[
-            AppSettings::SubcommandRequiredElseHelp,
-            AppSettings::VersionlessSubcommands,
-        ])
+        .setting(AppSettings::SubcommandRequiredElseHelp)
         .name(crate_name!())
         .version(git_version!(
             prefix = "git:",
@@ -93,31 +89,31 @@ fn cli<'a>(
         .author(crate_authors!())
         .about(crate_description!())
         .arg(
-            Arg::with_name("git")
+            Arg::new("git")
                 .global(true)
                 .long("git")
                 .default_value("git")
                 .help("Git binary to use"),
         )
         .arg(
-            Arg::with_name("silent")
+            Arg::new("silent")
                 .global(true)
-                .short("s")
+                .short('s')
                 .long("silent")
                 .help("Silence all output"),
         )
         .arg(
-            Arg::with_name("verbose")
+            Arg::new("verbose")
                 .global(true)
-                .short("v")
+                .short('v')
                 .long("verbose")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .help("Verbose output, repeat up to 2 times for increasing verbosity"),
         )
         .arg(
-            Arg::with_name("user")
+            Arg::new("user")
                 .global(true)
-                .short("U")
+                .short('U')
                 .long("user")
                 .env(ENV_USER)
                 .default_value(&default_user.0)
@@ -125,7 +121,7 @@ fn cli<'a>(
                 .help("User name, shared by multiple clones, unique per remote"),
         )
         .subcommand(
-            SubCommand::with_name("sync")
+            App::new("sync")
                 .about("Sync local branches to remote")
                 .arg(
                     host_arg()
@@ -136,28 +132,28 @@ fn cli<'a>(
                 )
                 .arg(remote_arg()),
         )
-        .subcommand(SubCommand::with_name("ls").about("List refs for all hosts"))
+        .subcommand(App::new("ls").about("List refs for all hosts"))
         .subcommand(
-            SubCommand::with_name("purge")
+            App::new("purge")
                 .about("Delete nomad refs locally and on the remote")
                 .arg(
-                    Arg::with_name("all")
+                    Arg::new("all")
                         .long("all")
                         .help("Delete refs for all hosts"),
                 )
                 .arg(
-                    host_arg().multiple(true).number_of_values(1).help(
+                    host_arg().multiple_occurrences(true).help(
                         "Delete refs for only the given host (can be specified multiple times)",
                     ),
                 )
                 .group(
-                    ArgGroup::with_name("host_group")
+                    ArgGroup::new("host_group")
                         .args(&["all", "host"])
                         .required(true),
                 )
                 .arg(remote_arg()),
         )
-        .get_matches_from_safe(args)
+        .try_get_matches_from(args)
 }
 
 /// The [`Verbosity`] intended by the user via the CLI.
@@ -178,7 +174,7 @@ fn specified_verbosity(matches: &ArgMatches) -> Option<Verbosity> {
 /// # Panics
 ///
 /// If [`clap`] does not prevent certain assumed invalid states.
-fn specified_git<'a>(matches: &'a ArgMatches) -> &'a str {
+fn specified_git(matches: &ArgMatches) -> &str {
     matches
         .value_of("git")
         .expect("There should be a default value")
@@ -497,7 +493,7 @@ mod test_cli {
     }
 
     impl CliTest {
-        fn matches<'a>(&'a self, args: &[&str]) -> clap::Result<ArgMatches<'a>> {
+        fn matches<'a>(&'a self, args: &[&str]) -> clap::Result<ArgMatches> {
             let mut vec = vec!["git-nomad"];
             vec.extend_from_slice(args);
             cli(&self.default_user, &self.default_host, &vec)
@@ -515,7 +511,7 @@ mod test_cli {
 
     struct CliTestRemote<'a> {
         test: &'a CliTest,
-        matches: ArgMatches<'a>,
+        matches: ArgMatches,
         remote: GitRemote,
         env: HashMap<String, String>,
     }
@@ -574,7 +570,7 @@ mod test_cli {
                 Ok(_) => unreachable!(),
                 Err(e) => e.kind,
             },
-            ErrorKind::MissingArgumentOrSubcommand,
+            ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand,
         );
     }
 

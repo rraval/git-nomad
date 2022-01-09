@@ -9,9 +9,6 @@ use clap::{
     crate_authors, crate_description, crate_name, App, AppSettings, Arg, ArgGroup, ArgMatches,
     SubCommand,
 };
-// `crate_version!` is only used as a version fallback and thus macro expansion may make the only
-// usage disappear.
-#[allow(unused_imports)]
 use clap::crate_version;
 use git_version::git_version;
 use verbosity::Verbosity;
@@ -79,6 +76,9 @@ fn cli<'a>(
             .takes_value(true)
     };
 
+    // This value is only conditionally used if `git_version!` cannot find any other version.
+    let _fallback_version = crate_version!();
+
     App::new("git nomad")
         .settings(&[
             AppSettings::SubcommandRequiredElseHelp,
@@ -88,7 +88,7 @@ fn cli<'a>(
         .version(git_version!(
             prefix = "git:",
             args = ["--tags", "--always", "--dirty=-modified"],
-            fallback = crate_version!(),
+            fallback = _fallback_version,
         ))
         .author(crate_authors!())
         .about(crate_description!())

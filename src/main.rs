@@ -6,9 +6,9 @@ use std::{
 
 use anyhow::bail;
 use clap::{
-    crate_authors, crate_description, crate_name, App, AppSettings, Arg, ArgGroup, ArgMatches,
+    crate_authors, crate_description, crate_name, crate_version, App, AppSettings, Arg, ArgGroup,
+    ArgMatches,
 };
-use clap::crate_version;
 use git_version::git_version;
 use verbosity::Verbosity;
 
@@ -68,12 +68,7 @@ fn cli(
             .help("Git remote to sync against")
     };
 
-    let host_arg = || {
-        Arg::new("host")
-            .short('H')
-            .long("host")
-            .takes_value(true)
-    };
+    let host_arg = || Arg::new("host").short('H').long("host").takes_value(true);
 
     // This value is only conditionally used if `git_version!` cannot find any other version.
     let _fallback_version = crate_version!();

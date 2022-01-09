@@ -5,5 +5,4 @@ ignore:
   - "/*"
   - "C:/*"
   - "../*"
-excl-line:
-  - "unreachable!"
+excl-line: "unreachable!"

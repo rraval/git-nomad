@@ -1,6 +1,10 @@
 # git-nomad
 
-![Coverage](https://img.shields.io/coveralls/github/rraval/git-nomad) ![Issues](https://img.shields.io/github/issues/rraval/git-nomad) ![Latest Release](https://img.shields.io/github/v/release/rraval/git-nomad) ![Commits since latest release](https://img.shields.io/github/commits-since/rraval/git-nomad/latest) ![License](https://img.shields.io/github/license/rraval/git-nomad)
+[![Coverage](https://img.shields.io/coveralls/github/rraval/git-nomad)](https://coveralls.io/github/rraval/git-nomad)
+[![Issues](https://img.shields.io/github/issues/rraval/git-nomad)](https://github.com/rraval/git-nomad/issues)
+[![Latest Release](https://img.shields.io/github/v/release/rraval/git-nomad)](https://github.com/rraval/git-nomad/releases/latest)
+[![Commits since latest release](https://img.shields.io/github/commits-since/rraval/git-nomad/latest)](https://github.com/rraval/git-nomad/commits/master)
+[![License](https://img.shields.io/github/license/rraval/git-nomad)](https://github.com/rraval/git-nomad/blob/master/LICENSE)
 
 Synchronize work-in-progress git branches in a light weight fashion. Motivation:
 

@@ -1,8 +1,0 @@
-ignore-not-existing: true
-llvm: true
-prefix-dir: /home/user/build/
-ignore:
-  - "/*"
-  - "C:/*"
-  - "../*"
-excl-line: "unreachable!"

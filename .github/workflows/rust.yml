@@ -64,6 +64,7 @@ jobs:
           command: clippy
           args: -- -D warnings
 
+  # Adapted from https://github.com/Blightmud/Blightmud/blob/dev/.github/workflows/coverage.yml
   coverage:
     runs-on: ubuntu-latest
     steps:
@@ -73,19 +74,19 @@ jobs:
           profile: minimal
           toolchain: nightly
           override: true
+          components: llvm-tools-preview
+      - name: Install grcov
+        run: "curl -L https://github.com/mozilla/grcov/releases/download/v0.8.2/grcov-linux-x86_64.tar.bz2 | tar -C ~/ -xjv"
       - uses: actions-rs/cargo@v1
         with:
           command: test
           args: --all-features --no-fail-fast
         env:
-          CARGO_INCREMENTAL: '0'
-          RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests'
-          RUSTDOCFLAGS: '-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests'
-      - uses: rraval/actions-rs-grcov@master
-        id: grcov
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUSTFLAGS: '-Zinstrument-coverage'
+          LLVM_PROFILE_FILE: 'report-%p-%m.profraw'
+      - name: Run grcov
+        run: "~/grcov . --binary-path target/debug/deps/ -s . -t lcov --branch --ignore-not-existing --ignore '../**' --ignore '/*' --excl-line 'unreachable!' -o coverage.lcov"
       - uses: coverallsapp/github-action@master
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          path-to-lcov: ${{ steps.grcov.outputs.report }}
+          path-to-lcov: coverage.lcov

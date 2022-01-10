@@ -73,10 +73,6 @@ jobs:
           profile: minimal
           toolchain: nightly
           override: true
-      - uses: actions-rs/install@v0.1.2
-        with:
-          crate: grcov
-          use-tool-cache: true
       - uses: actions-rs/cargo@v1
         with:
           command: test

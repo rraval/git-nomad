@@ -85,7 +85,7 @@ jobs:
           CARGO_INCREMENTAL: '0'
           RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests'
           RUSTDOCFLAGS: '-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests'
-      - uses: xnuter/grcov@550fd67f9b64b4bdd5f2f8f46e262340e6de4959
+      - uses: rraval/actions-rs-grcov@master
         id: grcov
       - uses: coverallsapp/github-action@master
         with:

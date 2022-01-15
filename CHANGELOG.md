@@ -19,6 +19,7 @@ However, the output of the application is designed for humans, not machines, and
 
 - Update to the 2021 edition of Rust.
 - Update to clap v3 for the command line interface.
+- Help messages are no longer colorized, matching the lack of color throughout the rest of the implementation.
 - Assorted minor version updates to various dependencies.
 
 ### Fixed

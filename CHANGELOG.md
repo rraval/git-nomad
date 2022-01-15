@@ -13,6 +13,18 @@ However, the output of the application is designed for humans, not machines, and
 
 ## [Unreleased]
 
+`git-nomad` is no longer considered a prototype and is approaching its (hopefully final) 1.0 release.
+
+### Changed
+
+- Update to the 2021 edition of Rust.
+- Update to clap v3 for the command line interface.
+- Assorted minor version updates to various dependencies.
+
+### Fixed
+
+- Adjust help message to only suggest `-vv` for max verbosity.
+
 ## [0.4.0]
 
 - An internal rewrite of the implementation to prevent entire categories of bugs like [#1][i1], [#2][i2], and [#3][i3] from sneaking in again.

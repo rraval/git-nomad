@@ -1,0 +1,5 @@
+name: Dev
+on: [push, pull_request]
+jobs:
+  all:
+    uses: rraval/workflows/.github/workflows/rust_dev.yml@master

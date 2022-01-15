@@ -1,0 +1,11 @@
+name: Deploy
+on:
+  release:
+    types: [published]
+jobs:
+  all:
+    uses: rraval/workflows/.github/workflows/rust_deploy_binary.yml@master
+    with:
+      CARGO_BINARY_NAME: git-nomad
+    secrets:
+      CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}

@@ -13,7 +13,7 @@ Synchronize work-in-progress git branches in a light weight fashion. Motivation:
 - You want all the efficiency and synchronization benefits of having a git clone available, meaning external syncing tools like Dropbox or network mounts are right out.
 - You want this synchronization to work out-of-the-box with popular third party remote hosts like GitHub.
 
-[![asciicast](https://asciinema.org/a/458630.svg)](https://asciinema.org/a/458630?autoplay=1)
+[![asciicast](https://asciinema.org/a/462028.svg)](https://asciinema.org/a/462028?autoplay=1)
 
 ## Usage
 

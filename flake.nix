@@ -17,20 +17,15 @@
         cargo
         cargo-outdated
         clippy
+        doitlive
         figlet
         gdb
         rust-analyzer
         rustc
         rustfmt
 
-        (pkgs.writeShellScriptBin "recNew" ''
-          export HOST="$1"
-          asciinema rec -i 0.3 -c 'bash --rcfile asciinema_env.sh' asciinema.cast
-        '')
-
-        (pkgs.writeShellScriptBin "recContinue" ''
-          export HOST="$1"
-          asciinema rec --append -i 0.3 -c 'bash --rcfile asciinema_env.sh' asciinema.cast
+        (pkgs.writeShellScriptBin "recordDemo" ''
+          asciinema rec --overwrite -c 'doitlive play --commentecho --quiet --shell bash demo.doitlive.sh' demo.asciinema.cast
         '')
       ];
     };

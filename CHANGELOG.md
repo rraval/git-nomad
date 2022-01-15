@@ -13,6 +13,8 @@ However, the output of the application is designed for humans, not machines, and
 
 ## [Unreleased]
 
+## [0.5.0]
+
 `git-nomad` is no longer considered a prototype and is approaching its (hopefully final) 1.0 release.
 
 ### Changed

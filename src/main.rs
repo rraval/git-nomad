@@ -6,8 +6,7 @@ use std::{
 
 use anyhow::bail;
 use clap::{
-    crate_authors, crate_description, crate_name, crate_version, App, AppSettings, Arg, ArgGroup,
-    ArgMatches,
+    crate_authors, crate_description, crate_name, crate_version, Arg, ArgGroup, ArgMatches, Command,
 };
 use git_version::git_version;
 use verbosity::Verbosity;
@@ -73,8 +72,8 @@ fn cli(
     // This value is only conditionally used if `git_version!` cannot find any other version.
     let _fallback_version = crate_version!();
 
-    App::new("git nomad")
-        .setting(AppSettings::SubcommandRequiredElseHelp)
+    Command::new("git nomad")
+        .arg_required_else_help(true)
         .name(crate_name!())
         .version(git_version!(
             prefix = "git:",
@@ -116,7 +115,7 @@ fn cli(
                 .help("User name, shared by multiple clones, unique per remote"),
         )
         .subcommand(
-            App::new("sync")
+            Command::new("sync")
                 .about("Sync local branches to remote")
                 .arg(
                     host_arg()
@@ -127,9 +126,9 @@ fn cli(
                 )
                 .arg(remote_arg()),
         )
-        .subcommand(App::new("ls").about("List refs for all hosts"))
+        .subcommand(Command::new("ls").about("List refs for all hosts"))
         .subcommand(
-            App::new("purge")
+            Command::new("purge")
                 .about("Delete nomad refs locally and on the remote")
                 .arg(
                     Arg::new("all")
@@ -563,7 +562,7 @@ mod test_cli {
         assert_eq!(
             match matches {
                 Ok(_) => unreachable!(),
-                Err(e) => e.kind,
+                Err(e) => e.kind(),
             },
             ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand,
         );

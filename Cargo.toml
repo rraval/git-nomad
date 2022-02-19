@@ -8,13 +8,13 @@ repository = "https://github.com/rraval/git-nomad"
 license = "MIT"
 
 [dependencies]
-anyhow = "^1.0.52"
+anyhow = "^1.0.54"
 git-version = "^0.3.5"
 indicatif = "^0.16.2"
 tempfile = "^3.2.0"
 whoami = "^1.2.1"
 
 [dependencies.clap]
-version = "^3.0.7"
+version = "^3.1.0"
 default-features = false
 features = ["cargo", "env", "std", "suggestions", "wrap_help"]

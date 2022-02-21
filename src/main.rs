@@ -6,7 +6,8 @@ use std::{
 
 use anyhow::bail;
 use clap::{
-    crate_authors, crate_description, crate_name, crate_version, Arg, ArgGroup, ArgMatches, Command,
+    crate_authors, crate_description, crate_name, crate_version, Arg, ArgGroup, ArgMatches,
+    Command, ValueHint,
 };
 use git_version::git_version;
 use verbosity::Verbosity;
@@ -63,11 +64,19 @@ fn cli(
 ) -> clap::Result<ArgMatches> {
     let remote_arg = || {
         Arg::new("remote")
-            .default_value(&DEFAULT_REMOTE.0)
             .help("Git remote to sync against")
+            .takes_value(true)
+            .value_hint(ValueHint::Other)
+            .default_value(&DEFAULT_REMOTE.0)
     };
 
-    let host_arg = || Arg::new("host").short('H').long("host").takes_value(true);
+    let host_arg = || {
+        Arg::new("host")
+            .short('H')
+            .long("host")
+            .takes_value(true)
+            .value_hint(ValueHint::Hostname)
+    };
 
     // This value is only conditionally used if `git_version!` cannot find any other version.
     let _fallback_version = crate_version!();
@@ -86,8 +95,10 @@ fn cli(
             Arg::new("git")
                 .global(true)
                 .long("git")
-                .default_value("git")
-                .help("Git binary to use"),
+                .help("Git binary to use")
+                .takes_value(true)
+                .value_hint(ValueHint::CommandName)
+                .default_value("git"),
         )
         .arg(
             Arg::new("silent")
@@ -101,18 +112,20 @@ fn cli(
                 .global(true)
                 .short('v')
                 .long("verbose")
-                .multiple_occurrences(true)
-                .help("Verbose output, repeat up to 2 times for increasing verbosity"),
+                .help("Verbose output, repeat up to 2 times for increasing verbosity")
+                .multiple_occurrences(true),
         )
         .arg(
             Arg::new("user")
                 .global(true)
                 .short('U')
                 .long("user")
-                .env(ENV_USER)
-                .default_value(&default_user.0)
+                .help("User name, shared by multiple clones, unique per remote")
                 .next_line_help(true)
-                .help("User name, shared by multiple clones, unique per remote"),
+                .takes_value(true)
+                .value_hint(ValueHint::Username)
+                .env(ENV_USER)
+                .default_value(&default_user.0),
         )
         .subcommand(
             Command::new("sync")
@@ -120,9 +133,9 @@ fn cli(
                 .arg(
                     host_arg()
                         .env(ENV_HOST)
-                        .next_line_help(true)
                         .default_value(&default_host.0)
-                        .help("Host name to sync with, unique per clone"),
+                        .help("Host name to sync with, unique per clone")
+                        .next_line_help(true),
                 )
                 .arg(remote_arg()),
         )

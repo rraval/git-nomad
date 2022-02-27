@@ -131,4 +131,25 @@ mod tests {
             GitRefParseError::TooManyParts,
         );
     }
+
+    /// Checks that displaying any [`GitRefParseError`] always includes the string passed in.
+    fn assert_display_contains_str(func: impl Fn(String) -> GitRefParseError) {
+        let displayed = format!("{}", func("foo".to_string()));
+        assert!(displayed.contains("foo"));
+    }
+
+    #[test]
+    fn display_missing_name() {
+        assert_display_contains_str(GitRefParseError::MissingName);
+    }
+
+    #[test]
+    fn display_missing_commit_id() {
+        assert_display_contains_str(GitRefParseError::MissingCommitId);
+    }
+
+    #[test]
+    fn display_too_many_parts() {
+        assert_display_contains_str(GitRefParseError::TooManyParts);
+    }
 }

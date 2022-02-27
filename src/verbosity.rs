@@ -118,36 +118,39 @@ pub fn output_stdout(output: Output) -> Result<String> {
 }
 
 /// Invoke a [`Command`] and check its exit code for success.
-///
-/// Makes effort to build a decent error message on failure.
 fn run_silent<S: AsRef<str>>(description: S, command: &mut Command) -> Result<Output> {
     let output = command
         .output()
         .with_context(|| format!("{}: {:?}", description.as_ref(), command))?;
 
     if !output.status.success() {
-        let forward = |name: &str, stream: &[u8]| {
-            if stream.is_empty() {
-                String::new()
-            } else {
-                format!(
-                    "\n# ---- {} ----\n{}",
-                    name,
-                    String::from_utf8_lossy(stream)
-                )
-            }
-        };
-
-        bail!(
-            "command failure\n$ {:?}\n# Exit code: {:?}{}{}",
-            command,
-            output.status.code(),
-            forward("STDOUT", &output.stdout),
-            forward("STDERR", &output.stderr)
-        );
+        return dump_command_failure(command, &output);
     }
 
     Ok(output)
+}
+
+/// Make some effort to build a decent error message for commands that fail.
+fn dump_command_failure<T>(command: &Command, output: &Output) -> Result<T> {
+    let forward = |name: &str, stream: &[u8]| {
+        if stream.is_empty() {
+            String::new()
+        } else {
+            format!(
+                "\n# ---- {} ----\n{}",
+                name,
+                String::from_utf8_lossy(stream)
+            )
+        }
+    };
+
+    bail!(
+        "command failure\n$ {:?}\n# status: {}{}{}",
+        command,
+        output.status,
+        forward("STDOUT", &output.stdout),
+        forward("STDERR", &output.stderr)
+    );
 }
 
 fn run_spinner<S: AsRef<str>>(description: S, command: &mut Command) -> Result<Output> {
@@ -199,11 +202,14 @@ fn run_with_invocation_and_output<S: AsRef<str>>(
 
 #[cfg(test)]
 mod test {
-    use std::process::Command;
+    use std::{
+        os::unix::prelude::ExitStatusExt,
+        process::{Command, ExitStatus, Output},
+    };
 
     use crate::verbosity::{run_notable, run_silent};
 
-    use super::{output_stdout, run_trivial, Verbosity};
+    use super::{dump_command_failure, output_stdout, run_trivial, Verbosity};
 
     const ALL_VERBOSITIES: &[Option<Verbosity>] = &[
         None,
@@ -242,5 +248,53 @@ mod test {
             Ok(_) => unreachable!(),
             Err(e) => assert!(e.to_string().contains("false")), // the command that was invoked
         }
+    }
+
+    /// Ensures that [`dump_command_failure`] prints all available information so the user can
+    /// figure out what went wrong.
+    #[test]
+    fn test_dump_command_failure_stdout_and_stderr() {
+        let mut command = Command::new("binary");
+        command.arg("arg");
+
+        let output = Output {
+            status: ExitStatus::from_raw(123),
+            stdout: "some stdout".as_bytes().to_vec(),
+            stderr: "some stderr".as_bytes().to_vec(),
+        };
+
+        let dump = dump_command_failure::<()>(&command, &output).unwrap_err();
+        let displayed_dump = format!("{}", dump);
+
+        assert!(displayed_dump.contains("binary"));
+        assert!(displayed_dump.contains("arg"));
+        assert!(displayed_dump.contains("123"));
+        assert!(displayed_dump.contains("STDOUT"));
+        assert!(displayed_dump.contains("some stdout"));
+        assert!(displayed_dump.contains("STDERR"));
+        assert!(displayed_dump.contains("some stderr"));
+    }
+
+    /// [`dump_command_failure`] should elide stderr when it is empty.
+    #[test]
+    fn test_dump_command_failure_just_stdout() {
+        let command = Command::new("binary");
+
+        let output = Output {
+            status: ExitStatus::from_raw(123),
+            stdout: "some stdout".as_bytes().to_vec(),
+            stderr: Vec::new(),
+        };
+
+        let dump = dump_command_failure::<()>(&command, &output).unwrap_err();
+        let displayed_dump = format!("{}", dump);
+
+        assert!(displayed_dump.contains("binary"));
+        assert!(!displayed_dump.contains("arg"));
+        assert!(displayed_dump.contains("123"));
+        assert!(displayed_dump.contains("STDOUT"));
+        assert!(displayed_dump.contains("some stdout"));
+        assert!(!displayed_dump.contains("STDERR"));
+        assert!(!displayed_dump.contains("some stderr"));
     }
 }

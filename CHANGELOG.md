@@ -13,6 +13,10 @@ However, the output of the application is designed for humans, not machines, and
 
 ## [Unreleased]
 
+### Changed
+
+- Cosmetic tweaks to how command failures are reported.
+
 ## [0.5.0]
 
 `git-nomad` is no longer considered a prototype and is approaching its (hopefully final) 1.0 release.

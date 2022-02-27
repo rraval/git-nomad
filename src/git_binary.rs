@@ -208,6 +208,18 @@ mod namespace {
             assert_eq!(&nomad_ref.host.0, HOST);
             assert_eq!(&nomad_ref.branch.0, BRANCH);
         }
+
+        /// [`NomadRef::from_git_remote_ref`] should refuse to parse refs with a different prefix.
+        #[test]
+        fn test_from_remote_ref_wrong_prefix() {
+            let remote_git_ref = GitRef {
+                commit_id: "some_commit_id".to_string(),
+                name: "refs/something/user/host/branch".to_string(),
+            };
+
+            let parsed = NomadRef::<GitRef>::from_git_remote_ref(remote_git_ref);
+            assert!(parsed.is_err());
+        }
     }
 }
 

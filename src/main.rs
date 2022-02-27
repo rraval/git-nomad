@@ -51,9 +51,7 @@ fn main() -> anyhow::Result<()> {
         }
     }
 
-    workflow.execute(&git)?;
-
-    Ok(())
+    workflow.execute(&git)
 }
 
 /// Use [`clap`] to implement the intended command line interface.

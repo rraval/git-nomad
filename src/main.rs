@@ -81,9 +81,8 @@ fn cli(
     // This value is only conditionally used if `git_version!` cannot find any other version.
     let _fallback_version = crate_version!();
 
-    Command::new("git nomad")
+    Command::new(crate_name!())
         .arg_required_else_help(true)
-        .name(crate_name!())
         .version(git_version!(
             prefix = "git:",
             args = ["--tags", "--always", "--dirty=-modified"],

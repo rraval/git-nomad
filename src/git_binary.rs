@@ -634,6 +634,51 @@ impl LineArity {
 }
 
 #[cfg(test)]
+mod test_line_arity {
+    use super::LineArity;
+
+    /// No lines counts as zero.
+    #[test]
+    fn test_empty() {
+        let arity = || LineArity::from("".to_string());
+        assert!(arity().one().is_err());
+        assert_eq!(arity().zero_or_one().unwrap(), None);
+    }
+
+    /// An empty line counts as zero.
+    #[test]
+    fn test_newline() {
+        let arity = || LineArity::from("\n".to_string());
+        assert!(arity().one().is_err());
+        assert_eq!(arity().zero_or_one().unwrap(), None);
+    }
+
+    /// A line without a trailing newline counts as one.
+    #[test]
+    fn test_one_line_without_newline() {
+        let arity = || LineArity::from("line".to_string());
+        assert_eq!(arity().one().unwrap(), "line".to_string());
+        assert_eq!(arity().zero_or_one().unwrap(), Some("line".to_string()));
+    }
+
+    /// A line with a trailing newline counts as one.
+    #[test]
+    fn test_one_line_with_newline() {
+        let arity = || LineArity::from("line\n".to_string());
+        assert_eq!(arity().one().unwrap(), "line".to_string());
+        assert_eq!(arity().zero_or_one().unwrap(), Some("line".to_string()));
+    }
+
+    /// Two lines with newlines count as many.
+    #[test]
+    fn test_two_lines() {
+        let arity = || LineArity::from("line\nanother\n".to_string());
+        assert!(arity().one().is_err());
+        assert!(arity().zero_or_one().is_err());
+    }
+}
+
+#[cfg(test)]
 mod test_impl {
     use std::fs::create_dir;
 

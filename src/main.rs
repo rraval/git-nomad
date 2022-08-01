@@ -4,10 +4,9 @@ use std::{
     ffi::OsString,
 };
 
-use anyhow::bail;
 use clap::{
-    crate_authors, crate_description, crate_name, crate_version, Arg, ArgGroup, ArgMatches,
-    Command, ValueHint,
+    crate_authors, crate_description, crate_name, crate_version, value_parser, Arg, ArgAction,
+    ArgGroup, ArgMatches, Command, ValueHint, ValueSource,
 };
 use git_version::git_version;
 use verbosity::Verbosity;
@@ -38,11 +37,13 @@ fn main() -> anyhow::Result<()> {
     let default_user = User::from(whoami::username());
     let default_host = Host::from(whoami::hostname());
 
-    let matches =
+    let mut matches =
         cli(&default_user, &default_host, &mut env::args_os()).unwrap_or_else(|e| e.exit());
-    let verbosity = specified_verbosity(&matches);
-    let git = GitBinary::new(verbosity, specified_git(&matches), current_dir()?.as_path())?;
-    let workflow = specified_workflow(&matches, &env::var, &default_user, &default_host, &git)?;
+    let verbosity = specified_verbosity(&mut matches);
+    // FIXME: Maybe `GitBinary::new` can work with Cow
+    let git_name = specified_git(&mut matches);
+    let git = GitBinary::new(verbosity, &git_name, current_dir()?.as_path())?;
+    let workflow = specified_workflow(&mut matches, &git)?;
 
     if let Some(verbosity) = verbosity {
         if verbosity.display_workflow {
@@ -64,6 +65,7 @@ fn cli(
         Arg::new("remote")
             .help("Git remote to sync against")
             .takes_value(true)
+            .value_parser(value_parser!(String))
             .value_hint(ValueHint::Other)
             .default_value(&DEFAULT_REMOTE.0)
     };
@@ -73,6 +75,7 @@ fn cli(
             .short('H')
             .long("host")
             .takes_value(true)
+            .value_parser(value_parser!(String))
             .value_hint(ValueHint::Hostname)
     };
 
@@ -94,6 +97,7 @@ fn cli(
                 .long("git")
                 .help("Git binary to use")
                 .takes_value(true)
+                .value_parser(value_parser!(String))
                 .value_hint(ValueHint::CommandName)
                 .default_value("git"),
         )
@@ -102,7 +106,10 @@ fn cli(
                 .global(true)
                 .short('s')
                 .long("silent")
-                .help("Silence all output"),
+                .help("Silence all output")
+                .takes_value(true)
+                .value_parser(value_parser!(bool))
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("verbose")
@@ -110,7 +117,9 @@ fn cli(
                 .short('v')
                 .long("verbose")
                 .help("Verbose output, repeat up to 2 times for increasing verbosity")
-                .multiple_occurrences(true),
+                .takes_value(true)
+                .value_parser(value_parser!(u8))
+                .action(ArgAction::Count),
         )
         .arg(
             Arg::new("user")
@@ -120,6 +129,7 @@ fn cli(
                 .help("User name, shared by multiple clones, unique per remote")
                 .next_line_help(true)
                 .takes_value(true)
+                .value_parser(value_parser!(String))
                 .value_hint(ValueHint::Username)
                 .env(ENV_USER)
                 .default_value(&default_user.0),
@@ -143,12 +153,19 @@ fn cli(
                 .arg(
                     Arg::new("all")
                         .long("all")
-                        .help("Delete refs for all hosts"),
+                        .help("Delete refs for all hosts")
+                        .takes_value(true)
+                        .value_parser(value_parser!(bool))
+                        .action(ArgAction::SetTrue),
                 )
                 .arg(
-                    host_arg().multiple_occurrences(true).help(
-                        "Delete refs for only the given host (can be specified multiple times)",
-                    ),
+                    host_arg()
+                        .takes_value(true)
+                        .value_parser(value_parser!(String))
+                        .action(ArgAction::Append)
+                        .help(
+                            "Delete refs for only the given host (can be specified multiple times)",
+                        ),
                 )
                 .group(
                     ArgGroup::new("host_group")
@@ -161,11 +178,11 @@ fn cli(
 }
 
 /// The [`Verbosity`] intended by the user via the CLI.
-fn specified_verbosity(matches: &ArgMatches) -> Option<Verbosity> {
-    if matches.is_present("silent") {
+fn specified_verbosity(matches: &mut ArgMatches) -> Option<Verbosity> {
+    if matches.remove_one::<bool>("silent").expect("has default") {
         None
     } else {
-        match matches.occurrences_of("verbose") {
+        match matches.remove_one::<u8>("verbose").expect("has default") {
             0 => Some(Verbosity::default()),
             1 => Some(Verbosity::verbose()),
             _ => Some(Verbosity::max()),
@@ -178,10 +195,8 @@ fn specified_verbosity(matches: &ArgMatches) -> Option<Verbosity> {
 /// # Panics
 ///
 /// If [`clap`] does not prevent certain assumed invalid states.
-fn specified_git(matches: &ArgMatches) -> &str {
-    matches
-        .value_of("git")
-        .expect("There should be a default value")
+fn specified_git(matches: &mut ArgMatches) -> String {
+    matches.remove_one("git").expect("default value")
 }
 
 /// The nomad workflow the user intends to execute via the CLI.
@@ -190,64 +205,60 @@ fn specified_git(matches: &ArgMatches) -> &str {
 ///
 /// If [`clap`] does not prevent certain assumed invalid states.
 fn specified_workflow<'a, 'user: 'a, 'host: 'a>(
-    matches: &'a ArgMatches,
-    get_value_from_env: &impl Fn(&'static str) -> Result<String, env::VarError>,
-    default_user: &'user User<'user>,
-    default_host: &'host Host<'host>,
+    matches: &'a mut ArgMatches,
     git: &GitBinary,
 ) -> anyhow::Result<Workflow<'a, 'a, 'a>> {
-    let user = resolve(
-        matches,
-        "user",
-        &get_value_from_env,
-        ENV_USER,
-        git.get_config(CONFIG_USER)?.map(User::from),
-        default_user,
-    )?;
+    let user = Cow::Owned(resolve(matches, "user", || {
+        git.get_config(CONFIG_USER).map(|opt| opt.map(User::from))
+    })?);
 
-    if let Some(matches) = matches.subcommand_matches("sync") {
-        let host = resolve(
-            matches,
-            "host",
-            &get_value_from_env,
-            ENV_HOST,
-            git.get_config(CONFIG_HOST)?.map(Host::from),
-            default_host,
-        )?;
-        let remote = Remote::from(
-            matches
-                .value_of("remote")
-                .expect("<remote> is a required argument"),
-        );
-        return Ok(Workflow::Sync { user, host, remote });
-    }
+    let (subcommand, matches) = matches
+        .remove_subcommand()
+        .expect("subcommand is mandatory");
 
-    if matches.subcommand_matches("ls").is_some() {
-        return Ok(Workflow::Ls { user });
-    }
+    return match (subcommand.as_str(), matches) {
+        ("sync", mut matches) => {
+            let host = Cow::Owned(resolve(&mut matches, "host", || {
+                git.get_config(CONFIG_HOST).map(|opt| opt.map(Host::from))
+            })?);
+            let remote = Remote::from(
+                matches
+                    .remove_one::<String>("remote")
+                    .expect("<remote> is a required argument"),
+            );
 
-    if let Some(matches) = matches.subcommand_matches("purge") {
-        let remote = Remote::from(
-            matches
-                .value_of("remote")
-                .expect("<remote> is a required argument"),
-        );
-        let purge_filter = if matches.is_present("all") {
-            PurgeFilter::All
-        } else if let Some(hosts) = matches.values_of("host") {
-            PurgeFilter::Hosts(hosts.map(Host::from).collect())
-        } else {
-            unreachable!("ArgGroup should have verified that one of these parameters was present");
-        };
+            Ok(Workflow::Sync { user, host, remote })
+        }
 
-        return Ok(Workflow::Purge {
-            user,
-            remote,
-            purge_filter,
-        });
-    }
+        ("ls", _) => Ok(Workflow::Ls { user }),
 
-    unreachable!("Subcommand is mandatory");
+        ("purge", mut matches) => {
+            let remote = Remote::from(
+                matches
+                    .remove_one::<String>("remote")
+                    .expect("<remote> is a required argument"),
+            );
+            let purge_filter = if matches.remove_one::<bool>("all").expect("default value") {
+                PurgeFilter::All
+            } else {
+                PurgeFilter::Hosts(
+                    matches
+                        .remove_many::<String>("host")
+                        .unwrap_or_default()
+                        .map(Host::from)
+                        .collect(),
+                )
+            };
+
+            return Ok(Workflow::Purge {
+                user,
+                remote,
+                purge_filter,
+            });
+        }
+
+        _ => unreachable!("unknown subcommand"),
+    };
 }
 
 /// Extract user arguments in order of preference:
@@ -256,45 +267,23 @@ fn specified_workflow<'a, 'user: 'a, 'host: 'a>(
 /// 2. Specified as an environment variable
 /// 3. Specified in `git config`
 /// 4. A default from querying the operating system
-fn resolve<'a, T: Clone + From<&'a str> + From<String>>(
-    matches: &'a ArgMatches,
+fn resolve<T: Clone + From<String>>(
+    matches: &mut ArgMatches,
     arg_name: &str,
-    get_value_from_env: &impl Fn(&'static str) -> Result<String, env::VarError>,
-    env_key: &'static str,
-    from_git_config: Option<T>,
-    from_os_default: &'a T,
-) -> anyhow::Result<Cow<'a, T>> {
-    // clap doesn't support distinguishing between a value that comes from
-    // an environment variable (2) or from a default (4); both cases are identical for the purposes
-    // of `ArgMatches::occurrences_of` and `ArgMatches::is_present`.
-
-    // Case (1), only use clap when the argument was explicitly specified.
-    if matches.occurrences_of(arg_name) > 0 {
-        return Ok(Cow::Owned(T::from(
-            matches
-                .value_of(arg_name)
-                .expect("occurrences_of claimed there was a value"),
-        )));
-    }
-
-    // Case (2), but report specified but malformed values as an error.
-    match get_value_from_env(env_key) {
-        Ok(value) => return Ok(Cow::Owned(T::from(value))),
-        Err(e) => match e {
-            env::VarError::NotPresent => (),
-            env::VarError::NotUnicode(payload) => {
-                bail!("{} is not unicode, found {:?}", env_key, payload);
-            }
+    from_git_config: impl Fn() -> anyhow::Result<Option<T>>,
+) -> anyhow::Result<T> {
+    match (
+        matches.value_source(arg_name).expect("default value"),
+        matches
+            .remove_one::<String>(arg_name)
+            .expect("default value"),
+    ) {
+        (ValueSource::CommandLine | ValueSource::EnvVariable, value) => Ok(T::from(value)),
+        (_, value) => match from_git_config()? {
+            Some(git_value) => Ok(git_value),
+            None => Ok(T::from(value)),
         },
     }
-
-    // Case (3)
-    if let Some(value) = from_git_config {
-        return Ok(Cow::Owned(value));
-    }
-
-    // Case (4)
-    Ok(Cow::Borrowed(from_os_default))
 }
 
 /// End-to-end workflow tests.
@@ -472,12 +461,7 @@ mod test_e2e {
 /// CLI invocation tests
 #[cfg(test)]
 mod test_cli {
-    use std::{
-        borrow::Cow,
-        collections::{HashMap, HashSet},
-        env,
-        iter::FromIterator,
-    };
+    use std::{borrow::Cow, collections::HashSet, iter::FromIterator};
 
     use clap::{ArgMatches, ErrorKind};
 
@@ -488,7 +472,7 @@ mod test_cli {
         types::{Host, Remote, User},
         verbosity::Verbosity,
         workflow::{PurgeFilter, Workflow},
-        CONFIG_HOST, CONFIG_USER, DEFAULT_REMOTE, ENV_HOST, ENV_USER,
+        CONFIG_HOST, CONFIG_USER, DEFAULT_REMOTE,
     };
 
     struct CliTest {
@@ -505,52 +489,25 @@ mod test_cli {
 
         fn remote(&self, args: &[&str]) -> CliTestRemote {
             CliTestRemote {
-                test: self,
                 matches: self.matches(args).unwrap(),
                 remote: GitRemote::init(),
-                env: HashMap::new(),
             }
         }
     }
 
-    struct CliTestRemote<'a> {
-        test: &'a CliTest,
+    struct CliTestRemote {
         matches: ArgMatches,
         remote: GitRemote,
-        env: HashMap<String, String>,
     }
 
-    impl<'a> CliTestRemote<'a> {
-        fn set_env<K: Into<String>, V: Into<String>>(&mut self, key: K, value: V) -> &mut Self {
-            self.env.insert(key.into(), value.into());
-            self
-        }
-
-        fn get_value_from_env(
-            &self,
-        ) -> impl Fn(&'static str) -> Result<String, env::VarError> + '_ {
-            move |key| {
-                self.env
-                    .get(key)
-                    .map(String::from)
-                    .ok_or(env::VarError::NotPresent)
-            }
-        }
-
-        fn set_config(&self, key: &str, value: &str) -> &Self {
+    impl CliTestRemote {
+        fn set_config(&mut self, key: &str, value: &str) -> &mut Self {
             self.remote.git.set_config(key, value).unwrap();
             self
         }
 
-        fn workflow(&self) -> Workflow<'_, '_, '_> {
-            specified_workflow(
-                &self.matches,
-                &self.get_value_from_env(),
-                &self.test.default_user,
-                &self.test.default_host,
-                &self.remote.git,
-            )
-            .unwrap()
+        fn workflow(&mut self) -> Workflow<'_, '_, '_> {
+            specified_workflow(&mut self.matches, &self.remote.git).unwrap()
         }
     }
 
@@ -584,8 +541,8 @@ mod test_cli {
         for args in &[&["--git", "foo", "ls"], &["ls", "--git", "foo"]] {
             println!("{:?}", args);
             let cli_test = CliTest::default();
-            let matches = cli_test.matches(*args).unwrap();
-            assert_eq!(specified_git(&matches), "foo");
+            let mut matches = cli_test.matches(*args).unwrap();
+            assert_eq!(specified_git(&mut matches), "foo");
         }
     }
 
@@ -599,16 +556,19 @@ mod test_cli {
         ] {
             println!("{:?}", args);
             let cli_test = CliTest::default();
-            let matches = cli_test.matches(*args).unwrap();
-            assert_eq!(specified_verbosity(&matches), None);
+            let mut matches = cli_test.matches(*args).unwrap();
+            assert_eq!(specified_verbosity(&mut matches), None);
         }
     }
 
     #[test]
     fn default_verbosity() {
         let cli_test = CliTest::default();
-        let matches = cli_test.matches(&["ls"]).unwrap();
-        assert_eq!(specified_verbosity(&matches), Some(Verbosity::default()));
+        let mut matches = cli_test.matches(&["ls"]).unwrap();
+        assert_eq!(
+            specified_verbosity(&mut matches),
+            Some(Verbosity::default())
+        );
     }
 
     #[test]
@@ -621,8 +581,11 @@ mod test_cli {
         ] {
             println!("{:?}", args);
             let cli_test = CliTest::default();
-            let matches = cli_test.matches(*args).unwrap();
-            assert_eq!(specified_verbosity(&matches), Some(Verbosity::verbose()));
+            let mut matches = cli_test.matches(*args).unwrap();
+            assert_eq!(
+                specified_verbosity(&mut matches),
+                Some(Verbosity::verbose())
+            );
         }
     }
 
@@ -636,8 +599,8 @@ mod test_cli {
         ] {
             println!("{:?}", args);
             let cli_test = CliTest::default();
-            let matches = cli_test.matches(*args).unwrap();
-            assert_eq!(specified_verbosity(&matches), Some(Verbosity::max()));
+            let mut matches = cli_test.matches(*args).unwrap();
+            assert_eq!(specified_verbosity(&mut matches), Some(Verbosity::max()));
         }
     }
 
@@ -653,30 +616,12 @@ mod test_cli {
     }
 
     #[test]
-    fn ls_explicit_beats_env() {
+    fn ls_explicit() {
         let cli_test = CliTest::default();
         assert_eq!(
-            cli_test
-                .remote(&["ls", "-U", "explicit_user"])
-                .set_env(ENV_USER, "env_user")
-                .workflow(),
+            cli_test.remote(&["ls", "-U", "explicit_user"]).workflow(),
             Workflow::Ls {
                 user: Cow::Owned(User::from("explicit_user")),
-            },
-        );
-    }
-
-    #[test]
-    fn ls_env_beats_config() {
-        let cli_test = CliTest::default();
-        assert_eq!(
-            cli_test
-                .remote(&["ls"])
-                .set_env(ENV_USER, "env_user")
-                .set_config(CONFIG_USER, "config_user")
-                .workflow(),
-            Workflow::Ls {
-                user: Cow::Owned(User::from("env_user")),
             },
         );
     }
@@ -713,24 +658,6 @@ mod test_cli {
                 },
             );
         }
-    }
-
-    /// Invoke `sync` with `user` and `host` coming from the environment.
-    #[test]
-    fn sync_env() {
-        let cli_test = CliTest::default();
-        assert_eq!(
-            cli_test
-                .remote(&["sync", "remote"])
-                .set_env(ENV_USER, "user0")
-                .set_env(ENV_HOST, "host0")
-                .workflow(),
-            Workflow::Sync {
-                user: Cow::Owned(User::from("user0")),
-                host: Cow::Owned(Host::from("host0")),
-                remote: Remote::from("remote"),
-            },
-        );
     }
 
     /// Invoke `sync` with `user` and `host` coming from `git config`.

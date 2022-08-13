@@ -1,6 +1,9 @@
 //! See [`Progress`] for the primary entry point.
 
-use std::process::{Command, Output};
+use std::{
+    process::{Command, Output},
+    time::Duration,
+};
 
 use anyhow::{bail, Context, Result};
 use indicatif::{ProgressBar, ProgressStyle};
@@ -158,10 +161,11 @@ fn run_spinner<S: AsRef<str>>(description: S, command: &mut Command) -> Result<O
     spinner.set_style(
         ProgressStyle::default_spinner()
             .tick_strings(&[" ..", ". .", ".. ", "..."])
-            .template("{msg}{spinner} {elapsed}"),
+            .template("{msg}{spinner} {elapsed}")
+            .unwrap(),
     );
     spinner.set_message(description.as_ref().to_owned());
-    spinner.enable_steady_tick(150);
+    spinner.enable_steady_tick(Duration::from_millis(150));
 
     let output = run_silent(description, command);
     spinner.finish();

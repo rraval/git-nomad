@@ -1,7 +1,7 @@
 //! See [`GitBinary`] for the primary entry point.
 
 use anyhow::{bail, Result};
-use std::{collections::HashSet, ffi::OsStr, path::Path, process::Command};
+use std::{borrow::Cow, collections::HashSet, ffi::OsStr, path::Path, process::Command};
 
 use crate::{
     git_ref::GitRef,
@@ -232,7 +232,7 @@ pub struct GitBinary<'name> {
 
     /// The name of the `git` binary to use. Implemented on top of [`Command::new`], so
     /// non-absolute paths are looked up against `$PATH`.
-    name: &'name OsStr,
+    name: Cow<'name, str>,
 
     /// The absolute path to the `.git` directory of the repository.
     git_dir: String,
@@ -243,14 +243,13 @@ impl<'name> GitBinary<'name> {
     /// the usual git rules of searching ancestor directories.
     pub fn new(
         verbosity: Option<Verbosity>,
-        name: &'name str,
+        name: Cow<'name, str>,
         cwd: &Path,
     ) -> Result<GitBinary<'name>> {
-        let name = name.as_ref();
         let git_dir = run_trivial(
             verbosity,
             "Resolving .git directory",
-            git_command(name)
+            git_command(name.as_ref())
                 .current_dir(cwd)
                 .args(&["rev-parse", "--absolute-git-dir"]),
         )
@@ -268,7 +267,7 @@ impl<'name> GitBinary<'name> {
     /// Invoke a git sub-command with an explicit `--git-dir` to make it independent of the working
     /// directory it is invoked from.
     fn command(&self) -> Command {
-        let mut command = git_command(self.name);
+        let mut command = git_command(self.name.as_ref());
         command.args(&["--git-dir", &self.git_dir]);
         command
     }
@@ -680,7 +679,7 @@ mod test_line_arity {
 
 #[cfg(test)]
 mod test_impl {
-    use std::fs::create_dir;
+    use std::{borrow::Cow, fs::create_dir};
 
     use tempfile::{tempdir, TempDir};
 
@@ -690,7 +689,7 @@ mod test_impl {
     use anyhow::Result;
 
     /// Initializes a git repository in a temporary directory.
-    fn git_init() -> Result<(String, TempDir)> {
+    fn git_init() -> Result<(Cow<'static, str>, TempDir)> {
         let name = "git".to_owned();
         let tmpdir = tempdir()?;
 
@@ -704,7 +703,7 @@ mod test_impl {
             ]),
         )?;
 
-        Ok((name, tmpdir))
+        Ok((Cow::Owned(name), tmpdir))
     }
 
     /// Find the `.git` directory when run from the root of the repo.
@@ -712,7 +711,7 @@ mod test_impl {
     fn toplevel_at_root() -> Result<()> {
         let (name, tmpdir) = git_init()?;
 
-        let git = GitBinary::new(VERBOSITY, &name, tmpdir.path())?;
+        let git = GitBinary::new(VERBOSITY, name, tmpdir.path())?;
         assert_eq!(
             Some(git.git_dir.as_str()),
             tmpdir.path().join(".git").to_str()
@@ -728,7 +727,7 @@ mod test_impl {
         let subdir = tmpdir.path().join("subdir");
         create_dir(&subdir)?;
 
-        let git = GitBinary::new(VERBOSITY, &name, subdir.as_path())?;
+        let git = GitBinary::new(VERBOSITY, name, subdir.as_path())?;
         assert_eq!(
             Some(git.git_dir.as_str()),
             tmpdir.path().join(".git").to_str(),
@@ -741,7 +740,7 @@ mod test_impl {
     #[test]
     fn read_empty_config() -> Result<()> {
         let (name, tmpdir) = git_init()?;
-        let git = GitBinary::new(VERBOSITY, &name, tmpdir.path())?;
+        let git = GitBinary::new(VERBOSITY, name, tmpdir.path())?;
 
         let got = git.get_config("test.key")?;
         assert_eq!(got, None);
@@ -753,7 +752,7 @@ mod test_impl {
     #[test]
     fn write_then_read_config() -> Result<()> {
         let (name, tmpdir) = git_init()?;
-        let git = GitBinary::new(VERBOSITY, &name, tmpdir.path())?;
+        let git = GitBinary::new(VERBOSITY, name, tmpdir.path())?;
 
         git.set_config("key", "testvalue")?;
         let got = git.get_config("key")?;

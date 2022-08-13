@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     collections::HashSet,
     fs::{create_dir, write},
     path::PathBuf,
@@ -85,7 +86,7 @@ impl GitRemote {
             git(&["commit", "-m", "commit0"]);
         }
 
-        let git = GitBinary::new(VERBOSITY, GIT, &remote_dir).unwrap();
+        let git = GitBinary::new(VERBOSITY, Cow::from(GIT), &remote_dir).unwrap();
 
         GitRemote {
             root_dir,
@@ -115,7 +116,7 @@ impl GitRemote {
         )
         .unwrap();
 
-        let git = GitBinary::new(VERBOSITY, GIT, &clone_dir).unwrap();
+        let git = GitBinary::new(VERBOSITY, Cow::from(GIT), &clone_dir).unwrap();
 
         GitClone {
             _remote: self,

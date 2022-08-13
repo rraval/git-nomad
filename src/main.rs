@@ -41,8 +41,11 @@ fn main() -> anyhow::Result<()> {
         cli(&default_user, &default_host, &mut env::args_os()).unwrap_or_else(|e| e.exit());
     let verbosity = specified_verbosity(&mut matches);
     // FIXME: Maybe `GitBinary::new` can work with Cow
-    let git_name = specified_git(&mut matches);
-    let git = GitBinary::new(verbosity, &git_name, current_dir()?.as_path())?;
+    let git = GitBinary::new(
+        verbosity,
+        Cow::from(specified_git(&mut matches)),
+        current_dir()?.as_path(),
+    )?;
     let workflow = specified_workflow(&mut matches, &git)?;
 
     if let Some(verbosity) = verbosity {

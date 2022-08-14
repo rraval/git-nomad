@@ -15,6 +15,7 @@ However, the output of the application is designed for humans, not machines, and
 
 ### Changed
 
+- `purge` and `sync` subcommands now take the `<remote>` as an option via `-R` or `--remote` or the `GIT_NOMAD_REMOTE` environment variable. Previously, this was an optional positional argument.
 - Cosmetic tweaks to how command failures are reported.
 
 ## [0.5.0]

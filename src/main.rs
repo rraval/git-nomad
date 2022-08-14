@@ -30,6 +30,7 @@ mod git_testing;
 const DEFAULT_REMOTE: Remote<'static> = Remote(Cow::Borrowed("origin"));
 const ENV_USER: &str = "GIT_NOMAD_USER";
 const ENV_HOST: &str = "GIT_NOMAD_HOST";
+const ENV_REMOTE: &str = "GIT_NOMAD_REMOTE";
 const CONFIG_USER: &str = "user";
 const CONFIG_HOST: &str = "host";
 
@@ -65,10 +66,13 @@ fn cli(
 ) -> clap::Result<ArgMatches> {
     let remote_arg = || {
         Arg::new("remote")
-            .help("Git remote to sync against")
+            .short('R')
+            .long("remote")
+            .next_line_help(true)
             .takes_value(true)
             .value_parser(value_parser!(String))
             .value_hint(ValueHint::Other)
+            .env(ENV_REMOTE)
             .default_value(&DEFAULT_REMOTE.0)
     };
 
@@ -146,7 +150,7 @@ fn cli(
                         .help("Host name to sync with, unique per clone")
                         .next_line_help(true),
                 )
-                .arg(remote_arg()),
+                .arg(remote_arg().help("Git remote to sync refs against")),
         )
         .subcommand(Command::new("ls").about("List refs for all hosts"))
         .subcommand(
@@ -174,7 +178,7 @@ fn cli(
                         .args(&["all", "host"])
                         .required(true),
                 )
-                .arg(remote_arg()),
+                .arg(remote_arg().help("Git remote to delete refs from")),
         )
         .try_get_matches_from(args)
 }
@@ -646,8 +650,10 @@ mod test_cli {
     #[test]
     fn sync_explicit() {
         for args in &[
-            &["--user", "user0", "sync", "--host", "host0", "remote"] as &[&str],
-            &["sync", "-U", "user0", "-H", "host0", "remote"],
+            &[
+                "--user", "user0", "sync", "--host", "host0", "--remote", "remote",
+            ] as &[&str],
+            &["sync", "-U", "user0", "-H", "host0", "-R", "remote"],
         ] {
             println!("{:?}", args);
             let cli_test = CliTest::default();
@@ -719,6 +725,7 @@ mod test_cli {
                     "host1",
                     "-H",
                     "host2",
+                    "-R",
                     "remote"
                 ])
                 .workflow(),

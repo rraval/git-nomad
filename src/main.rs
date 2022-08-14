@@ -9,7 +9,9 @@ use clap::{
     ArgGroup, ArgMatches, Command, ValueHint, ValueSource,
 };
 use git_version::git_version;
+use types::Branch;
 use verbosity::Verbosity;
+use workflow::WorkflowRefOnHost;
 
 use crate::{
     git_binary::GitBinary,
@@ -177,6 +179,43 @@ fn cli(
                 )
                 .arg(remote_arg().help("Git remote to delete refs from")),
         )
+        .subcommand(
+            Command::new("ref")
+                .about("FIXME")
+                .arg(
+                    Arg::new("fetch")
+                        .long("no-fetch")
+                        .help("FIXME")
+                        .takes_value(true)
+                        .value_parser(value_parser!(bool))
+                        .action(ArgAction::SetFalse),
+                )
+                .arg(
+                    Arg::new("other")
+                        .short('o')
+                        .long("other")
+                        .help("FIXME")
+                        .takes_value(true)
+                        .value_parser(value_parser!(bool))
+                        .action(ArgAction::SetTrue),
+                )
+                .arg(
+                    host_arg()
+                        .env(ENV_HOST)
+                        .default_value(&default_host.0)
+                        .help("FIXME"),
+                )
+                .arg(remote_arg().help("FIXME"))
+                .arg(
+                    Arg::new("branch")
+                        .short('b')
+                        .long("branch")
+                        .help("FIXME")
+                        .takes_value(true)
+                        .value_parser(value_parser!(String))
+                        .value_hint(ValueHint::Other),
+                ),
+        )
         .try_get_matches_from(args)
 }
 
@@ -257,6 +296,37 @@ fn specified_workflow<'a>(
                 user,
                 remote,
                 purge_filter,
+            });
+        }
+
+        ("ref", mut matches) => {
+            let remote = Remote::from(
+                matches
+                    .remove_one::<String>("remote")
+                    .expect("default value"),
+            );
+
+            let branch = match matches.remove_one::<String>("branch") {
+                Some(branch) => Ok(Branch::from(branch)),
+                None => git.current_branch(),
+            }?;
+
+            let host = Host::from(matches.remove_one::<String>("host").expect("default value"));
+
+            let on_host = if matches.remove_one::<bool>("other").expect("default value") {
+                WorkflowRefOnHost::Other { ignoring: host }
+            } else {
+                WorkflowRefOnHost::Specific { host }
+            };
+
+            let should_fetch = matches.remove_one::<bool>("fetch").expect("default value");
+
+            return Ok(Workflow::Ref {
+                should_fetch,
+                user,
+                remote,
+                branch,
+                on_host,
             });
         }
 

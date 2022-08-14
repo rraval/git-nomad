@@ -6,7 +6,7 @@ use anyhow::Result;
 
 use crate::{
     git_binary::GitBinary,
-    types::{Host, NomadRef, Remote, User},
+    types::{Branch, Host, NomadRef, Remote, User},
 };
 
 /// A boundary type that separates the CLI interface from high level nomad workflows.
@@ -25,6 +25,13 @@ pub enum Workflow<'a> {
         remote: Remote<'a>,
         purge_filter: PurgeFilter<'a>,
     },
+    Ref {
+        should_fetch: bool,
+        user: User<'a>,
+        remote: Remote<'a>,
+        branch: Branch<'a>,
+        on_host: WorkflowRefOnHost<'a>,
+    },
 }
 
 /// How should local and remote refs be deleted during the `purge` workflow.
@@ -34,6 +41,12 @@ pub enum PurgeFilter<'a> {
     All,
     /// Delete only nomad managed refs for given [`Host`]s under the given [`User`].
     Hosts(HashSet<Host<'a>>),
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum WorkflowRefOnHost<'host> {
+    Specific { host: Host<'host> },
+    Other { ignoring: Host<'host> },
 }
 
 impl Workflow<'_> {
@@ -47,6 +60,7 @@ impl Workflow<'_> {
                 remote,
                 purge_filter,
             } => purge(git, &user, &remote, purge_filter),
+            Self::Ref { .. } => todo!(),
         }
     }
 }

@@ -437,6 +437,18 @@ impl GitBinary<'_> {
         Ok(())
     }
 
+    /// Get the current branch, which may fail if the work tree is in a detached HEAD state.
+    #[cfg(test)]
+    pub fn current_branch(&self) -> Result<Branch<'static>> {
+        let mut command = self.command();
+        command.args(&["symbolic-ref", "--short", "HEAD"]);
+        run_trivial(self.verbosity, "Reading current branch", &mut command)
+            .and_then(output_stdout)
+            .map(LineArity::from)
+            .and_then(LineArity::one)
+            .map(Branch::from)
+    }
+
     /// Create a git branch named `branch_name`.
     #[cfg(test)]
     pub fn create_branch(&self, description: impl AsRef<str>, branch_name: &Branch) -> Result<()> {
@@ -679,10 +691,12 @@ mod test_impl {
 
     use tempfile::{tempdir, TempDir};
 
-    use crate::{git_testing::VERBOSITY, verbosity::run_notable};
+    use crate::{git_testing::VERBOSITY, types::Branch, verbosity::run_notable};
 
     use super::{git_command, GitBinary};
     use anyhow::Result;
+
+    const INITIAL_BRANCH: &str = "branch0";
 
     /// Initializes a git repository in a temporary directory.
     fn git_init() -> Result<(Cow<'static, str>, TempDir)> {
@@ -695,7 +709,7 @@ mod test_impl {
             git_command(&name).current_dir(tmpdir.path()).args(&[
                 "init",
                 "--initial-branch",
-                "branch0",
+                INITIAL_BRANCH,
             ]),
         )?;
 
@@ -754,6 +768,45 @@ mod test_impl {
         let got = git.get_config("key")?;
 
         assert_eq!(got, Some("testvalue".to_string()));
+
+        Ok(())
+    }
+
+    /// Reading the current branch should work as expected, even when the repository is completely
+    /// empty (and hence that branch doesn't have a corresponding commit ID).
+    #[test]
+    fn current_branch() -> Result<()> {
+        let (name, tmpdir) = git_init()?;
+        let git = GitBinary::new(VERBOSITY, name, tmpdir.path())?;
+
+        let branch = git.current_branch()?;
+        assert_eq!(branch, Branch::from(INITIAL_BRANCH));
+
+        Ok(())
+    }
+
+    /// Reading the current branch in a detached HEAD state should be handled as an error.
+    #[test]
+    fn current_branch_in_detached_head() -> Result<()> {
+        let (name, tmpdir) = git_init()?;
+        let git = GitBinary::new(VERBOSITY, name, tmpdir.path())?;
+
+        run_notable(
+            VERBOSITY,
+            "Create an initial commit",
+            git.command()
+                .args(&["commit", "--allow-empty", "-m", "initial commit"]),
+        )?;
+
+        let head = git.get_ref("Get commit ID for HEAD", "HEAD")?;
+        run_notable(
+            VERBOSITY,
+            "Switch to detached HEAD state",
+            git.command().args(&["checkout", &head.commit_id]),
+        )?;
+
+        let branch_result = git.current_branch();
+        assert!(branch_result.is_err());
 
         Ok(())
     }

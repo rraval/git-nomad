@@ -68,7 +68,6 @@ fn cli(
         Arg::new("remote")
             .short('R')
             .long("remote")
-            .next_line_help(true)
             .takes_value(true)
             .value_parser(value_parser!(String))
             .value_hint(ValueHint::Other)
@@ -133,7 +132,6 @@ fn cli(
                 .short('U')
                 .long("user")
                 .help("User name, shared by multiple clones, unique per remote")
-                .next_line_help(true)
                 .takes_value(true)
                 .value_parser(value_parser!(String))
                 .value_hint(ValueHint::Username)
@@ -147,8 +145,7 @@ fn cli(
                     host_arg()
                         .env(ENV_HOST)
                         .default_value(&default_host.0)
-                        .help("Host name to sync with, unique per clone")
-                        .next_line_help(true),
+                        .help("Host name to sync with, unique per clone"),
                 )
                 .arg(remote_arg().help("Git remote to sync refs against")),
         )

@@ -40,7 +40,6 @@ fn main() -> anyhow::Result<()> {
     let mut matches =
         cli(&default_user, &default_host, &mut env::args_os()).unwrap_or_else(|e| e.exit());
     let verbosity = specified_verbosity(&mut matches);
-    // FIXME: Maybe `GitBinary::new` can work with Cow
     let git = GitBinary::new(
         verbosity,
         Cow::from(specified_git(&mut matches)),
@@ -211,9 +210,9 @@ fn specified_workflow<'a, 'user: 'a, 'host: 'a>(
     matches: &'a mut ArgMatches,
     git: &GitBinary,
 ) -> anyhow::Result<Workflow<'a, 'a, 'a>> {
-    let user = Cow::Owned(resolve(matches, "user", || {
+    let user = resolve(matches, "user", || {
         git.get_config(CONFIG_USER).map(|opt| opt.map(User::from))
-    })?);
+    })?;
 
     let (subcommand, matches) = matches
         .remove_subcommand()
@@ -221,9 +220,9 @@ fn specified_workflow<'a, 'user: 'a, 'host: 'a>(
 
     return match (subcommand.as_str(), matches) {
         ("sync", mut matches) => {
-            let host = Cow::Owned(resolve(&mut matches, "host", || {
+            let host = resolve(&mut matches, "host", || {
                 git.get_config(CONFIG_HOST).map(|opt| opt.map(Host::from))
-            })?);
+            })?;
             let remote = Remote::from(
                 matches
                     .remove_one::<String>("remote")
@@ -292,7 +291,7 @@ fn resolve<T: Clone + From<String>>(
 /// End-to-end workflow tests.
 #[cfg(test)]
 mod test_e2e {
-    use std::{borrow::Cow, collections::HashSet, iter::FromIterator};
+    use std::{collections::HashSet, iter::FromIterator};
 
     use crate::{
         git_testing::{GitClone, GitRemote, INITIAL_BRANCH},
@@ -302,8 +301,8 @@ mod test_e2e {
 
     fn sync_host(clone: &GitClone) {
         Workflow::Sync {
-            user: Cow::Borrowed(&clone.user),
-            host: Cow::Borrowed(&clone.host),
+            user: clone.user.always_borrow(),
+            host: clone.host.always_borrow(),
             remote: clone.remote(),
         }
         .execute(&clone.git)
@@ -410,7 +409,7 @@ mod test_e2e {
 
         // pruning refs for host0 from host1
         Workflow::Purge {
-            user: Cow::Borrowed(&host1.user),
+            user: host1.user.always_borrow(),
             remote: host1.remote(),
             purge_filter: PurgeFilter::Hosts(HashSet::from_iter([host0.host.always_borrow()])),
         }
@@ -449,7 +448,7 @@ mod test_e2e {
 
         // pruning refs for all hosts from host1
         Workflow::Purge {
-            user: Cow::Borrowed(&host1.user),
+            user: host1.user.always_borrow(),
             remote: host1.remote(),
             purge_filter: PurgeFilter::All,
         }
@@ -464,7 +463,7 @@ mod test_e2e {
 /// CLI invocation tests
 #[cfg(test)]
 mod test_cli {
-    use std::{borrow::Cow, collections::HashSet, iter::FromIterator};
+    use std::{collections::HashSet, iter::FromIterator};
 
     use clap::{ArgMatches, ErrorKind};
 
@@ -613,7 +612,7 @@ mod test_cli {
         assert_eq!(
             cli_test.remote(&["ls"]).workflow(),
             Workflow::Ls {
-                user: Cow::Borrowed(&cli_test.default_user),
+                user: cli_test.default_user.always_borrow(),
             },
         );
     }
@@ -624,7 +623,7 @@ mod test_cli {
         assert_eq!(
             cli_test.remote(&["ls", "-U", "explicit_user"]).workflow(),
             Workflow::Ls {
-                user: Cow::Owned(User::from("explicit_user")),
+                user: User::from("explicit_user"),
             },
         );
     }
@@ -638,7 +637,7 @@ mod test_cli {
                 .set_config(CONFIG_USER, "config_user")
                 .workflow(),
             Workflow::Ls {
-                user: Cow::Owned(User::from("config_user")),
+                user: User::from("config_user"),
             },
         );
     }
@@ -655,8 +654,8 @@ mod test_cli {
             assert_eq!(
                 cli_test.remote(*args).workflow(),
                 Workflow::Sync {
-                    user: Cow::Owned(User::from("user0")),
-                    host: Cow::Owned(Host::from("host0")),
+                    user: User::from("user0"),
+                    host: Host::from("host0"),
                     remote: Remote::from("remote"),
                 },
             );
@@ -674,8 +673,8 @@ mod test_cli {
                 .set_config(CONFIG_HOST, "host0")
                 .workflow(),
             Workflow::Sync {
-                user: Cow::Owned(User::from("user0")),
-                host: Cow::Owned(Host::from("host0")),
+                user: User::from("user0"),
+                host: Host::from("host0"),
                 remote: DEFAULT_REMOTE.clone(),
             }
         );
@@ -688,8 +687,8 @@ mod test_cli {
         assert_eq!(
             cli_test.remote(&["sync"]).workflow(),
             Workflow::Sync {
-                user: Cow::Borrowed(&cli_test.default_user),
-                host: Cow::Borrowed(&cli_test.default_host),
+                user: cli_test.default_user.always_borrow(),
+                host: cli_test.default_host.always_borrow(),
                 remote: DEFAULT_REMOTE.clone(),
             }
         );
@@ -701,7 +700,7 @@ mod test_cli {
         assert_eq!(
             cli_test.remote(&["purge", "--all"]).workflow(),
             Workflow::Purge {
-                user: Cow::Borrowed(&cli_test.default_user),
+                user: cli_test.default_user.always_borrow(),
                 remote: DEFAULT_REMOTE.clone(),
                 purge_filter: PurgeFilter::All,
             }
@@ -724,7 +723,7 @@ mod test_cli {
                 ])
                 .workflow(),
             Workflow::Purge {
-                user: Cow::Borrowed(&cli_test.default_user),
+                user: cli_test.default_user.always_borrow(),
                 remote: Remote::from("remote"),
                 purge_filter: PurgeFilter::Hosts(HashSet::from_iter(
                     ["host0", "host1", "host2"].map(Host::from)

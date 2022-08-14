@@ -1,6 +1,6 @@
 //! High level user invoked workflows for nomad.
 
-use std::{borrow::Cow, collections::HashSet};
+use std::collections::HashSet;
 
 use anyhow::Result;
 
@@ -13,15 +13,15 @@ use crate::{
 #[derive(Debug, PartialEq, Eq)]
 pub enum Workflow<'user, 'host, 'remote> {
     Sync {
-        user: Cow<'user, User<'user>>,
-        host: Cow<'host, Host<'host>>,
+        user: User<'user>,
+        host: Host<'host>,
         remote: Remote<'remote>,
     },
     Ls {
-        user: Cow<'user, User<'user>>,
+        user: User<'user>,
     },
     Purge {
-        user: Cow<'user, User<'user>>,
+        user: User<'user>,
         remote: Remote<'remote>,
         purge_filter: PurgeFilter<'host>,
     },

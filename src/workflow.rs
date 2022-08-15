@@ -11,32 +11,32 @@ use crate::{
 
 /// A boundary type that separates the CLI interface from high level nomad workflows.
 #[derive(Debug, PartialEq, Eq)]
-pub enum Workflow<'user, 'host, 'remote> {
+pub enum Workflow<'a> {
     Sync {
-        user: User<'user>,
-        host: Host<'host>,
-        remote: Remote<'remote>,
+        user: User<'a>,
+        host: Host<'a>,
+        remote: Remote<'a>,
     },
     Ls {
-        user: User<'user>,
+        user: User<'a>,
     },
     Purge {
-        user: User<'user>,
-        remote: Remote<'remote>,
-        purge_filter: PurgeFilter<'host>,
+        user: User<'a>,
+        remote: Remote<'a>,
+        purge_filter: PurgeFilter<'a>,
     },
 }
 
 /// How should local and remote refs be deleted during the `purge` workflow.
 #[derive(Debug, PartialEq, Eq)]
-pub enum PurgeFilter<'host> {
+pub enum PurgeFilter<'a> {
     /// Delete all nomad managed refs for the given [`User`].
     All,
     /// Delete only nomad managed refs for given [`Host`]s under the given [`User`].
-    Hosts(HashSet<Host<'host>>),
+    Hosts(HashSet<Host<'a>>),
 }
 
-impl<'user> Workflow<'user, '_, '_> {
+impl Workflow<'_> {
     /// Imperatively execute the workflow.
     pub fn execute(self, git: &GitBinary) -> Result<()> {
         match self {
@@ -91,12 +91,7 @@ fn ls(git: &GitBinary, user: &User) -> Result<()> {
 }
 
 /// Delete nomad managed refs returned by `to_prune`.
-fn purge<'user>(
-    git: &GitBinary,
-    user: &'user User,
-    remote: &Remote,
-    purge_filter: PurgeFilter,
-) -> Result<()> {
+fn purge(git: &GitBinary, user: &User, remote: &Remote, purge_filter: PurgeFilter) -> Result<()> {
     git.fetch_nomad_refs(user, remote)?;
     let snapshot = git.snapshot(user)?;
     let prune = match purge_filter {

@@ -5,34 +5,34 @@ use crate::types::{Branch, Host, NomadRef, RemoteNomadRefSet, User};
 /// A point in time view of refs we care about. [`Snapshot`] is only for local branches and refs
 /// and thus is scoped under a specific [`User`].
 #[allow(clippy::manual_non_exhaustive)]
-pub struct Snapshot<'user, 'host, Ref> {
+pub struct Snapshot<'a, Ref> {
     /// The active branches in this clone that the user manipulates directly with `git branch` etc.
     pub local_branches: HashSet<Branch<'static>>,
     /// The refs that nomad manages to follow the local branches.
-    pub nomad_refs: Vec<NomadRef<'user, 'host, 'static, Ref>>,
+    pub nomad_refs: Vec<NomadRef<'a, Ref>>,
     /// Force all callers to go through [`Snapshot::new`] which can validate invariants.
     _private: (),
 }
 
 /// Describes where a ref should be removed from.
 #[derive(Debug, PartialEq, Eq)]
-pub enum PruneFrom<'user, 'host, Ref> {
-    LocalOnly(NomadRef<'user, 'host, 'static, Ref>),
-    LocalAndRemote(NomadRef<'user, 'host, 'static, Ref>),
+pub enum PruneFrom<'a, Ref> {
+    LocalOnly(NomadRef<'a, Ref>),
+    LocalAndRemote(NomadRef<'a, Ref>),
 }
 
-impl<Ref> Snapshot<'_, '_, Ref> {
+impl<Ref> Snapshot<'_, Ref> {
     /// Smart constructor that enforces the "scoped under a specific [`User`]" invariant.
     ///
     /// # Panics
     ///
     /// If `nomad_refs` points to a different [`User`] than the `user` passed in. This indicates
     /// serious programmer error.
-    pub fn new<'user>(
-        user: &'user User,
+    pub fn new<'a>(
+        user: &'a User,
         local_branches: HashSet<Branch<'static>>,
-        nomad_refs: Vec<NomadRef<'user, 'static, 'static, Ref>>,
-    ) -> Snapshot<'user, 'static, Ref> {
+        nomad_refs: Vec<NomadRef<'a, Ref>>,
+    ) -> Snapshot<'a, Ref> {
         for nomad_ref in &nomad_refs {
             assert_eq!(user, &nomad_ref.user);
         }
@@ -45,7 +45,7 @@ impl<Ref> Snapshot<'_, '_, Ref> {
     }
 }
 
-impl<'user, 'host, Ref> Snapshot<'user, 'host, Ref> {
+impl<'a, Ref> Snapshot<'a, Ref> {
     /// Find nomad host branches that can be pruned because:
     /// 1. The local branch they were based on no longer exists.
     /// 2. The remote branch they were based on no longer exists.
@@ -53,7 +53,7 @@ impl<'user, 'host, Ref> Snapshot<'user, 'host, Ref> {
         self,
         host: &Host,
         remote_nomad_refs: &RemoteNomadRefSet,
-    ) -> Vec<PruneFrom<'user, 'host, Ref>> {
+    ) -> Vec<PruneFrom<'a, Ref>> {
         let Self {
             nomad_refs,
             local_branches,
@@ -76,7 +76,7 @@ impl<'user, 'host, Ref> Snapshot<'user, 'host, Ref> {
     }
 
     /// Return all nomad branches regardless of host.
-    pub fn prune_all(self) -> Vec<PruneFrom<'user, 'host, Ref>> {
+    pub fn prune_all(self) -> Vec<PruneFrom<'a, Ref>> {
         let Self { nomad_refs, .. } = self;
         nomad_refs
             .into_iter()
@@ -85,7 +85,7 @@ impl<'user, 'host, Ref> Snapshot<'user, 'host, Ref> {
     }
 
     /// Return all nomad branches for specific hosts.
-    pub fn prune_all_by_hosts(self, hosts: &HashSet<Host>) -> Vec<PruneFrom<'user, 'host, Ref>> {
+    pub fn prune_all_by_hosts(self, hosts: &HashSet<Host>) -> Vec<PruneFrom<'a, Ref>> {
         let Self { nomad_refs, .. } = self;
         nomad_refs
             .into_iter()
@@ -100,9 +100,7 @@ impl<'user, 'host, Ref> Snapshot<'user, 'host, Ref> {
     }
 
     /// Return all [`NomadRef`]s grouped by host in sorted order.
-    pub fn sorted_hosts_and_branches(
-        self,
-    ) -> Vec<(Host<'host>, Vec<NomadRef<'user, 'host, 'static, Ref>>)> {
+    pub fn sorted_hosts_and_branches(self) -> Vec<(Host<'a>, Vec<NomadRef<'a, Ref>>)> {
         let mut by_host = HashMap::<Host, Vec<NomadRef<Ref>>>::new();
         let Self { nomad_refs, .. } = self;
 
@@ -134,10 +132,10 @@ mod tests {
 
     use super::{Branch, NomadRef, PruneFrom, Snapshot};
 
-    fn snapshot<'user>(
-        user: &'user User,
+    fn snapshot<'a>(
+        user: &'a User,
         local_branches: impl IntoIterator<Item = &'static str>,
-    ) -> Snapshot<'user, 'static, ()> {
+    ) -> Snapshot<'a, ()> {
         Snapshot::new(
             user,
             local_branches.into_iter().map(Branch::from).collect(),

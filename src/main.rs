@@ -207,10 +207,10 @@ fn specified_git(matches: &mut ArgMatches) -> String {
 /// # Panics
 ///
 /// If [`clap`] does not prevent certain assumed invalid states.
-fn specified_workflow<'a, 'user: 'a, 'host: 'a>(
+fn specified_workflow<'a>(
     matches: &'a mut ArgMatches,
     git: &GitBinary,
-) -> anyhow::Result<Workflow<'a, 'a, 'a>> {
+) -> anyhow::Result<Workflow<'a>> {
     let user = resolve(matches, "user", || {
         git.get_config(CONFIG_USER).map(|opt| opt.map(User::from))
     })?;
@@ -484,7 +484,7 @@ mod test_cli {
     }
 
     impl CliTest {
-        fn matches<'a>(&'a self, args: &[&str]) -> clap::Result<ArgMatches> {
+        fn matches(&self, args: &[&str]) -> clap::Result<ArgMatches> {
             let mut vec = vec!["git-nomad"];
             vec.extend_from_slice(args);
             cli(&self.default_user, &self.default_host, &vec)
@@ -509,7 +509,7 @@ mod test_cli {
             self
         }
 
-        fn workflow(&mut self) -> Workflow<'_, '_, '_> {
+        fn workflow(&mut self) -> Workflow<'_> {
             specified_workflow(&mut self.matches, &self.remote.git).unwrap()
         }
     }

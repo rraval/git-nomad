@@ -38,10 +38,8 @@ impl From<GitRef> for GitCommitId {
     }
 }
 
-impl<'user, 'host, 'branch> From<NomadRef<'user, 'host, 'branch, GitRef>>
-    for NomadRef<'user, 'host, 'branch, GitCommitId>
-{
-    fn from(nomad_ref: NomadRef<'user, 'host, 'branch, GitRef>) -> Self {
+impl<'a> From<NomadRef<'a, GitRef>> for NomadRef<'a, GitCommitId> {
+    fn from(nomad_ref: NomadRef<'a, GitRef>) -> Self {
         Self {
             user: nomad_ref.user,
             host: nomad_ref.host,
@@ -179,12 +177,12 @@ impl<'a> GitClone<'a> {
     }
 
     /// Delete the nomad managed refs backed by `branch_names` from both the local and remote.
-    pub fn prune_local_and_remote<'b, B: IntoIterator<Item = &'b str>>(&'a self, branch_names: B) {
+    pub fn prune_local_and_remote(&'a self, branch_names: impl IntoIterator<Item = &'a str>) {
         let prune_from = branch_names.into_iter().map(|name| {
             let nomad_ref = NomadRef::<()> {
                 user: self.user.always_borrow(),
                 host: self.host.always_borrow(),
-                branch: Branch::from(name.to_string()),
+                branch: Branch::from(name),
                 ref_: (),
             };
 
@@ -206,10 +204,7 @@ impl<'a> GitClone<'a> {
     }
 
     /// Resolve a specific nomad managed ref in the local clone by `branch` name.
-    pub fn get_nomad_ref<'branch>(
-        &'a self,
-        branch: &'branch str,
-    ) -> Option<NomadRef<'a, 'a, 'branch, GitCommitId>> {
+    pub fn get_nomad_ref(&'a self, branch: &'a str) -> Option<NomadRef<'a, GitCommitId>> {
         self.git
             .get_ref("", format!("refs/heads/{}", branch))
             .ok()

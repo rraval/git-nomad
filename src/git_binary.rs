@@ -83,7 +83,7 @@ mod namespace {
         )
     }
 
-    impl<'user, 'host, 'branch, Ref> NomadRef<'user, 'host, 'branch, Ref> {
+    impl<Ref> NomadRef<'_, Ref> {
         /// A nomad ref in the local clone, which elides the user name for convenience.
         #[cfg(test)]
         pub fn to_git_local_ref(&self) -> String {
@@ -100,13 +100,13 @@ mod namespace {
         }
     }
 
-    impl NomadRef<'_, '_, '_, GitRef> {
+    impl NomadRef<'_, GitRef> {
         /// Constructs a [`NomadRef`] from a git ref in the local clone, which elides the user name
         /// for convenience.
-        pub fn from_git_local_ref<'user>(
-            user: &'user User,
+        pub fn from_git_local_ref<'a>(
+            user: &'a User,
             git_ref: GitRef,
-        ) -> Result<NomadRef<'user, 'static, 'static, GitRef>, GitRef> {
+        ) -> Result<NomadRef<'a, GitRef>, GitRef> {
             let parts = git_ref.name.split('/').collect::<Vec<_>>();
             match parts.as_slice() {
                 ["refs", prefix, host, branch_name] => {
@@ -127,9 +127,7 @@ mod namespace {
 
         /// Constructs a [`NomadRef`] from a git ref in the remote, which includes the user as part
         /// of the ref name.
-        pub fn from_git_remote_ref(
-            git_ref: GitRef,
-        ) -> Result<NomadRef<'static, 'static, 'static, GitRef>, GitRef> {
+        pub fn from_git_remote_ref(git_ref: GitRef) -> Result<NomadRef<'static, GitRef>, GitRef> {
             let parts = git_ref.name.split('/').collect::<Vec<_>>();
             match parts.as_slice() {
                 ["refs", prefix, user, host, branch_name] => {
@@ -241,11 +239,7 @@ pub struct GitBinary<'name> {
 impl<'name> GitBinary<'name> {
     /// Create a new [`GitBinary`] by finding the `.git` dir relative to `cwd`, which implements
     /// the usual git rules of searching ancestor directories.
-    pub fn new(
-        verbosity: Option<Verbosity>,
-        name: Cow<'name, str>,
-        cwd: &Path,
-    ) -> Result<GitBinary<'name>> {
+    pub fn new(verbosity: Option<Verbosity>, name: Cow<'name, str>, cwd: &Path) -> Result<Self> {
         let git_dir = run_trivial(
             verbosity,
             "Resolving .git directory",
@@ -263,7 +257,9 @@ impl<'name> GitBinary<'name> {
             git_dir,
         })
     }
+}
 
+impl GitBinary<'_> {
     /// Invoke a git sub-command with an explicit `--git-dir` to make it independent of the working
     /// directory it is invoked from.
     fn command(&self) -> Command {
@@ -466,11 +462,11 @@ impl<'name> GitBinary<'name> {
 
     /// Build a point in time snapshot for all refs that nomad cares about from the state in the
     /// local git clone.
-    pub fn snapshot<'user>(&self, user: &'user User) -> Result<Snapshot<'user, 'static, GitRef>> {
+    pub fn snapshot<'a>(&self, user: &'a User) -> Result<Snapshot<'a, GitRef>> {
         let refs = self.list_refs("Fetching all refs")?;
 
         let mut local_branches = HashSet::<Branch>::new();
-        let mut nomad_refs = Vec::<NomadRef<'static, 'static, 'static, GitRef>>::new();
+        let mut nomad_refs = Vec::<NomadRef<'a, GitRef>>::new();
 
         for r in refs {
             if let Some(name) = r.name.strip_prefix("refs/heads/") {
@@ -529,10 +525,10 @@ impl<'name> GitBinary<'name> {
     }
 
     /// Delete the given nomad managed refs.
-    pub fn prune_nomad_refs<'user, 'host>(
+    pub fn prune_nomad_refs<'a>(
         &self,
         remote: &Remote,
-        prune: impl Iterator<Item = PruneFrom<'user, 'host, GitRef>>,
+        prune: impl Iterator<Item = PruneFrom<'a, GitRef>>,
     ) -> Result<()> {
         let mut refspecs = Vec::<String>::new();
         let mut refs = Vec::<GitRef>::new();

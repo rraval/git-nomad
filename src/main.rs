@@ -64,17 +64,6 @@ fn cli(
     default_host: &Host,
     args: impl IntoIterator<Item = impl Into<OsString> + Clone>,
 ) -> clap::Result<ArgMatches> {
-    let remote_arg = || {
-        Arg::new("remote")
-            .short('R')
-            .long("remote")
-            .takes_value(true)
-            .value_parser(value_parser!(String))
-            .value_hint(ValueHint::Other)
-            .env(ENV_REMOTE)
-            .default_value(&DEFAULT_REMOTE.0)
-    };
-
     let host_arg = || {
         Arg::new("host")
             .short('H')
@@ -138,6 +127,18 @@ fn cli(
                 .env(ENV_USER)
                 .default_value(&default_user.0),
         )
+        .arg(
+            Arg::new("remote")
+                .global(true)
+                .short('R')
+                .long("remote")
+                .help("Git remote to operate against")
+                .takes_value(true)
+                .value_parser(value_parser!(String))
+                .value_hint(ValueHint::Other)
+                .env(ENV_REMOTE)
+                .default_value(&DEFAULT_REMOTE.0),
+        )
         .subcommand(
             Command::new("sync")
                 .about("Sync local branches to remote")
@@ -146,10 +147,19 @@ fn cli(
                         .env(ENV_HOST)
                         .default_value(&default_host.0)
                         .help("Host name to sync with, unique per clone"),
-                )
-                .arg(remote_arg().help("Git remote to sync refs against")),
+                ),
         )
-        .subcommand(Command::new("ls").about("List refs for all hosts"))
+        .subcommand(
+            Command::new("ls").about("List refs for all hosts").arg(
+                Arg::new("fetch")
+                    .short('F')
+                    .long("fetch")
+                    .help("Fetch refs from remote before listing")
+                    .takes_value(true)
+                    .value_parser(value_parser!(bool))
+                    .action(ArgAction::SetTrue),
+            ),
+        )
         .subcommand(
             Command::new("purge")
                 .about("Delete nomad refs locally and on the remote")
@@ -174,8 +184,7 @@ fn cli(
                     ArgGroup::new("host_group")
                         .args(&["all", "host"])
                         .required(true),
-                )
-                .arg(remote_arg().help("Git remote to delete refs from")),
+                ),
         )
         .try_get_matches_from(args)
 }
@@ -215,6 +224,12 @@ fn specified_workflow<'a>(
         git.get_config(CONFIG_USER).map(|opt| opt.map(User::from))
     })?;
 
+    let remote = Remote::from(
+        matches
+            .remove_one::<String>("remote")
+            .expect("default value"),
+    );
+
     let (subcommand, matches) = matches
         .remove_subcommand()
         .expect("subcommand is mandatory");
@@ -224,16 +239,18 @@ fn specified_workflow<'a>(
             let host = resolve(&mut matches, "host", || {
                 git.get_config(CONFIG_HOST).map(|opt| opt.map(Host::from))
             })?;
-            let remote = Remote::from(
-                matches
-                    .remove_one::<String>("remote")
-                    .expect("<remote> is a required argument"),
-            );
 
             Ok(Workflow::Sync { user, host, remote })
         }
 
-        ("ls", _) => Ok(Workflow::Ls { user }),
+        ("ls", mut matches) => Ok(Workflow::Ls {
+            user,
+            fetch_remote: if matches.remove_one::<bool>("fetch").expect("has default") {
+                Some(remote)
+            } else {
+                None
+            },
+        }),
 
         ("purge", mut matches) => {
             let remote = Remote::from(
@@ -614,6 +631,47 @@ mod test_cli {
             cli_test.remote(&["ls"]).workflow(),
             Workflow::Ls {
                 user: cli_test.default_user.always_borrow(),
+                fetch_remote: None,
+            },
+        );
+    }
+
+    #[test]
+    fn ls_fetch_remote_default() {
+        let cli_test = CliTest::default();
+        assert_eq!(
+            cli_test.remote(&["ls", "--fetch"]).workflow(),
+            Workflow::Ls {
+                user: cli_test.default_user.always_borrow(),
+                fetch_remote: Some(DEFAULT_REMOTE),
+            },
+        );
+    }
+
+    #[test]
+    fn ls_fetch_remote_global() {
+        let cli_test = CliTest::default();
+        assert_eq!(
+            cli_test
+                .remote(&["--remote", "foo", "ls", "--fetch"])
+                .workflow(),
+            Workflow::Ls {
+                user: cli_test.default_user.always_borrow(),
+                fetch_remote: Some(Remote::from("foo")),
+            },
+        );
+    }
+
+    #[test]
+    fn ls_fetch_remote_local() {
+        let cli_test = CliTest::default();
+        assert_eq!(
+            cli_test
+                .remote(&["ls", "--fetch", "--remote", "foo"])
+                .workflow(),
+            Workflow::Ls {
+                user: cli_test.default_user.always_borrow(),
+                fetch_remote: Some(Remote::from("foo")),
             },
         );
     }
@@ -625,6 +683,7 @@ mod test_cli {
             cli_test.remote(&["ls", "-U", "explicit_user"]).workflow(),
             Workflow::Ls {
                 user: User::from("explicit_user"),
+                fetch_remote: None,
             },
         );
     }
@@ -639,6 +698,7 @@ mod test_cli {
                 .workflow(),
             Workflow::Ls {
                 user: User::from("config_user"),
+                fetch_remote: None,
             },
         );
     }

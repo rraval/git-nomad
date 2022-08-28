@@ -19,6 +19,7 @@ pub enum Workflow<'a> {
     },
     Ls {
         user: User<'a>,
+        fetch_remote: Option<Remote<'a>>,
     },
     Purge {
         user: User<'a>,
@@ -32,7 +33,7 @@ impl Workflow<'_> {
     pub fn execute(self, git: &GitBinary) -> Result<()> {
         match self {
             Self::Sync { user, host, remote } => sync(git, &user, &host, &remote),
-            Self::Ls { user } => ls(git, &user),
+            Self::Ls { user, fetch_remote } => ls(git, &user, fetch_remote),
             Self::Purge {
                 user,
                 remote,
@@ -75,7 +76,7 @@ fn sync(git: &GitBinary, user: &User, host: &Host, remote: &Remote) -> Result<()
 
     if git.is_output_allowed() {
         println!();
-        ls(git, user)?
+        ls(git, user, None)?
     }
 
     Ok(())
@@ -85,7 +86,11 @@ fn sync(git: &GitBinary, user: &User, host: &Host, remote: &Remote) -> Result<()
 ///
 /// Does not respect [`Progress::is_output_allowed`] because output is the whole point of this
 /// command.
-fn ls(git: &GitBinary, user: &User) -> Result<()> {
+fn ls(git: &GitBinary, user: &User, fetch_remote: Option<Remote>) -> Result<()> {
+    if let Some(remote) = fetch_remote {
+        git.fetch_nomad_refs(user, &remote)?;
+    }
+
     let snapshot = git.snapshot(user)?;
 
     for (host, branches) in snapshot.sorted_hosts_and_branches() {

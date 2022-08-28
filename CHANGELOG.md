@@ -13,9 +13,14 @@ However, the output of the application is designed for humans, not machines, and
 
 ## [Unreleased]
 
+### Added
+
+- `purge` now takes the `<remote>` to delete refs from.
+- `ls` gained a `--fetch` option to fetch refs from the `<remote>` before listing.
+
 ### Changed
 
-- `purge` and `sync` subcommands now take the `<remote>` as an option via `-R` or `--remote` or the `GIT_NOMAD_REMOTE` environment variable. Previously, this was an optional positional argument.
+- `<remote>` is now a global option instead of a positional argument. It can be specified via `-R`, `--remote`, or the `GIT_NOMAD_REMOTE` environment variable. It influences the git remote that `ls`, `sync`, `purge` operate on.
 - Cosmetic tweaks to how command failures are reported.
 
 ## [0.5.0] - 2022-01-15

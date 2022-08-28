@@ -17,6 +17,7 @@ However, the output of the application is designed for humans, not machines, and
 
 - `purge` now takes the `<remote>` to delete refs from.
 - `ls` gained a `--fetch` option to fetch refs from the `<remote>` before listing.
+- `ls` gained a `--style` option to choose how output should be printed.
 
 ### Changed
 

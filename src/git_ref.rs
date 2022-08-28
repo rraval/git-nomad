@@ -1,9 +1,6 @@
 //! See [`GitRef`] for the primary entry point.
 
-use std::{
-    error::Error,
-    fmt::{self, Display},
-};
+use std::{error::Error, fmt};
 
 /// Information about a specific ref in a git repository, analogous to the information
 /// that `git show-ref` produces.
@@ -17,12 +14,6 @@ pub struct GitRef {
     pub commit_id: String,
     /// The full ref name, like `refs/heads/master`.
     pub name: String,
-}
-
-impl Display for GitRef {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} -> {}", self.name, self.commit_id)
-    }
 }
 
 /// All the ways a `git show-ref` line can fail to parse.

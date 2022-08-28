@@ -6,6 +6,7 @@ use anyhow::Result;
 
 use crate::{
     git_binary::GitBinary,
+    git_ref::GitRef,
     types::{Host, NomadRef, Remote, User},
 };
 
@@ -18,6 +19,7 @@ pub enum Workflow<'a> {
         remote: Remote<'a>,
     },
     Ls {
+        style: LsStyle,
         user: User<'a>,
         fetch_remote: Option<Remote<'a>>,
     },
@@ -33,7 +35,11 @@ impl Workflow<'_> {
     pub fn execute(self, git: &GitBinary) -> Result<()> {
         match self {
             Self::Sync { user, host, remote } => sync(git, &user, &host, &remote),
-            Self::Ls { user, fetch_remote } => ls(git, &user, fetch_remote),
+            Self::Ls {
+                style,
+                user,
+                fetch_remote,
+            } => ls(git, style, &user, fetch_remote),
             Self::Purge {
                 user,
                 remote,
@@ -61,6 +67,30 @@ impl<T: PartialEq + Eq + Hash> Filter<T> {
     }
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum LsStyle {
+    Grouped,
+    Ref,
+    Commit,
+}
+
+impl LsStyle {
+    pub fn print_host(self, host: &Host) {
+        match self {
+            Self::Grouped => println!("{}", host.0),
+            Self::Ref | Self::Commit => (),
+        }
+    }
+
+    pub fn print_ref(self, ref_: &GitRef) {
+        match self {
+            Self::Grouped => println!("  {} -> {}", ref_.name, ref_.commit_id),
+            Self::Ref => println!("{}", ref_.name),
+            Self::Commit => println!("{}", ref_.commit_id),
+        }
+    }
+}
+
 /// Synchronize current local branches with nomad managed refs in the given remote.
 fn sync(git: &GitBinary, user: &User, host: &Host, remote: &Remote) -> Result<()> {
     git.push_nomad_refs(user, host, remote)?;
@@ -76,7 +106,7 @@ fn sync(git: &GitBinary, user: &User, host: &Host, remote: &Remote) -> Result<()
 
     if git.is_output_allowed() {
         println!();
-        ls(git, user, None)?
+        ls(git, LsStyle::Grouped, user, None)?
     }
 
     Ok(())
@@ -86,7 +116,7 @@ fn sync(git: &GitBinary, user: &User, host: &Host, remote: &Remote) -> Result<()
 ///
 /// Does not respect [`Progress::is_output_allowed`] because output is the whole point of this
 /// command.
-fn ls(git: &GitBinary, user: &User, fetch_remote: Option<Remote>) -> Result<()> {
+fn ls(git: &GitBinary, style: LsStyle, user: &User, fetch_remote: Option<Remote>) -> Result<()> {
     if let Some(remote) = fetch_remote {
         git.fetch_nomad_refs(user, &remote)?;
     }
@@ -94,10 +124,10 @@ fn ls(git: &GitBinary, user: &User, fetch_remote: Option<Remote>) -> Result<()> 
     let snapshot = git.snapshot(user)?;
 
     for (host, branches) in snapshot.sorted_hosts_and_branches() {
-        println!("{}", host.0);
+        style.print_host(&host);
 
         for NomadRef { ref_, .. } in branches {
-            println!("  {}", ref_);
+            style.print_ref(&ref_);
         }
     }
 

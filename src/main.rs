@@ -6,7 +6,7 @@ use std::{
 
 use clap::{
     crate_authors, crate_description, crate_name, crate_version, value_parser, Arg, ArgAction,
-    ArgGroup, ArgMatches, Command, ValueHint, ValueSource,
+    ArgGroup, ArgMatches, Command, PossibleValue, ValueHint, ValueSource,
 };
 use git_version::git_version;
 use verbosity::Verbosity;
@@ -14,7 +14,7 @@ use verbosity::Verbosity;
 use crate::{
     git_binary::GitBinary,
     types::{Host, Remote, User},
-    workflow::{Filter, Workflow},
+    workflow::{Filter, LsStyle, Workflow},
 };
 
 mod git_binary;
@@ -150,15 +150,31 @@ fn cli(
                 ),
         )
         .subcommand(
-            Command::new("ls").about("List refs for all hosts").arg(
-                Arg::new("fetch")
-                    .short('F')
-                    .long("fetch")
-                    .help("Fetch refs from remote before listing")
-                    .takes_value(true)
-                    .value_parser(value_parser!(bool))
-                    .action(ArgAction::SetTrue),
-            ),
+            Command::new("ls")
+                .about("List refs for all hosts")
+                .arg(
+                    Arg::new("fetch")
+                        .short('F')
+                        .long("fetch")
+                        .help("Fetch refs from remote before listing")
+                        .takes_value(true)
+                        .value_parser(value_parser!(bool))
+                        .action(ArgAction::SetTrue),
+                )
+                .arg(
+                    Arg::new("style")
+                        .short('s')
+                        .long("style")
+                        .help("Format for listing nomad managed refs")
+                        .takes_value(true)
+                        .value_parser([
+                            PossibleValue::new("grouped")
+                                .help("Print ref name and commit ID grouped by host"),
+                            PossibleValue::new("ref").help("Print only the ref name"),
+                            PossibleValue::new("commit").help("Print only the commit ID"),
+                        ])
+                        .default_value("grouped"),
+                ),
         )
         .subcommand(
             Command::new("purge")
@@ -244,6 +260,16 @@ fn specified_workflow<'a>(
         }
 
         ("ls", mut matches) => Ok(Workflow::Ls {
+            style: match matches
+                .remove_one::<String>("style")
+                .expect("has default")
+                .as_str()
+            {
+                "grouped" => LsStyle::Grouped,
+                "ref" => LsStyle::Ref,
+                "commit" => LsStyle::Commit,
+                _ => unreachable!("has possible values"),
+            },
             user,
             fetch_remote: if matches.remove_one::<bool>("fetch").expect("has default") {
                 Some(remote)
@@ -491,7 +517,7 @@ mod test_cli {
         specified_git, specified_verbosity, specified_workflow,
         types::{Host, Remote, User},
         verbosity::Verbosity,
-        workflow::{Filter, Workflow},
+        workflow::{Filter, LsStyle, Workflow},
         CONFIG_HOST, CONFIG_USER, DEFAULT_REMOTE,
     };
 
@@ -630,6 +656,7 @@ mod test_cli {
         assert_eq!(
             cli_test.remote(&["ls"]).workflow(),
             Workflow::Ls {
+                style: LsStyle::Grouped,
                 user: cli_test.default_user.always_borrow(),
                 fetch_remote: None,
             },
@@ -642,6 +669,7 @@ mod test_cli {
         assert_eq!(
             cli_test.remote(&["ls", "--fetch"]).workflow(),
             Workflow::Ls {
+                style: LsStyle::Grouped,
                 user: cli_test.default_user.always_borrow(),
                 fetch_remote: Some(DEFAULT_REMOTE),
             },
@@ -656,6 +684,7 @@ mod test_cli {
                 .remote(&["--remote", "foo", "ls", "--fetch"])
                 .workflow(),
             Workflow::Ls {
+                style: LsStyle::Grouped,
                 user: cli_test.default_user.always_borrow(),
                 fetch_remote: Some(Remote::from("foo")),
             },
@@ -670,10 +699,74 @@ mod test_cli {
                 .remote(&["ls", "--fetch", "--remote", "foo"])
                 .workflow(),
             Workflow::Ls {
+                style: LsStyle::Grouped,
                 user: cli_test.default_user.always_borrow(),
                 fetch_remote: Some(Remote::from("foo")),
             },
         );
+    }
+
+    #[test]
+    fn ls_style_grouped() {
+        for args in &[
+            &["ls", "--style", "grouped"] as &[&str],
+            &["ls", "--style=grouped"],
+            &["ls", "-s", "grouped"],
+        ] {
+            println!("{:?}", args);
+
+            let cli_test = CliTest::default();
+            assert_eq!(
+                cli_test.remote(args).workflow(),
+                Workflow::Ls {
+                    style: LsStyle::Grouped,
+                    user: cli_test.default_user.always_borrow(),
+                    fetch_remote: None,
+                },
+            );
+        }
+    }
+
+    #[test]
+    fn ls_style_ref() {
+        for args in &[
+            &["ls", "--style", "ref"] as &[&str],
+            &["ls", "--style=ref"],
+            &["ls", "-s", "ref"],
+        ] {
+            println!("{:?}", args);
+
+            let cli_test = CliTest::default();
+            assert_eq!(
+                cli_test.remote(args).workflow(),
+                Workflow::Ls {
+                    style: LsStyle::Ref,
+                    user: cli_test.default_user.always_borrow(),
+                    fetch_remote: None,
+                },
+            );
+        }
+    }
+
+    #[test]
+    fn ls_style_commit() {
+        for args in &[
+            &["ls", "--style", "commit"] as &[&str],
+            &["ls", "--style=commit"],
+            &["ls", "-s", "commit"],
+        ] {
+            println!("{:?}", args);
+
+            let cli_test = CliTest::default();
+            assert_eq!(
+                cli_test.remote(args).workflow(),
+                Workflow::Ls {
+                    style: LsStyle::Commit,
+                    user: cli_test.default_user.always_borrow(),
+                    fetch_remote: None,
+                },
+            );
+        }
     }
 
     #[test]
@@ -682,6 +775,7 @@ mod test_cli {
         assert_eq!(
             cli_test.remote(&["ls", "-U", "explicit_user"]).workflow(),
             Workflow::Ls {
+                style: LsStyle::Grouped,
                 user: User::from("explicit_user"),
                 fetch_remote: None,
             },
@@ -697,6 +791,7 @@ mod test_cli {
                 .set_config(CONFIG_USER, "config_user")
                 .workflow(),
             Workflow::Ls {
+                style: LsStyle::Grouped,
                 user: User::from("config_user"),
                 fetch_remote: None,
             },

@@ -11,7 +11,7 @@ use clap::{
 use git_version::git_version;
 use types::Branch;
 use verbosity::Verbosity;
-use workflow::WorkflowRefOnHost;
+use workflow::ForHost;
 
 use crate::{
     git_binary::GitBinary,
@@ -313,10 +313,10 @@ fn specified_workflow<'a>(
 
             let host = Host::from(matches.remove_one::<String>("host").expect("default value"));
 
-            let on_host = if matches.remove_one::<bool>("other").expect("default value") {
-                WorkflowRefOnHost::Other { ignoring: host }
+            let for_host = if matches.remove_one::<bool>("other").expect("default value") {
+                ForHost::Other { ignoring: host }
             } else {
-                WorkflowRefOnHost::Specific { host }
+                ForHost::Specific { host }
             };
 
             let should_fetch = matches.remove_one::<bool>("fetch").expect("default value");
@@ -326,7 +326,7 @@ fn specified_workflow<'a>(
                 user,
                 remote,
                 branch,
-                on_host,
+                for_host,
             });
         }
 

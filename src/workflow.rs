@@ -2,10 +2,11 @@
 
 use std::collections::HashSet;
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 
 use crate::{
     git_binary::GitBinary,
+    snapshot::Snapshot,
     types::{Branch, Host, NomadRef, Remote, User},
 };
 
@@ -30,7 +31,7 @@ pub enum Workflow<'a> {
         user: User<'a>,
         remote: Remote<'a>,
         branch: Branch<'a>,
-        on_host: WorkflowRefOnHost<'a>,
+        for_host: ForHost<'a>,
     },
 }
 
@@ -41,12 +42,6 @@ pub enum PurgeFilter<'a> {
     All,
     /// Delete only nomad managed refs for given [`Host`]s under the given [`User`].
     Hosts(HashSet<Host<'a>>),
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum WorkflowRefOnHost<'host> {
-    Specific { host: Host<'host> },
-    Other { ignoring: Host<'host> },
 }
 
 impl Workflow<'_> {
@@ -60,7 +55,37 @@ impl Workflow<'_> {
                 remote,
                 purge_filter,
             } => purge(git, &user, &remote, purge_filter),
-            Self::Ref { .. } => todo!(),
+            Self::Ref {
+                should_fetch,
+                user,
+                remote,
+                branch,
+                for_host,
+            } => print_ref(git, should_fetch, user, remote, branch, for_host),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum ForHost<'a> {
+    Specific { host: Host<'a> },
+    Other { ignoring: Host<'a> },
+}
+
+impl ForHost<'_> {
+    fn matches<Ref>(&self, nomad_ref: &NomadRef<Ref>) -> bool {
+        match self {
+            Self::Specific { host } => &nomad_ref.host == host,
+            Self::Other { ignoring } => &nomad_ref.host != ignoring,
+        }
+    }
+
+    fn error(&self, branch: &Branch) -> anyhow::Error {
+        match self {
+            Self::Specific { host } => anyhow!("No branch `{}` for host `{}`", branch.0, host.0),
+            Self::Other { ignoring } => {
+                anyhow!("No branch `{}` other than host `{}`", branch.0, ignoring.0)
+            }
         }
     }
 }
@@ -114,4 +139,36 @@ fn purge(git: &GitBinary, user: &User, remote: &Remote, purge_filter: PurgeFilte
     };
     git.prune_nomad_refs(remote, prune.into_iter())?;
     Ok(())
+}
+
+/// FIXME
+fn print_ref(
+    git: &GitBinary,
+    should_fetch: bool,
+    user: User,
+    remote: Remote,
+    branch: Branch,
+    for_host: ForHost,
+) -> Result<()> {
+    if should_fetch {
+        git.fetch_nomad_refs(&user, &remote)?;
+    }
+
+    let Snapshot { mut nomad_refs, .. } = git.snapshot(&user)?;
+    nomad_refs.retain(|nomad_ref| {
+        nomad_ref.user == user && nomad_ref.branch == branch && for_host.matches(nomad_ref)
+    });
+
+    match nomad_refs.as_slice() {
+        [] => Err(for_host.error(&branch)),
+
+        [only] => {
+            println!("{}", only.ref_.name);
+            Ok(())
+        }
+
+        // The filtering strategies above should lead to 0 or 1 result. Anything else indicates
+        // programmer error.
+        _ => todo!(),
+    }
 }

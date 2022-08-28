@@ -14,7 +14,7 @@ use verbosity::Verbosity;
 use crate::{
     git_binary::GitBinary,
     types::{Host, Remote, User},
-    workflow::{PurgeFilter, Workflow},
+    workflow::{Filter, Workflow},
 };
 
 mod git_binary;
@@ -241,10 +241,10 @@ fn specified_workflow<'a>(
                     .remove_one::<String>("remote")
                     .expect("<remote> is a required argument"),
             );
-            let purge_filter = if matches.remove_one::<bool>("all").expect("default value") {
-                PurgeFilter::All
+            let host_filter = if matches.remove_one::<bool>("all").expect("default value") {
+                Filter::All
             } else {
-                PurgeFilter::Hosts(
+                Filter::Allow(
                     matches
                         .remove_many::<String>("host")
                         .unwrap_or_default()
@@ -256,7 +256,7 @@ fn specified_workflow<'a>(
             return Ok(Workflow::Purge {
                 user,
                 remote,
-                purge_filter,
+                host_filter,
             });
         }
 
@@ -297,7 +297,7 @@ mod test_e2e {
     use crate::{
         git_testing::{GitClone, GitRemote, INITIAL_BRANCH},
         types::Branch,
-        workflow::{PurgeFilter, Workflow},
+        workflow::{Filter, Workflow},
     };
 
     fn sync_host(clone: &GitClone) {
@@ -412,7 +412,7 @@ mod test_e2e {
         Workflow::Purge {
             user: host1.user.always_borrow(),
             remote: host1.remote(),
-            purge_filter: PurgeFilter::Hosts(HashSet::from_iter([host0.host.always_borrow()])),
+            host_filter: Filter::Allow(HashSet::from_iter([host0.host.always_borrow()])),
         }
         .execute(&host1.git)
         .unwrap();
@@ -451,7 +451,7 @@ mod test_e2e {
         Workflow::Purge {
             user: host1.user.always_borrow(),
             remote: host1.remote(),
-            purge_filter: PurgeFilter::All,
+            host_filter: Filter::All,
         }
         .execute(&host1.git)
         .unwrap();
@@ -474,7 +474,7 @@ mod test_cli {
         specified_git, specified_verbosity, specified_workflow,
         types::{Host, Remote, User},
         verbosity::Verbosity,
-        workflow::{PurgeFilter, Workflow},
+        workflow::{Filter, Workflow},
         CONFIG_HOST, CONFIG_USER, DEFAULT_REMOTE,
     };
 
@@ -705,7 +705,7 @@ mod test_cli {
             Workflow::Purge {
                 user: cli_test.default_user.always_borrow(),
                 remote: DEFAULT_REMOTE.clone(),
-                purge_filter: PurgeFilter::All,
+                host_filter: Filter::All,
             }
         );
     }
@@ -729,7 +729,7 @@ mod test_cli {
             Workflow::Purge {
                 user: cli_test.default_user.always_borrow(),
                 remote: Remote::from("remote"),
-                purge_filter: PurgeFilter::Hosts(HashSet::from_iter(
+                host_filter: Filter::Allow(HashSet::from_iter(
                     ["host0", "host1", "host2"].map(Host::from)
                 )),
             }

@@ -1,6 +1,6 @@
 //! High level user invoked workflows for nomad.
 
-use std::collections::HashSet;
+use std::{collections::HashSet, hash::Hash};
 
 use anyhow::Result;
 
@@ -23,17 +23,8 @@ pub enum Workflow<'a> {
     Purge {
         user: User<'a>,
         remote: Remote<'a>,
-        purge_filter: PurgeFilter<'a>,
+        host_filter: Filter<Host<'a>>,
     },
-}
-
-/// How should local and remote refs be deleted during the `purge` workflow.
-#[derive(Debug, PartialEq, Eq)]
-pub enum PurgeFilter<'a> {
-    /// Delete all nomad managed refs for the given [`User`].
-    All,
-    /// Delete only nomad managed refs for given [`Host`]s under the given [`User`].
-    Hosts(HashSet<Host<'a>>),
 }
 
 impl Workflow<'_> {
@@ -45,8 +36,26 @@ impl Workflow<'_> {
             Self::Purge {
                 user,
                 remote,
-                purge_filter,
-            } => purge(git, &user, &remote, purge_filter),
+                host_filter,
+            } => purge(git, &user, &remote, host_filter),
+        }
+    }
+}
+
+/// Declarative representation of a limited filter function.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Filter<T: PartialEq + Eq + Hash> {
+    /// Everything.
+    All,
+    /// Only the specified values.
+    Allow(HashSet<T>),
+}
+
+impl<T: PartialEq + Eq + Hash> Filter<T> {
+    pub fn contains(&self, t: &T) -> bool {
+        match self {
+            Self::All => true,
+            Self::Allow(hash_set) => hash_set.contains(t),
         }
     }
 }
@@ -91,13 +100,10 @@ fn ls(git: &GitBinary, user: &User) -> Result<()> {
 }
 
 /// Delete nomad managed refs returned by `to_prune`.
-fn purge(git: &GitBinary, user: &User, remote: &Remote, purge_filter: PurgeFilter) -> Result<()> {
+fn purge(git: &GitBinary, user: &User, remote: &Remote, host_filter: Filter<Host>) -> Result<()> {
     git.fetch_nomad_refs(user, remote)?;
     let snapshot = git.snapshot(user)?;
-    let prune = match purge_filter {
-        PurgeFilter::All => snapshot.prune_all(),
-        PurgeFilter::Hosts(host_set) => snapshot.prune_all_by_hosts(&host_set),
-    };
+    let prune = snapshot.prune_by_hosts(|h| host_filter.contains(h));
     git.prune_nomad_refs(remote, prune.into_iter())?;
     Ok(())
 }

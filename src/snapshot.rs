@@ -75,22 +75,13 @@ impl<'a, Ref> Snapshot<'a, Ref> {
         prune
     }
 
-    /// Return all nomad branches regardless of host.
-    pub fn prune_all(self) -> Vec<PruneFrom<'a, Ref>> {
-        let Self { nomad_refs, .. } = self;
-        nomad_refs
-            .into_iter()
-            .map(PruneFrom::LocalAndRemote)
-            .collect()
-    }
-
     /// Return all nomad branches for specific hosts.
-    pub fn prune_all_by_hosts(self, hosts: &HashSet<Host>) -> Vec<PruneFrom<'a, Ref>> {
+    pub fn prune_by_hosts(self, host_filter: impl Fn(&Host) -> bool) -> Vec<PruneFrom<'a, Ref>> {
         let Self { nomad_refs, .. } = self;
         nomad_refs
             .into_iter()
             .filter_map(|nomad_ref| {
-                if !hosts.contains(&nomad_ref.host) {
+                if !host_filter(&nomad_ref.host) {
                     return None;
                 }
 
@@ -126,7 +117,7 @@ impl<'a, Ref> Snapshot<'a, Ref> {
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashSet, iter::FromIterator};
+    use std::iter::FromIterator;
 
     use crate::types::{Host, RemoteNomadRefSet, User};
 
@@ -294,7 +285,7 @@ mod tests {
     #[test]
     fn snapshot_prune_all() {
         let user = &User::from("user0");
-        let prune = snapshot(user, ["branch0", "branch1"]).prune_all();
+        let prune = snapshot(user, ["branch0", "branch1"]).prune_by_hosts(|_h| true);
         assert_eq!(
             prune,
             vec![
@@ -324,8 +315,8 @@ mod tests {
     #[test]
     fn snapshot_prune_hosts() {
         let user = &User::from("user0");
-        let prune = snapshot(user, ["branch0", "branch1"])
-            .prune_all_by_hosts(&HashSet::from_iter([Host::from("host0")]));
+        let prune =
+            snapshot(user, ["branch0", "branch1"]).prune_by_hosts(|h| *h == Host::from("host0"));
         assert_eq!(
             prune,
             vec![

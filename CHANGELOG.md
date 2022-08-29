@@ -21,6 +21,7 @@ However, the output of the application is designed for humans, not machines, and
 ### Changed
 
 - `<remote>` is now a global option instead of a positional argument. It can be specified via `-R`, `--remote`, or the `GIT_NOMAD_REMOTE` environment variable. It influences the git remote that `ls`, `sync`, `purge` operate on.
+- The `--silent` option has been renamed to `--quiet`.
 - Cosmetic tweaks to how command failures are reported.
 
 ## [0.5.0] - 2022-01-15

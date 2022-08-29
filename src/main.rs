@@ -96,11 +96,11 @@ fn cli(
                 .default_value("git"),
         )
         .arg(
-            Arg::new("silent")
+            Arg::new("quiet")
                 .global(true)
-                .short('s')
-                .long("silent")
-                .help("Silence all output")
+                .short('q')
+                .long("quiet")
+                .help("Suppress all output")
                 .takes_value(true)
                 .value_parser(value_parser!(bool))
                 .action(ArgAction::SetTrue),
@@ -191,7 +191,7 @@ fn cli(
 
 /// The [`Verbosity`] intended by the user via the CLI.
 fn specified_verbosity(matches: &mut ArgMatches) -> Option<Verbosity> {
-    if matches.remove_one::<bool>("silent").expect("has default") {
+    if matches.remove_one::<bool>("quiet").expect("has default") {
         None
     } else {
         match matches.remove_one::<u8>("verbose").expect("has default") {
@@ -567,12 +567,12 @@ mod test_cli {
     }
 
     #[test]
-    fn silent_verbosity() {
+    fn quiet_verbosity() {
         for args in &[
-            &["--silent", "ls"],
-            &["-s", "ls"],
-            &["ls", "--silent"],
-            &["ls", "-s"],
+            &["--quiet", "ls"],
+            &["-q", "ls"],
+            &["ls", "--quiet"],
+            &["ls", "-q"],
         ] {
             println!("{:?}", args);
             let cli_test = CliTest::default();

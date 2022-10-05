@@ -18,7 +18,7 @@ However, the output of the application is designed for humans, not machines, and
 - `purge` and `sync` subcommands now take the `<remote>` as an option via `-R` or `--remote` or the `GIT_NOMAD_REMOTE` environment variable. Previously, this was an optional positional argument.
 - Cosmetic tweaks to how command failures are reported.
 
-## [0.5.0] - 2021-01-15
+## [0.5.0] - 2022-01-15
 
 `git-nomad` is no longer considered a prototype and is approaching its (hopefully final) 1.0 release.
 

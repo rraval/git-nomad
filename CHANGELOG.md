@@ -18,7 +18,7 @@ However, the output of the application is designed for humans, not machines, and
 - `purge` and `sync` subcommands now take the `<remote>` as an option via `-R` or `--remote` or the `GIT_NOMAD_REMOTE` environment variable. Previously, this was an optional positional argument.
 - Cosmetic tweaks to how command failures are reported.
 
-## [0.5.0]
+## [0.5.0] - 2021-01-15
 
 `git-nomad` is no longer considered a prototype and is approaching its (hopefully final) 1.0 release.
 
@@ -33,7 +33,7 @@ However, the output of the application is designed for humans, not machines, and
 
 - Adjust help message to only suggest `-vv` for max verbosity.
 
-## [0.4.0]
+## [0.4.0] - 2021-12-26
 
 - An internal rewrite of the implementation to prevent entire categories of bugs like [#1][i1], [#2][i2], and [#3][i3] from sneaking in again.
 - End-to-end tests that validate the entire workflow.
@@ -48,22 +48,22 @@ However, the output of the application is designed for humans, not machines, and
 
 - [#2][i2]: A severe bug related to purging refs from other hosts, i.e. after you wish to stop using git-nomad.
 
-## [0.3.2]
+## [0.3.2] - 2021-12-18
 
 - Patch release to test the automated release workflow.
 
-## [0.3.1]
+## [0.3.1] - 2021-12-18
 
 - Updates some minor dependencies.
 - Patch release to test the automated release workflow.
 
-## [0.3.0]
+## [0.3.0] - 2021-12-18
 
 ### Changed
 
 - Skip running pre-push hooks for git-nomad operations. This allows pushing work-in-progress branches with lint or compile errors (if the repo has pre-push hooks that check that).
 
-## [0.2.1]
+## [0.2.1] - 2021-11-06
 
 ### Fixed
 

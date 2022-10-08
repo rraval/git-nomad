@@ -22,8 +22,13 @@ However, the output of the application is designed for humans, not machines, and
 ### Changed
 
 - `<remote>` is now a global option instead of a positional argument. It can be specified via `-R`, `--remote`, or the `GIT_NOMAD_REMOTE` environment variable. It influences the git remote that `ls`, `sync`, `purge` operate on.
+- `--host` is now a global option instead of subcommand specific.
 - The `--silent` option has been renamed to `--quiet`.
 - Cosmetic tweaks to how command failures are reported.
+
+## Removed
+
+- Support for multiple hosts in the `purge` subcommand. Do it one at a time with the `--host` global option or via `--all`.
 
 ## [0.5.0] - 2022-01-15
 

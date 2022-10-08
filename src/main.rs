@@ -1,12 +1,13 @@
 use std::{
     borrow::Cow,
+    collections::HashSet,
     env::{self, current_dir},
     ffi::OsString,
 };
 
 use clap::{
     crate_authors, crate_description, crate_name, crate_version, value_parser, Arg, ArgAction,
-    ArgGroup, ArgMatches, Command, PossibleValue, ValueHint, ValueSource,
+    ArgMatches, Command, PossibleValue, ValueHint, ValueSource,
 };
 use git_version::git_version;
 use verbosity::Verbosity;
@@ -64,15 +65,6 @@ fn cli(
     default_host: &Host,
     args: impl IntoIterator<Item = impl Into<OsString> + Clone>,
 ) -> clap::Result<ArgMatches> {
-    let host_arg = || {
-        Arg::new("host")
-            .short('H')
-            .long("host")
-            .takes_value(true)
-            .value_parser(value_parser!(String))
-            .value_hint(ValueHint::Hostname)
-    };
-
     // This value is only conditionally used if `git_version!` cannot find any other version.
     let _fallback_version = crate_version!();
 
@@ -128,6 +120,18 @@ fn cli(
                 .default_value(&default_user.0),
         )
         .arg(
+            Arg::new("host")
+                .global(true)
+                .short('H')
+                .long("host")
+                .takes_value(true)
+                .value_parser(value_parser!(String))
+                .value_hint(ValueHint::Hostname)
+                .env(ENV_HOST)
+                .default_value(&default_host.0)
+                .help("Host name, unique per clone"),
+        )
+        .arg(
             Arg::new("remote")
                 .global(true)
                 .short('R')
@@ -139,16 +143,7 @@ fn cli(
                 .env(ENV_REMOTE)
                 .default_value(&DEFAULT_REMOTE.0),
         )
-        .subcommand(
-            Command::new("sync")
-                .about("Sync local branches to remote")
-                .arg(
-                    host_arg()
-                        .env(ENV_HOST)
-                        .default_value(&default_host.0)
-                        .help("Host name to sync with, unique per clone"),
-                ),
-        )
+        .subcommand(Command::new("sync").about("Sync local branches to remote"))
         .subcommand(
             Command::new("ls")
                 .about("List refs for all hosts")
@@ -186,20 +181,6 @@ fn cli(
                         .takes_value(true)
                         .value_parser(value_parser!(bool))
                         .action(ArgAction::SetTrue),
-                )
-                .arg(
-                    host_arg()
-                        .takes_value(true)
-                        .value_parser(value_parser!(String))
-                        .action(ArgAction::Append)
-                        .help(
-                            "Delete refs for only the given host (can be specified multiple times)",
-                        ),
-                )
-                .group(
-                    ArgGroup::new("host_group")
-                        .args(&["all", "host"])
-                        .required(true),
                 ),
         )
         .try_get_matches_from(args)
@@ -240,6 +221,10 @@ fn specified_workflow<'a>(
         git.get_config(CONFIG_USER).map(|opt| opt.map(User::from))
     })?;
 
+    let host = resolve(matches, "host", || {
+        git.get_config(CONFIG_HOST).map(|opt| opt.map(Host::from))
+    })?;
+
     let remote = Remote::from(
         matches
             .remove_one::<String>("remote")
@@ -251,13 +236,7 @@ fn specified_workflow<'a>(
         .expect("subcommand is mandatory");
 
     return match (subcommand.as_str(), matches) {
-        ("sync", mut matches) => {
-            let host = resolve(&mut matches, "host", || {
-                git.get_config(CONFIG_HOST).map(|opt| opt.map(Host::from))
-            })?;
-
-            Ok(Workflow::Sync { user, host, remote })
-        }
+        ("sync", _) => Ok(Workflow::Sync { user, host, remote }),
 
         ("ls", mut matches) => Ok(Workflow::Ls {
             style: match matches
@@ -287,13 +266,7 @@ fn specified_workflow<'a>(
             let host_filter = if matches.remove_one::<bool>("all").expect("default value") {
                 Filter::All
             } else {
-                Filter::Allow(
-                    matches
-                        .remove_many::<String>("host")
-                        .unwrap_or_default()
-                        .map(Host::from)
-                        .collect(),
-                )
+                Filter::Allow(HashSet::from_iter([host]))
             };
 
             return Ok(Workflow::Purge {
@@ -870,23 +843,12 @@ mod test_cli {
         let cli_test = CliTest::default();
         assert_eq!(
             cli_test
-                .remote(&[
-                    "purge",
-                    "--host=host0",
-                    "--host",
-                    "host1",
-                    "-H",
-                    "host2",
-                    "-R",
-                    "remote"
-                ])
+                .remote(&["--host=host0", "purge", "-R", "remote"])
                 .workflow(),
             Workflow::Purge {
                 user: cli_test.default_user.always_borrow(),
                 remote: Remote::from("remote"),
-                host_filter: Filter::Allow(HashSet::from_iter(
-                    ["host0", "host1", "host2"].map(Host::from)
-                )),
+                host_filter: Filter::Allow(HashSet::from_iter(["host0"].map(Host::from))),
             }
         );
     }

@@ -16,7 +16,7 @@ use verbosity::Verbosity;
 use crate::{
     git_binary::GitBinary,
     types::{Host, Remote, User},
-    workflow::{Filter, LsStyle, Workflow},
+    workflow::{Filter, LsPrinter, Workflow},
 };
 
 mod git_binary;
@@ -158,9 +158,8 @@ fn cli(
                         .action(ArgAction::SetTrue),
                 )
                 .arg(
-                    Arg::new("style")
-                        .short('s')
-                        .long("style")
+                    Arg::new("print")
+                        .long("print")
                         .help("Format for listing nomad managed refs")
                         .takes_value(true)
                         .value_parser([
@@ -265,14 +264,14 @@ fn specified_workflow<'a>(
         ("sync", _) => Ok(Workflow::Sync { user, host, remote }),
 
         ("ls", mut matches) => Ok(Workflow::Ls {
-            style: match matches
-                .remove_one::<String>("style")
+            printer: match matches
+                .remove_one::<String>("print")
                 .expect("has default")
                 .as_str()
             {
-                "grouped" => LsStyle::Grouped,
-                "ref" => LsStyle::Ref,
-                "commit" => LsStyle::Commit,
+                "grouped" => LsPrinter::Grouped,
+                "ref" => LsPrinter::Ref,
+                "commit" => LsPrinter::Commit,
                 _ => unreachable!("has possible values"),
             },
             user,
@@ -541,7 +540,7 @@ mod test_cli {
         specified_git, specified_verbosity, specified_workflow,
         types::{Branch, Host, Remote, User},
         verbosity::Verbosity,
-        workflow::{Filter, LsStyle, Workflow},
+        workflow::{Filter, LsPrinter, Workflow},
         CONFIG_HOST, CONFIG_USER, DEFAULT_REMOTE,
     };
 
@@ -684,7 +683,7 @@ mod test_cli {
         assert_eq!(
             cli_test.remote(&["ls"]).workflow(),
             Workflow::Ls {
-                style: LsStyle::Grouped,
+                printer: LsPrinter::Grouped,
                 user: cli_test.default_user.always_borrow(),
                 fetch_remote: None,
                 host_filter: cli_test.default_host_filter(),
@@ -699,7 +698,7 @@ mod test_cli {
         assert_eq!(
             cli_test.remote(&["ls", "--fetch"]).workflow(),
             Workflow::Ls {
-                style: LsStyle::Grouped,
+                printer: LsPrinter::Grouped,
                 user: cli_test.default_user.always_borrow(),
                 fetch_remote: Some(DEFAULT_REMOTE),
                 host_filter: cli_test.default_host_filter(),
@@ -716,7 +715,7 @@ mod test_cli {
                 .remote(&["--remote", "foo", "ls", "--fetch"])
                 .workflow(),
             Workflow::Ls {
-                style: LsStyle::Grouped,
+                printer: LsPrinter::Grouped,
                 user: cli_test.default_user.always_borrow(),
                 fetch_remote: Some(Remote::from("foo")),
                 host_filter: cli_test.default_host_filter(),
@@ -733,7 +732,7 @@ mod test_cli {
                 .remote(&["ls", "--fetch", "--remote", "foo"])
                 .workflow(),
             Workflow::Ls {
-                style: LsStyle::Grouped,
+                printer: LsPrinter::Grouped,
                 user: cli_test.default_user.always_borrow(),
                 fetch_remote: Some(Remote::from("foo")),
                 host_filter: cli_test.default_host_filter(),
@@ -743,11 +742,10 @@ mod test_cli {
     }
 
     #[test]
-    fn ls_style_grouped() {
+    fn ls_print_grouped() {
         for args in &[
-            &["ls", "--style", "grouped"] as &[&str],
-            &["ls", "--style=grouped"],
-            &["ls", "-s", "grouped"],
+            &["ls", "--print", "grouped"] as &[&str],
+            &["ls", "--print=grouped"],
         ] {
             println!("{:?}", args);
 
@@ -755,7 +753,7 @@ mod test_cli {
             assert_eq!(
                 cli_test.remote(args).workflow(),
                 Workflow::Ls {
-                    style: LsStyle::Grouped,
+                    printer: LsPrinter::Grouped,
                     user: cli_test.default_user.always_borrow(),
                     fetch_remote: None,
                     host_filter: cli_test.default_host_filter(),
@@ -766,19 +764,15 @@ mod test_cli {
     }
 
     #[test]
-    fn ls_style_ref() {
-        for args in &[
-            &["ls", "--style", "ref"] as &[&str],
-            &["ls", "--style=ref"],
-            &["ls", "-s", "ref"],
-        ] {
+    fn ls_print_ref() {
+        for args in &[&["ls", "--print", "ref"] as &[&str], &["ls", "--print=ref"]] {
             println!("{:?}", args);
 
             let cli_test = CliTest::default();
             assert_eq!(
                 cli_test.remote(args).workflow(),
                 Workflow::Ls {
-                    style: LsStyle::Ref,
+                    printer: LsPrinter::Ref,
                     user: cli_test.default_user.always_borrow(),
                     fetch_remote: None,
                     host_filter: cli_test.default_host_filter(),
@@ -789,11 +783,10 @@ mod test_cli {
     }
 
     #[test]
-    fn ls_style_commit() {
+    fn ls_print_commit() {
         for args in &[
-            &["ls", "--style", "commit"] as &[&str],
-            &["ls", "--style=commit"],
-            &["ls", "-s", "commit"],
+            &["ls", "--print", "commit"] as &[&str],
+            &["ls", "--print=commit"],
         ] {
             println!("{:?}", args);
 
@@ -801,7 +794,7 @@ mod test_cli {
             assert_eq!(
                 cli_test.remote(args).workflow(),
                 Workflow::Ls {
-                    style: LsStyle::Commit,
+                    printer: LsPrinter::Commit,
                     user: cli_test.default_user.always_borrow(),
                     fetch_remote: None,
                     host_filter: cli_test.default_host_filter(),
@@ -817,7 +810,7 @@ mod test_cli {
         assert_eq!(
             cli_test.remote(&["ls", "-U", "explicit_user"]).workflow(),
             Workflow::Ls {
-                style: LsStyle::Grouped,
+                printer: LsPrinter::Grouped,
                 user: User::from("explicit_user"),
                 fetch_remote: None,
                 host_filter: cli_test.default_host_filter(),
@@ -835,7 +828,7 @@ mod test_cli {
                 .set_config(CONFIG_USER, "config_user")
                 .workflow(),
             Workflow::Ls {
-                style: LsStyle::Grouped,
+                printer: LsPrinter::Grouped,
                 user: User::from("config_user"),
                 fetch_remote: None,
                 host_filter: cli_test.default_host_filter(),
@@ -850,7 +843,7 @@ mod test_cli {
         assert_eq!(
             cli_test.remote(&["ls", "--head"]).workflow(),
             Workflow::Ls {
-                style: LsStyle::Grouped,
+                printer: LsPrinter::Grouped,
                 user: cli_test.default_user.always_borrow(),
                 fetch_remote: None,
                 host_filter: cli_test.default_host_filter(),
@@ -867,7 +860,7 @@ mod test_cli {
                 .remote(&["ls", "-b", "foo", "--branch", "bar", "--branch=baz"])
                 .workflow(),
             Workflow::Ls {
-                style: LsStyle::Grouped,
+                printer: LsPrinter::Grouped,
                 user: cli_test.default_user.always_borrow(),
                 fetch_remote: None,
                 host_filter: cli_test.default_host_filter(),
@@ -882,7 +875,7 @@ mod test_cli {
         assert_eq!(
             cli_test.remote(&["ls", "--print-self"]).workflow(),
             Workflow::Ls {
-                style: LsStyle::Grouped,
+                printer: LsPrinter::Grouped,
                 user: cli_test.default_user.always_borrow(),
                 fetch_remote: None,
                 host_filter: Filter::All,

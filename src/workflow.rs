@@ -19,7 +19,7 @@ pub enum Workflow<'a> {
         remote: Remote<'a>,
     },
     Ls {
-        style: LsStyle,
+        printer: LsPrinter,
         user: User<'a>,
         fetch_remote: Option<Remote<'a>>,
         host_filter: Filter<Host<'a>>,
@@ -38,12 +38,19 @@ impl Workflow<'_> {
         match self {
             Self::Sync { user, host, remote } => sync(git, &user, &host, &remote),
             Self::Ls {
-                style,
+                printer,
                 user,
                 fetch_remote,
                 host_filter,
                 branch_filter,
-            } => ls(git, style, &user, fetch_remote, host_filter, branch_filter),
+            } => ls(
+                git,
+                printer,
+                &user,
+                fetch_remote,
+                host_filter,
+                branch_filter,
+            ),
             Self::Purge {
                 user,
                 remote,
@@ -75,13 +82,13 @@ impl<T: PartialEq + Eq + Hash> Filter<T> {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum LsStyle {
+pub enum LsPrinter {
     Grouped,
     Ref,
     Commit,
 }
 
-impl LsStyle {
+impl LsPrinter {
     pub fn print_host(self, host: &Host) {
         match self {
             Self::Grouped => println!("{}", host.0),
@@ -113,7 +120,14 @@ fn sync(git: &GitBinary, user: &User, host: &Host, remote: &Remote) -> Result<()
 
     if git.is_output_allowed() {
         println!();
-        ls(git, LsStyle::Grouped, user, None, Filter::All, Filter::All)?
+        ls(
+            git,
+            LsPrinter::Grouped,
+            user,
+            None,
+            Filter::All,
+            Filter::All,
+        )?
     }
 
     Ok(())
@@ -125,7 +139,7 @@ fn sync(git: &GitBinary, user: &User, host: &Host, remote: &Remote) -> Result<()
 /// command.
 fn ls(
     git: &GitBinary,
-    style: LsStyle,
+    printer: LsPrinter,
     user: &User,
     fetch_remote: Option<Remote>,
     host_filter: Filter<Host>,
@@ -142,11 +156,11 @@ fn ls(
             continue;
         }
 
-        style.print_host(&host);
+        printer.print_host(&host);
 
         for NomadRef { ref_, branch, .. } in branches {
             if branch_filter.contains(&branch) {
-                style.print_ref(&ref_);
+                printer.print_ref(&ref_);
             }
         }
     }

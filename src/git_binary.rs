@@ -438,7 +438,6 @@ impl GitBinary<'_> {
     }
 
     /// Get the current branch, which may fail if the work tree is in a detached HEAD state.
-    #[cfg(test)]
     pub fn current_branch(&self) -> Result<Branch<'static>> {
         let mut command = self.command();
         command.args(&["symbolic-ref", "--short", "HEAD"]);

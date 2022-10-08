@@ -10,6 +10,7 @@ use clap::{
     ArgMatches, Command, PossibleValue, ValueHint, ValueSource,
 };
 use git_version::git_version;
+use types::Branch;
 use verbosity::Verbosity;
 
 use crate::{
@@ -146,7 +147,7 @@ fn cli(
         .subcommand(Command::new("sync").about("Sync local branches to remote"))
         .subcommand(
             Command::new("ls")
-                .about("List refs for all hosts")
+                .about("List nomad managed refs")
                 .arg(
                     Arg::new("fetch")
                         .short('F')
@@ -169,6 +170,23 @@ fn cli(
                             PossibleValue::new("commit").help("Print only the commit ID"),
                         ])
                         .default_value("grouped"),
+                )
+                .arg(
+                    Arg::new("head")
+                    .long("head")
+                    .help("Only display refs for the current branch")
+                    .takes_value(true)
+                    .value_parser(value_parser!(bool))
+                    .action(ArgAction::SetTrue),
+                )
+                .arg(
+                    Arg::new("branch")
+                    .short('b')
+                    .long("branch")
+                    .help("Only display refs for the named branch (can be specified multiple times)")
+                    .takes_value(true)
+                    .value_parser(value_parser!(String))
+                    .action(ArgAction::Append)
                 ),
         )
         .subcommand(
@@ -254,6 +272,23 @@ fn specified_workflow<'a>(
                 Some(remote)
             } else {
                 None
+            },
+            branch_filter: {
+                let mut branch_set = HashSet::<Branch>::new();
+
+                if let Some(true) = matches.remove_one::<bool>("head") {
+                    branch_set.insert(git.current_branch()?);
+                }
+
+                if let Some(branches) = matches.remove_many::<String>("branch") {
+                    branch_set.extend(branches.map(Branch::from));
+                }
+
+                if branch_set.is_empty() {
+                    Filter::All
+                } else {
+                    Filter::Allow(branch_set)
+                }
             },
         }),
 
@@ -488,7 +523,7 @@ mod test_cli {
         cli,
         git_testing::GitRemote,
         specified_git, specified_verbosity, specified_workflow,
-        types::{Host, Remote, User},
+        types::{Branch, Host, Remote, User},
         verbosity::Verbosity,
         workflow::{Filter, LsStyle, Workflow},
         CONFIG_HOST, CONFIG_USER, DEFAULT_REMOTE,
@@ -632,6 +667,7 @@ mod test_cli {
                 style: LsStyle::Grouped,
                 user: cli_test.default_user.always_borrow(),
                 fetch_remote: None,
+                branch_filter: Filter::All,
             },
         );
     }
@@ -645,6 +681,7 @@ mod test_cli {
                 style: LsStyle::Grouped,
                 user: cli_test.default_user.always_borrow(),
                 fetch_remote: Some(DEFAULT_REMOTE),
+                branch_filter: Filter::All,
             },
         );
     }
@@ -660,6 +697,7 @@ mod test_cli {
                 style: LsStyle::Grouped,
                 user: cli_test.default_user.always_borrow(),
                 fetch_remote: Some(Remote::from("foo")),
+                branch_filter: Filter::All,
             },
         );
     }
@@ -675,6 +713,7 @@ mod test_cli {
                 style: LsStyle::Grouped,
                 user: cli_test.default_user.always_borrow(),
                 fetch_remote: Some(Remote::from("foo")),
+                branch_filter: Filter::All,
             },
         );
     }
@@ -695,6 +734,7 @@ mod test_cli {
                     style: LsStyle::Grouped,
                     user: cli_test.default_user.always_borrow(),
                     fetch_remote: None,
+                    branch_filter: Filter::All,
                 },
             );
         }
@@ -716,6 +756,7 @@ mod test_cli {
                     style: LsStyle::Ref,
                     user: cli_test.default_user.always_borrow(),
                     fetch_remote: None,
+                    branch_filter: Filter::All,
                 },
             );
         }
@@ -737,6 +778,7 @@ mod test_cli {
                     style: LsStyle::Commit,
                     user: cli_test.default_user.always_borrow(),
                     fetch_remote: None,
+                    branch_filter: Filter::All,
                 },
             );
         }
@@ -751,6 +793,7 @@ mod test_cli {
                 style: LsStyle::Grouped,
                 user: User::from("explicit_user"),
                 fetch_remote: None,
+                branch_filter: Filter::All,
             },
         );
     }
@@ -767,6 +810,37 @@ mod test_cli {
                 style: LsStyle::Grouped,
                 user: User::from("config_user"),
                 fetch_remote: None,
+                branch_filter: Filter::All,
+            },
+        );
+    }
+
+    #[test]
+    fn ls_head() {
+        let cli_test = CliTest::default();
+        assert_eq!(
+            cli_test.remote(&["ls", "--head"]).workflow(),
+            Workflow::Ls {
+                style: LsStyle::Grouped,
+                user: cli_test.default_user.always_borrow(),
+                fetch_remote: None,
+                branch_filter: Filter::Allow(["master"].map(Branch::from).into()),
+            },
+        );
+    }
+
+    #[test]
+    fn ls_branches() {
+        let cli_test = CliTest::default();
+        assert_eq!(
+            cli_test
+                .remote(&["ls", "-b", "foo", "--branch", "bar", "--branch=baz"])
+                .workflow(),
+            Workflow::Ls {
+                style: LsStyle::Grouped,
+                user: cli_test.default_user.always_borrow(),
+                fetch_remote: None,
+                branch_filter: Filter::Allow(["foo", "bar", "baz"].map(Branch::from).into()),
             },
         );
     }

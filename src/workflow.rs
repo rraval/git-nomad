@@ -7,7 +7,7 @@ use anyhow::Result;
 use crate::{
     git_binary::GitBinary,
     git_ref::GitRef,
-    types::{Host, NomadRef, Remote, User},
+    types::{Branch, Host, NomadRef, Remote, User},
 };
 
 /// A boundary type that separates the CLI interface from high level nomad workflows.
@@ -22,6 +22,7 @@ pub enum Workflow<'a> {
         style: LsStyle,
         user: User<'a>,
         fetch_remote: Option<Remote<'a>>,
+        branch_filter: Filter<Branch<'a>>,
     },
     Purge {
         user: User<'a>,
@@ -39,7 +40,8 @@ impl Workflow<'_> {
                 style,
                 user,
                 fetch_remote,
-            } => ls(git, style, &user, fetch_remote),
+                branch_filter,
+            } => ls(git, style, &user, fetch_remote, branch_filter),
             Self::Purge {
                 user,
                 remote,
@@ -106,7 +108,7 @@ fn sync(git: &GitBinary, user: &User, host: &Host, remote: &Remote) -> Result<()
 
     if git.is_output_allowed() {
         println!();
-        ls(git, LsStyle::Grouped, user, None)?
+        ls(git, LsStyle::Grouped, user, None, Filter::All)?
     }
 
     Ok(())
@@ -116,7 +118,13 @@ fn sync(git: &GitBinary, user: &User, host: &Host, remote: &Remote) -> Result<()
 ///
 /// Does not respect [`Progress::is_output_allowed`] because output is the whole point of this
 /// command.
-fn ls(git: &GitBinary, style: LsStyle, user: &User, fetch_remote: Option<Remote>) -> Result<()> {
+fn ls(
+    git: &GitBinary,
+    style: LsStyle,
+    user: &User,
+    fetch_remote: Option<Remote>,
+    branch_filter: Filter<Branch>,
+) -> Result<()> {
     if let Some(remote) = fetch_remote {
         git.fetch_nomad_refs(user, &remote)?;
     }
@@ -126,8 +134,10 @@ fn ls(git: &GitBinary, style: LsStyle, user: &User, fetch_remote: Option<Remote>
     for (host, branches) in snapshot.sorted_hosts_and_branches() {
         style.print_host(&host);
 
-        for NomadRef { ref_, .. } in branches {
-            style.print_ref(&ref_);
+        for NomadRef { ref_, branch, .. } in branches {
+            if branch_filter.contains(&branch) {
+                style.print_ref(&ref_);
+            }
         }
     }
 

@@ -187,6 +187,14 @@ fn cli(
                     .takes_value(true)
                     .value_parser(value_parser!(String))
                     .action(ArgAction::Append)
+                )
+                .arg(
+                    Arg::new("print_self")
+                    .long("print-self")
+                    .help("Print refs for the current host")
+                    .takes_value(true)
+                    .value_parser(value_parser!(bool))
+                    .action(ArgAction::SetTrue)
                 ),
         )
         .subcommand(
@@ -272,6 +280,14 @@ fn specified_workflow<'a>(
                 Some(remote)
             } else {
                 None
+            },
+            host_filter: if matches
+                .remove_one::<bool>("print_self")
+                .expect("has default")
+            {
+                Filter::All
+            } else {
+                Filter::Deny([host].into())
             },
             branch_filter: {
                 let mut branch_set = HashSet::<Branch>::new();
@@ -535,6 +551,10 @@ mod test_cli {
     }
 
     impl CliTest {
+        fn default_host_filter(&self) -> Filter<Host> {
+            Filter::Deny([self.default_host.always_borrow()].into())
+        }
+
         fn matches(&self, args: &[&str]) -> clap::Result<ArgMatches> {
             let mut vec = vec!["git-nomad"];
             vec.extend_from_slice(args);
@@ -667,6 +687,7 @@ mod test_cli {
                 style: LsStyle::Grouped,
                 user: cli_test.default_user.always_borrow(),
                 fetch_remote: None,
+                host_filter: cli_test.default_host_filter(),
                 branch_filter: Filter::All,
             },
         );
@@ -681,6 +702,7 @@ mod test_cli {
                 style: LsStyle::Grouped,
                 user: cli_test.default_user.always_borrow(),
                 fetch_remote: Some(DEFAULT_REMOTE),
+                host_filter: cli_test.default_host_filter(),
                 branch_filter: Filter::All,
             },
         );
@@ -697,6 +719,7 @@ mod test_cli {
                 style: LsStyle::Grouped,
                 user: cli_test.default_user.always_borrow(),
                 fetch_remote: Some(Remote::from("foo")),
+                host_filter: cli_test.default_host_filter(),
                 branch_filter: Filter::All,
             },
         );
@@ -713,6 +736,7 @@ mod test_cli {
                 style: LsStyle::Grouped,
                 user: cli_test.default_user.always_borrow(),
                 fetch_remote: Some(Remote::from("foo")),
+                host_filter: cli_test.default_host_filter(),
                 branch_filter: Filter::All,
             },
         );
@@ -734,6 +758,7 @@ mod test_cli {
                     style: LsStyle::Grouped,
                     user: cli_test.default_user.always_borrow(),
                     fetch_remote: None,
+                    host_filter: cli_test.default_host_filter(),
                     branch_filter: Filter::All,
                 },
             );
@@ -756,6 +781,7 @@ mod test_cli {
                     style: LsStyle::Ref,
                     user: cli_test.default_user.always_borrow(),
                     fetch_remote: None,
+                    host_filter: cli_test.default_host_filter(),
                     branch_filter: Filter::All,
                 },
             );
@@ -778,6 +804,7 @@ mod test_cli {
                     style: LsStyle::Commit,
                     user: cli_test.default_user.always_borrow(),
                     fetch_remote: None,
+                    host_filter: cli_test.default_host_filter(),
                     branch_filter: Filter::All,
                 },
             );
@@ -793,6 +820,7 @@ mod test_cli {
                 style: LsStyle::Grouped,
                 user: User::from("explicit_user"),
                 fetch_remote: None,
+                host_filter: cli_test.default_host_filter(),
                 branch_filter: Filter::All,
             },
         );
@@ -810,6 +838,7 @@ mod test_cli {
                 style: LsStyle::Grouped,
                 user: User::from("config_user"),
                 fetch_remote: None,
+                host_filter: cli_test.default_host_filter(),
                 branch_filter: Filter::All,
             },
         );
@@ -824,6 +853,7 @@ mod test_cli {
                 style: LsStyle::Grouped,
                 user: cli_test.default_user.always_borrow(),
                 fetch_remote: None,
+                host_filter: cli_test.default_host_filter(),
                 branch_filter: Filter::Allow(["master"].map(Branch::from).into()),
             },
         );
@@ -840,7 +870,23 @@ mod test_cli {
                 style: LsStyle::Grouped,
                 user: cli_test.default_user.always_borrow(),
                 fetch_remote: None,
+                host_filter: cli_test.default_host_filter(),
                 branch_filter: Filter::Allow(["foo", "bar", "baz"].map(Branch::from).into()),
+            },
+        );
+    }
+
+    #[test]
+    fn ls_print_self() {
+        let cli_test = CliTest::default();
+        assert_eq!(
+            cli_test.remote(&["ls", "--print-self"]).workflow(),
+            Workflow::Ls {
+                style: LsStyle::Grouped,
+                user: cli_test.default_user.always_borrow(),
+                fetch_remote: None,
+                host_filter: Filter::All,
+                branch_filter: Filter::All,
             },
         );
     }

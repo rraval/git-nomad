@@ -19,10 +19,12 @@ However, the output of the application is designed for humans, not machines, and
   - `--fetch` to fetch refs from the `<remote>` before listing.
   - `--style` to choose how output should be printed.
   - `--head` and `--branch` to filter the output to specific branches.
+  - `--print-self` for current host refs to be printed.
 - `purge` now takes the `<remote>` to delete refs from.
 
 ### Changed
 
+- `ls` no longer implicitly prints refs for the current host (see `--print-self`).
 - `<remote>` is now a global option instead of a positional argument. It can be specified via `-R`, `--remote`, or the `GIT_NOMAD_REMOTE` environment variable. It influences the git remote that `ls`, `sync`, `purge` operate on.
 - `--host` is now a global option instead of subcommand specific.
 - The `--silent` option has been renamed to `--quiet`.

@@ -22,6 +22,7 @@ pub enum Workflow<'a> {
         style: LsStyle,
         user: User<'a>,
         fetch_remote: Option<Remote<'a>>,
+        host_filter: Filter<Host<'a>>,
         branch_filter: Filter<Branch<'a>>,
     },
     Purge {
@@ -40,8 +41,9 @@ impl Workflow<'_> {
                 style,
                 user,
                 fetch_remote,
+                host_filter,
                 branch_filter,
-            } => ls(git, style, &user, fetch_remote, branch_filter),
+            } => ls(git, style, &user, fetch_remote, host_filter, branch_filter),
             Self::Purge {
                 user,
                 remote,
@@ -58,6 +60,8 @@ pub enum Filter<T: PartialEq + Eq + Hash> {
     All,
     /// Only the specified values.
     Allow(HashSet<T>),
+    /// Everything except the specified values.
+    Deny(HashSet<T>),
 }
 
 impl<T: PartialEq + Eq + Hash> Filter<T> {
@@ -65,6 +69,7 @@ impl<T: PartialEq + Eq + Hash> Filter<T> {
         match self {
             Self::All => true,
             Self::Allow(hash_set) => hash_set.contains(t),
+            Self::Deny(hash_set) => !hash_set.contains(t),
         }
     }
 }
@@ -108,7 +113,7 @@ fn sync(git: &GitBinary, user: &User, host: &Host, remote: &Remote) -> Result<()
 
     if git.is_output_allowed() {
         println!();
-        ls(git, LsStyle::Grouped, user, None, Filter::All)?
+        ls(git, LsStyle::Grouped, user, None, Filter::All, Filter::All)?
     }
 
     Ok(())
@@ -123,6 +128,7 @@ fn ls(
     style: LsStyle,
     user: &User,
     fetch_remote: Option<Remote>,
+    host_filter: Filter<Host>,
     branch_filter: Filter<Branch>,
 ) -> Result<()> {
     if let Some(remote) = fetch_remote {
@@ -132,6 +138,10 @@ fn ls(
     let snapshot = git.snapshot(user)?;
 
     for (host, branches) in snapshot.sorted_hosts_and_branches() {
+        if !host_filter.contains(&host) {
+            continue;
+        }
+
         style.print_host(&host);
 
         for NomadRef { ref_, branch, .. } in branches {

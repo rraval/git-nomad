@@ -6,8 +6,8 @@ use std::{
 };
 
 use clap::{
-    crate_authors, crate_description, crate_name, crate_version, value_parser, Arg, ArgAction,
-    ArgMatches, Command, PossibleValue, ValueHint, ValueSource,
+    builder::PossibleValue, crate_authors, crate_description, crate_name, crate_version,
+    parser::ValueSource, value_parser, Arg, ArgAction, ArgMatches, Command, ValueHint,
 };
 use git_version::git_version;
 use types::Branch;
@@ -41,7 +41,7 @@ fn main() -> anyhow::Result<()> {
     let default_host = Host::from(whoami::hostname());
 
     let mut matches =
-        cli(&default_user, &default_host, &mut env::args_os()).unwrap_or_else(|e| e.exit());
+        cli(default_user, default_host, &mut env::args_os()).unwrap_or_else(|e| e.exit());
     let verbosity = specified_verbosity(&mut matches);
     let git = GitBinary::new(
         verbosity,
@@ -62,10 +62,10 @@ fn main() -> anyhow::Result<()> {
 
 /// Use [`clap`] to implement the intended command line interface.
 fn cli(
-    default_user: &User,
-    default_host: &Host,
+    default_user: User,
+    default_host: Host,
     args: impl IntoIterator<Item = impl Into<OsString> + Clone>,
-) -> clap::Result<ArgMatches> {
+) -> clap::error::Result<ArgMatches> {
     // This value is only conditionally used if `git_version!` cannot find any other version.
     let _fallback_version = crate_version!();
 
@@ -83,7 +83,6 @@ fn cli(
                 .global(true)
                 .long("git")
                 .help("Git binary to use")
-                .takes_value(true)
                 .value_parser(value_parser!(String))
                 .value_hint(ValueHint::CommandName)
                 .default_value("git"),
@@ -94,7 +93,6 @@ fn cli(
                 .short('q')
                 .long("quiet")
                 .help("Suppress all output")
-                .takes_value(true)
                 .value_parser(value_parser!(bool))
                 .action(ArgAction::SetTrue),
         )
@@ -104,7 +102,6 @@ fn cli(
                 .short('v')
                 .long("verbose")
                 .help("Verbose output, repeat up to 2 times for increasing verbosity")
-                .takes_value(true)
                 .value_parser(value_parser!(u8))
                 .action(ArgAction::Count),
         )
@@ -114,22 +111,20 @@ fn cli(
                 .short('U')
                 .long("user")
                 .help("User name, shared by multiple clones, unique per remote")
-                .takes_value(true)
                 .value_parser(value_parser!(String))
                 .value_hint(ValueHint::Username)
                 .env(ENV_USER)
-                .default_value(&default_user.0),
+                .default_value(default_user.0.into_owned()),
         )
         .arg(
             Arg::new("host")
                 .global(true)
                 .short('H')
                 .long("host")
-                .takes_value(true)
                 .value_parser(value_parser!(String))
                 .value_hint(ValueHint::Hostname)
                 .env(ENV_HOST)
-                .default_value(&default_host.0)
+                .default_value(default_host.0.into_owned())
                 .help("Host name, unique per clone"),
         )
         .arg(
@@ -138,11 +133,10 @@ fn cli(
                 .short('R')
                 .long("remote")
                 .help("Git remote to operate against")
-                .takes_value(true)
                 .value_parser(value_parser!(String))
                 .value_hint(ValueHint::Other)
                 .env(ENV_REMOTE)
-                .default_value(&DEFAULT_REMOTE.0),
+                .default_value(DEFAULT_REMOTE.0.as_ref())
         )
         .subcommand(Command::new("sync").about("Sync local branches to remote"))
         .subcommand(
@@ -153,7 +147,6 @@ fn cli(
                         .short('F')
                         .long("fetch")
                         .help("Fetch refs from remote before listing")
-                        .takes_value(true)
                         .value_parser(value_parser!(bool))
                         .action(ArgAction::SetTrue),
                 )
@@ -161,7 +154,6 @@ fn cli(
                     Arg::new("print")
                         .long("print")
                         .help("Format for listing nomad managed refs")
-                        .takes_value(true)
                         .value_parser([
                             PossibleValue::new("grouped")
                                 .help("Print ref name and commit ID grouped by host"),
@@ -174,7 +166,6 @@ fn cli(
                     Arg::new("head")
                     .long("head")
                     .help("Only display refs for the current branch")
-                    .takes_value(true)
                     .value_parser(value_parser!(bool))
                     .action(ArgAction::SetTrue),
                 )
@@ -183,7 +174,6 @@ fn cli(
                     .short('b')
                     .long("branch")
                     .help("Only display refs for the named branch (can be specified multiple times)")
-                    .takes_value(true)
                     .value_parser(value_parser!(String))
                     .action(ArgAction::Append)
                 )
@@ -191,7 +181,6 @@ fn cli(
                     Arg::new("print_self")
                     .long("print-self")
                     .help("Print refs for the current host")
-                    .takes_value(true)
                     .value_parser(value_parser!(bool))
                     .action(ArgAction::SetTrue)
                 ),
@@ -203,7 +192,6 @@ fn cli(
                     Arg::new("all")
                         .long("all")
                         .help("Delete refs for all hosts")
-                        .takes_value(true)
                         .value_parser(value_parser!(bool))
                         .action(ArgAction::SetTrue),
                 ),
@@ -532,7 +520,7 @@ mod test_e2e {
 mod test_cli {
     use std::{collections::HashSet, iter::FromIterator};
 
-    use clap::{ArgMatches, ErrorKind};
+    use clap::{error::ErrorKind, ArgMatches};
 
     use crate::{
         cli,
@@ -554,10 +542,10 @@ mod test_cli {
             Filter::Deny([self.default_host.always_borrow()].into())
         }
 
-        fn matches(&self, args: &[&str]) -> clap::Result<ArgMatches> {
+        fn matches(&self, args: &[&str]) -> clap::error::Result<ArgMatches> {
             let mut vec = vec!["git-nomad"];
             vec.extend_from_slice(args);
-            cli(&self.default_user, &self.default_host, &vec)
+            cli(self.default_user.clone(), self.default_host.clone(), &vec)
         }
 
         fn remote(&self, args: &[&str]) -> CliTestRemote {

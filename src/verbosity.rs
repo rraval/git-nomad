@@ -43,6 +43,9 @@ impl CommandVerbosity {
 pub struct Verbosity {
     /// Show an internal representation of the workflow about to be invoked.
     pub display_workflow: bool,
+    /// Show the version information for debugging.
+    pub display_version: bool,
+
     pub significance: SignificanceVerbosity,
     pub command: CommandVerbosity,
 }
@@ -58,6 +61,7 @@ impl Verbosity {
     const fn standard() -> Self {
         Self {
             display_workflow: false,
+            display_version: false,
             significance: SignificanceVerbosity::OnlyNotable,
             command: CommandVerbosity::Spinner,
         }
@@ -66,6 +70,7 @@ impl Verbosity {
     pub const fn verbose() -> Self {
         Self {
             display_workflow: true,
+            display_version: false,
             significance: SignificanceVerbosity::All,
             command: CommandVerbosity::Invocation,
         }
@@ -74,6 +79,7 @@ impl Verbosity {
     pub const fn max() -> Self {
         Self {
             display_workflow: true,
+            display_version: true,
             significance: SignificanceVerbosity::All,
             command: CommandVerbosity::InvocationAndOutput,
         }

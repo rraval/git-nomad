@@ -36,6 +36,14 @@ const ENV_REMOTE: &str = "GIT_NOMAD_REMOTE";
 const CONFIG_USER: &str = "user";
 const CONFIG_HOST: &str = "host";
 
+// This value is only conditionally used if `git_version!` cannot find any other version.
+const _FALLBACK_VERSION: &str = crate_version!();
+const VERSION: &str = git_version!(
+    prefix = "git:",
+    args = ["--tags", "--always", "--dirty=-modified"],
+    fallback = _FALLBACK_VERSION,
+);
+
 fn main() -> anyhow::Result<()> {
     let default_user = User::from(whoami::username());
     let default_host = Host::from(whoami::hostname());
@@ -43,6 +51,12 @@ fn main() -> anyhow::Result<()> {
     let mut matches =
         cli(default_user, default_host, &mut env::args_os()).unwrap_or_else(|e| e.exit());
     let verbosity = specified_verbosity(&mut matches);
+
+    if verbosity.map_or(false, |v| v.display_version) {
+        eprintln!();
+        eprintln!("Version: {}", VERSION);
+    }
+
     let git = GitBinary::new(
         verbosity,
         Cow::from(specified_git(&mut matches)),
@@ -50,11 +64,9 @@ fn main() -> anyhow::Result<()> {
     )?;
     let workflow = specified_workflow(&mut matches, &git)?;
 
-    if let Some(verbosity) = verbosity {
-        if verbosity.display_workflow {
-            eprintln!();
-            eprintln!("Workflow: {:?}", workflow);
-        }
+    if verbosity.map_or(false, |v| v.display_workflow) {
+        eprintln!();
+        eprintln!("Workflow: {:?}", workflow);
     }
 
     workflow.execute(&git)
@@ -66,16 +78,9 @@ fn cli(
     default_host: Host,
     args: impl IntoIterator<Item = impl Into<OsString> + Clone>,
 ) -> clap::error::Result<ArgMatches> {
-    // This value is only conditionally used if `git_version!` cannot find any other version.
-    let _fallback_version = crate_version!();
-
     Command::new(crate_name!())
         .arg_required_else_help(true)
-        .version(git_version!(
-            prefix = "git:",
-            args = ["--tags", "--always", "--dirty=-modified"],
-            fallback = _fallback_version,
-        ))
+        .version(VERSION)
         .author(crate_authors!())
         .about(crate_description!())
         .arg(

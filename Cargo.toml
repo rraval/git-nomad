@@ -17,4 +17,17 @@ whoami = "^1.2.3"
 [dependencies.clap]
 version = "^4.0.11"
 default-features = false
-features = ["cargo", "env", "std", "suggestions", "wrap_help", "string"]
+features = [
+    "std",
+    # turn color off since this is a barebones CLI
+    # "color",
+    "help",
+    "usage",
+    "error-context",
+    "suggestions",
+
+    "cargo",
+    "env",
+    "wrap_help",
+    "string",
+]

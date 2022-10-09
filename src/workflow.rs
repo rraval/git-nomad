@@ -1,8 +1,8 @@
 //! High level user invoked workflows for nomad.
 
-use std::{collections::HashSet, hash::Hash};
+use std::{collections::HashSet, hash::Hash, io::Write};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 
 use crate::{
     git_binary::GitBinary,
@@ -34,9 +34,9 @@ pub enum Workflow<'a> {
 
 impl Workflow<'_> {
     /// Imperatively execute the workflow.
-    pub fn execute(self, git: &GitBinary) -> Result<()> {
+    pub fn execute(self, git: &GitBinary, output: &mut dyn Write) -> Result<()> {
         match self {
-            Self::Sync { user, host, remote } => sync(git, &user, &host, &remote),
+            Self::Sync { user, host, remote } => sync(git, output, &user, &host, &remote),
             Self::Ls {
                 printer,
                 user,
@@ -45,6 +45,7 @@ impl Workflow<'_> {
                 branch_filter,
             } => ls(
                 git,
+                output,
                 printer,
                 &user,
                 fetch_remote,
@@ -89,24 +90,31 @@ pub enum LsPrinter {
 }
 
 impl LsPrinter {
-    pub fn print_host(self, host: &Host) {
+    pub fn print_host(self, output: &mut dyn Write, host: &Host) -> Result<()> {
         match self {
-            Self::Grouped => println!("{}", host.0),
-            Self::Ref | Self::Commit => (),
+            Self::Grouped => writeln!(output, "{}", host.0).context("printing grouped host"),
+            Self::Ref | Self::Commit => Ok(()),
         }
     }
 
-    pub fn print_ref(self, ref_: &GitRef) {
+    pub fn print_ref(self, output: &mut dyn Write, ref_: &GitRef) -> Result<()> {
         match self {
-            Self::Grouped => println!("  {} -> {}", ref_.name, ref_.commit_id),
-            Self::Ref => println!("{}", ref_.name),
-            Self::Commit => println!("{}", ref_.commit_id),
+            Self::Grouped => writeln!(output, "  {} -> {}", ref_.name, ref_.commit_id)
+                .context("printing ref and commit"),
+            Self::Ref => writeln!(output, "{}", ref_.name).context("printing ref"),
+            Self::Commit => writeln!(output, "{}", ref_.commit_id).context("printing commit"),
         }
     }
 }
 
 /// Synchronize current local branches with nomad managed refs in the given remote.
-fn sync(git: &GitBinary, user: &User, host: &Host, remote: &Remote) -> Result<()> {
+fn sync(
+    git: &GitBinary,
+    output: &mut dyn Write,
+    user: &User,
+    host: &Host,
+    remote: &Remote,
+) -> Result<()> {
     git.push_nomad_refs(user, host, remote)?;
     git.fetch_nomad_refs(user, remote)?;
     let remote_nomad_refs = git.list_nomad_refs(user, remote)?.collect();
@@ -119,9 +127,10 @@ fn sync(git: &GitBinary, user: &User, host: &Host, remote: &Remote) -> Result<()
     )?;
 
     if git.is_output_allowed() {
-        println!();
+        writeln!(output)?;
         ls(
             git,
+            output,
             LsPrinter::Grouped,
             user,
             None,
@@ -139,6 +148,7 @@ fn sync(git: &GitBinary, user: &User, host: &Host, remote: &Remote) -> Result<()
 /// command.
 fn ls(
     git: &GitBinary,
+    output: &mut dyn Write,
     printer: LsPrinter,
     user: &User,
     fetch_remote: Option<Remote>,
@@ -156,11 +166,11 @@ fn ls(
             continue;
         }
 
-        printer.print_host(&host);
+        printer.print_host(output, &host)?;
 
         for NomadRef { ref_, branch, .. } in branches {
             if branch_filter.contains(&branch) {
-                printer.print_ref(&ref_);
+                printer.print_ref(output, &ref_)?;
             }
         }
     }

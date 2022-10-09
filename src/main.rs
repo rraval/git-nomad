@@ -10,6 +10,7 @@ use clap::{
     parser::ValueSource, value_parser, Arg, ArgAction, ArgMatches, Command, ValueHint,
 };
 use git_version::git_version;
+use output::OutputStream;
 use types::Branch;
 use verbosity::Verbosity;
 
@@ -21,6 +22,7 @@ use crate::{
 
 mod git_binary;
 mod git_ref;
+mod output;
 mod snapshot;
 mod types;
 mod verbosity;
@@ -69,7 +71,7 @@ fn main() -> anyhow::Result<()> {
         eprintln!("Workflow: {:?}", workflow);
     }
 
-    workflow.execute(&git)
+    workflow.execute(&git, &mut OutputStream::new_stdout())
 }
 
 /// Use [`clap`] to implement the intended command line interface.
@@ -355,6 +357,7 @@ mod test_e2e {
 
     use crate::{
         git_testing::{GitClone, GitRemote, INITIAL_BRANCH},
+        output::OutputStream,
         types::Branch,
         workflow::{Filter, Workflow},
     };
@@ -365,7 +368,7 @@ mod test_e2e {
             host: clone.host.always_borrow(),
             remote: clone.remote(),
         }
-        .execute(&clone.git)
+        .execute(&clone.git, &mut OutputStream::new_vec())
         .unwrap();
     }
 
@@ -473,7 +476,7 @@ mod test_e2e {
             remote: host1.remote(),
             host_filter: Filter::Allow(HashSet::from_iter([host0.host.always_borrow()])),
         }
-        .execute(&host1.git)
+        .execute(&host1.git, &mut OutputStream::new_vec())
         .unwrap();
 
         // the origin should only have refs for host1
@@ -512,7 +515,7 @@ mod test_e2e {
             remote: host1.remote(),
             host_filter: Filter::All,
         }
-        .execute(&host1.git)
+        .execute(&host1.git, &mut OutputStream::new_vec())
         .unwrap();
 
         // the origin should have no refs

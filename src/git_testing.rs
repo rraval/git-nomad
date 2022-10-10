@@ -2,7 +2,7 @@ use std::{
     borrow::Cow,
     collections::HashSet,
     fs::{create_dir, write},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 use tempfile::{tempdir, TempDir};
@@ -88,6 +88,10 @@ impl GitRemote {
             remote_dir,
             git,
         }
+    }
+
+    pub fn working_directory(&self) -> &Path {
+        &self.remote_dir
     }
 
     fn verbosity(&self) -> Option<Verbosity> {

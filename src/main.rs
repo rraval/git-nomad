@@ -3,6 +3,8 @@ use std::{
     collections::HashSet,
     env::{self, current_dir},
     ffi::OsString,
+    io::Write,
+    path::Path,
 };
 
 use clap::{
@@ -47,11 +49,22 @@ const VERSION: &str = git_version!(
 );
 
 fn main() -> anyhow::Result<()> {
+    nomad(
+        &mut env::args_os(),
+        current_dir()?.as_path(),
+        &mut OutputStream::new_stdout(),
+    )
+}
+
+fn nomad(
+    args: impl IntoIterator<Item = impl Into<OsString> + Clone>,
+    cwd: &Path,
+    output: &mut dyn Write,
+) -> anyhow::Result<()> {
     let default_user = User::from(whoami::username());
     let default_host = Host::from(whoami::hostname());
 
-    let mut matches =
-        cli(default_user, default_host, &mut env::args_os()).unwrap_or_else(|e| e.exit());
+    let mut matches = cli(default_user, default_host, args).unwrap_or_else(|e| e.exit());
     let verbosity = specified_verbosity(&mut matches);
 
     if verbosity.map_or(false, |v| v.display_version) {
@@ -59,11 +72,7 @@ fn main() -> anyhow::Result<()> {
         eprintln!("Version: {}", VERSION);
     }
 
-    let git = GitBinary::new(
-        verbosity,
-        Cow::from(specified_git(&mut matches)),
-        current_dir()?.as_path(),
-    )?;
+    let git = GitBinary::new(verbosity, Cow::from(specified_git(&mut matches)), cwd)?;
     let workflow = specified_workflow(&mut matches, &git)?;
 
     if verbosity.map_or(false, |v| v.display_workflow) {
@@ -71,7 +80,7 @@ fn main() -> anyhow::Result<()> {
         eprintln!("Workflow: {:?}", workflow);
     }
 
-    workflow.execute(&git, &mut OutputStream::new_stdout())
+    workflow.execute(&git, output)
 }
 
 /// Use [`clap`] to implement the intended command line interface.
@@ -357,6 +366,7 @@ mod test_e2e {
 
     use crate::{
         git_testing::{GitClone, GitRemote, INITIAL_BRANCH},
+        nomad,
         output::OutputStream,
         types::Branch,
         verbosity::Verbosity,
@@ -371,6 +381,20 @@ mod test_e2e {
         }
         .execute(&clone.git, &mut OutputStream::new_vec())
         .unwrap();
+    }
+
+    /// Invoking all the real logic in `nomad` should not panic.
+    #[test]
+    fn nomad_ls() {
+        let origin = GitRemote::init(None);
+        let mut output = OutputStream::new_vec();
+        nomad(
+            ["git-nomad", "ls", "-vv"],
+            origin.working_directory(),
+            &mut output,
+        )
+        .unwrap();
+        assert_eq!(output.as_str(), "");
     }
 
     /// Syncing should pick up nomad refs from other hosts.

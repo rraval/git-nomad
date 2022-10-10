@@ -13,6 +13,8 @@ However, the output of the application is designed for humans, not machines, and
 
 ## [Unreleased]
 
+## [0.6.0] - 2022-10-10
+
 ### Added
 
 - `ls` has gained a number of new options:
@@ -28,6 +30,7 @@ However, the output of the application is designed for humans, not machines, and
 - `<remote>` is now a global option instead of a positional argument. It can be specified via `-R`, `--remote`, or the `GIT_NOMAD_REMOTE` environment variable. It influences the git remote that `ls`, `sync`, `purge` operate on.
 - `--host` is now a global option instead of subcommand specific.
 - The `--silent` option has been renamed to `--quiet`.
+- Update to clap v4 for the command line interface.
 - Cosmetic tweaks to how command failures are reported.
 
 ## Removed

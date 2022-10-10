@@ -214,14 +214,14 @@ mod test {
                 LsPrinter::Grouped,
                 format!(
                     "{}\n  refs/nomad/{}/master -> {}\n",
-                    clone.host.0, clone.host.0, commit_id.commit_id
+                    clone.host.0, clone.host.0, commit_id.0
                 ),
             ),
             (
                 LsPrinter::Ref,
                 format!("refs/nomad/{}/master\n", clone.host.0),
             ),
-            (LsPrinter::Commit, format!("{}\n", commit_id.commit_id)),
+            (LsPrinter::Commit, format!("{}\n", commit_id.0)),
         ] {
             let mut output = OutputStream::new_vec();
 

@@ -27,14 +27,12 @@ pub const VERBOSITY: Option<Verbosity> = Some(Verbosity::max());
 /// Useful for comparing just the commit IDs without caring what the [`GitRef::name`]` actually
 /// was.
 #[derive(PartialEq, Eq, Hash, Debug, Clone)]
-pub struct GitCommitId {
-    pub commit_id: String,
-}
+pub struct GitCommitId(pub String);
 
 impl From<GitRef> for GitCommitId {
     fn from(git_ref: GitRef) -> Self {
         let GitRef { commit_id, .. } = git_ref;
-        Self { commit_id }
+        Self(commit_id)
     }
 }
 
@@ -164,7 +162,7 @@ impl<'a> GitClone<'a> {
         .and_then(LineArity::one)
         .unwrap();
 
-        GitCommitId { commit_id }
+        GitCommitId(commit_id)
     }
 
     /// Push all nomad managed refs to the remote.

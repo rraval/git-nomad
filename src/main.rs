@@ -359,6 +359,7 @@ mod test_e2e {
         git_testing::{GitClone, GitRemote, INITIAL_BRANCH},
         output::OutputStream,
         types::Branch,
+        verbosity::Verbosity,
         workflow::{Filter, Workflow},
     };
 
@@ -380,7 +381,7 @@ mod test_e2e {
     /// See https://github.com/rraval/git-nomad/issues/1
     #[test]
     fn issue_1() {
-        let origin = GitRemote::init();
+        let origin = GitRemote::init(None);
         let feature = &Branch::from("feature");
 
         let host0 = origin.clone("user0", "host0");
@@ -453,7 +454,7 @@ mod test_e2e {
     /// See https://github.com/rraval/git-nomad/issues/2
     #[test]
     fn issue_2_other_host() {
-        let origin = GitRemote::init();
+        let origin = GitRemote::init(None);
 
         let host0 = origin.clone("user0", "host0");
         sync_host(&host0);
@@ -492,7 +493,7 @@ mod test_e2e {
     /// See https://github.com/rraval/git-nomad/issues/2
     #[test]
     fn issue_2_all() {
-        let origin = GitRemote::init();
+        let origin = GitRemote::init(Some(Verbosity::max()));
 
         let host0 = origin.clone("user0", "host0");
         sync_host(&host0);
@@ -559,7 +560,7 @@ mod test_cli {
         fn remote(&self, args: &[&str]) -> CliTestRemote {
             CliTestRemote {
                 matches: self.matches(args).unwrap(),
-                remote: GitRemote::init(),
+                remote: GitRemote::init(Some(Verbosity::max())),
             }
         }
     }

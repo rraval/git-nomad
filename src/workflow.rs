@@ -195,7 +195,7 @@ mod test {
 
     #[test]
     fn ls_printer() {
-        let remote = GitRemote::init();
+        let remote = GitRemote::init(None);
 
         let clone = remote.clone("user0", "host0");
         let commit_id = clone.current_commit();

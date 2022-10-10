@@ -18,7 +18,6 @@ use crate::{
 const GIT: &str = "git";
 const ORIGIN: &str = "origin";
 pub const INITIAL_BRANCH: &str = "master";
-pub const VERBOSITY: Option<Verbosity> = Some(Verbosity::max());
 
 /// Only stores the hexadecimal git commit ID.
 ///
@@ -56,7 +55,7 @@ pub struct GitRemote {
 
 impl GitRemote {
     /// Initializes a git remote in a temporary directory.
-    pub fn init() -> GitRemote {
+    pub fn init(verbosity: Option<Verbosity>) -> GitRemote {
         let root_dir = tempdir().unwrap();
         let remote_dir = root_dir.path().join("remote");
 
@@ -65,7 +64,7 @@ impl GitRemote {
 
             let git = |args: &[&str]| {
                 run_notable(
-                    VERBOSITY,
+                    verbosity,
                     "",
                     git_command(GIT).current_dir(remote_dir).args(args),
                 )
@@ -82,13 +81,17 @@ impl GitRemote {
             git(&["commit", "-m", "commit0"]);
         }
 
-        let git = GitBinary::new(VERBOSITY, Cow::from(GIT), &remote_dir).unwrap();
+        let git = GitBinary::new(verbosity, Cow::from(GIT), &remote_dir).unwrap();
 
         GitRemote {
             root_dir,
             remote_dir,
             git,
         }
+    }
+
+    fn verbosity(&self) -> Option<Verbosity> {
+        self.git.verbosity
     }
 
     /// Creates a git clone that can act like a [`Host`].
@@ -101,7 +104,7 @@ impl GitRemote {
         };
 
         run_notable(
-            VERBOSITY,
+            self.verbosity(),
             "",
             git_command(GIT)
                 .current_dir(&self.root_dir)
@@ -112,10 +115,10 @@ impl GitRemote {
         )
         .unwrap();
 
-        let git = GitBinary::new(VERBOSITY, Cow::from(GIT), &clone_dir).unwrap();
+        let git = GitBinary::new(self.verbosity(), Cow::from(GIT), &clone_dir).unwrap();
 
         GitClone {
-            _remote: self,
+            git_remote: self,
             _clone_dir: clone_dir,
             remote: Remote::from(ORIGIN),
             user: User::from(user),
@@ -141,7 +144,7 @@ impl GitRemote {
 
 /// Acts like a separate [`Host`] in a temporary directory.
 pub struct GitClone<'a> {
-    _remote: &'a GitRemote,
+    git_remote: &'a GitRemote,
     _clone_dir: PathBuf,
     pub remote: Remote<'static>,
     pub user: User<'static>,
@@ -153,7 +156,7 @@ impl<'a> GitClone<'a> {
     /// Get the commit ID at HEAD.
     pub fn current_commit(&self) -> GitCommitId {
         let commit_id = run_notable(
-            VERBOSITY,
+            self.git_remote.verbosity(),
             "Get current commit",
             self.git.command().arg("rev-parse").arg("HEAD"),
         )

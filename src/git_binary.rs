@@ -226,7 +226,7 @@ mod namespace {
 #[derive(PartialEq, Eq)]
 pub struct GitBinary<'name> {
     /// Used to actually execute commands while reporting progress to the user.
-    verbosity: Option<Verbosity>,
+    pub verbosity: Option<Verbosity>,
 
     /// The name of the `git` binary to use. Implemented on top of [`Command::new`], so
     /// non-absolute paths are looked up against `$PATH`.
@@ -690,7 +690,7 @@ mod test_impl {
 
     use tempfile::{tempdir, TempDir};
 
-    use crate::{git_testing::VERBOSITY, types::Branch, verbosity::run_notable};
+    use crate::{types::Branch, verbosity::{run_notable, Verbosity}};
 
     use super::{git_command, GitBinary};
     use anyhow::Result;
@@ -703,7 +703,7 @@ mod test_impl {
         let tmpdir = tempdir()?;
 
         run_notable(
-            VERBOSITY,
+            Some(Verbosity::max()),
             "",
             git_command(&name).current_dir(tmpdir.path()).args(&[
                 "init",
@@ -720,7 +720,7 @@ mod test_impl {
     fn toplevel_at_root() -> Result<()> {
         let (name, tmpdir) = git_init()?;
 
-        let git = GitBinary::new(VERBOSITY, name, tmpdir.path())?;
+        let git = GitBinary::new(None, name, tmpdir.path())?;
         assert_eq!(
             Some(git.git_dir.as_str()),
             tmpdir.path().join(".git").to_str()
@@ -736,7 +736,7 @@ mod test_impl {
         let subdir = tmpdir.path().join("subdir");
         create_dir(&subdir)?;
 
-        let git = GitBinary::new(VERBOSITY, name, subdir.as_path())?;
+        let git = GitBinary::new(None, name, subdir.as_path())?;
         assert_eq!(
             Some(git.git_dir.as_str()),
             tmpdir.path().join(".git").to_str(),
@@ -749,7 +749,7 @@ mod test_impl {
     #[test]
     fn read_empty_config() -> Result<()> {
         let (name, tmpdir) = git_init()?;
-        let git = GitBinary::new(VERBOSITY, name, tmpdir.path())?;
+        let git = GitBinary::new(None, name, tmpdir.path())?;
 
         let got = git.get_config("test.key")?;
         assert_eq!(got, None);
@@ -761,7 +761,7 @@ mod test_impl {
     #[test]
     fn write_then_read_config() -> Result<()> {
         let (name, tmpdir) = git_init()?;
-        let git = GitBinary::new(VERBOSITY, name, tmpdir.path())?;
+        let git = GitBinary::new(None, name, tmpdir.path())?;
 
         git.set_config("key", "testvalue")?;
         let got = git.get_config("key")?;
@@ -776,7 +776,7 @@ mod test_impl {
     #[test]
     fn current_branch() -> Result<()> {
         let (name, tmpdir) = git_init()?;
-        let git = GitBinary::new(VERBOSITY, name, tmpdir.path())?;
+        let git = GitBinary::new(None, name, tmpdir.path())?;
 
         let branch = git.current_branch()?;
         assert_eq!(branch, Branch::from(INITIAL_BRANCH));
@@ -787,11 +787,13 @@ mod test_impl {
     /// Reading the current branch in a detached HEAD state should be handled as an error.
     #[test]
     fn current_branch_in_detached_head() -> Result<()> {
+        let verbosity = Some(Verbosity::max());
+
         let (name, tmpdir) = git_init()?;
-        let git = GitBinary::new(VERBOSITY, name, tmpdir.path())?;
+        let git = GitBinary::new(verbosity, name, tmpdir.path())?;
 
         run_notable(
-            VERBOSITY,
+            verbosity,
             "Create an initial commit",
             git.command()
                 .args(&["commit", "--allow-empty", "-m", "initial commit"]),
@@ -799,7 +801,7 @@ mod test_impl {
 
         let head = git.get_ref("Get commit ID for HEAD", "HEAD")?;
         run_notable(
-            VERBOSITY,
+            verbosity,
             "Switch to detached HEAD state",
             git.command().args(&["checkout", &head.commit_id]),
         )?;
@@ -813,7 +815,7 @@ mod test_impl {
 
 #[cfg(test)]
 mod test_backend {
-    use crate::git_testing::{GitCommitId, GitRemote, INITIAL_BRANCH};
+    use crate::{git_testing::{GitCommitId, GitRemote, INITIAL_BRANCH}, verbosity::Verbosity};
     use std::{collections::HashSet, iter::FromIterator};
 
     use crate::types::NomadRef;
@@ -821,7 +823,7 @@ mod test_backend {
     /// Push should put local branches to remote `refs/nomad/{user}/{host}/{branch}`
     #[test]
     fn push() {
-        let origin = GitRemote::init();
+        let origin = GitRemote::init(Some(Verbosity::max()));
         let host0 = origin.clone("user0", "host0");
         host0.push();
 
@@ -835,7 +837,7 @@ mod test_backend {
     /// `refs/nomad/{host}/{branch}`
     #[test]
     fn fetch() {
-        let origin = GitRemote::init();
+        let origin = GitRemote::init(None);
 
         let host0 = origin.clone("user0", "host0");
         host0.push();
@@ -862,7 +864,7 @@ mod test_backend {
     /// Pruning should delete refs in the local and remote.
     #[test]
     fn push_fetch_prune() {
-        let origin = GitRemote::init();
+        let origin = GitRemote::init(Some(Verbosity::max()));
         let host0 = origin.clone("user0", "host0");
 
         // In the beginning, there are no nomad refs

@@ -262,7 +262,7 @@ impl<'name> GitBinary<'name> {
 impl GitBinary<'_> {
     /// Invoke a git sub-command with an explicit `--git-dir` to make it independent of the working
     /// directory it is invoked from.
-    fn command(&self) -> Command {
+    pub fn command(&self) -> Command {
         let mut command = git_command(self.name.as_ref());
         command.args(&["--git-dir", &self.git_dir]);
         command
@@ -585,7 +585,7 @@ impl GitBinary<'_> {
 
 /// Utility to parse line based output of various `git` sub-commands.
 #[derive(Debug)]
-enum LineArity {
+pub enum LineArity {
     /// The command produced no lines.
     Zero(),
     /// The command produced exactly one line.
@@ -621,7 +621,7 @@ impl From<String> for LineArity {
 
 impl LineArity {
     /// The caller expects the output to only have a single line.
-    fn one(self) -> Result<String> {
+    pub fn one(self) -> Result<String> {
         if let LineArity::One(line) = self {
             Ok(line)
         } else {
@@ -630,7 +630,7 @@ impl LineArity {
     }
 
     /// The caller expects the output to have zero or one line.
-    fn zero_or_one(self) -> Result<Option<String>> {
+    pub fn zero_or_one(self) -> Result<Option<String>> {
         match self {
             LineArity::Zero() => Ok(None),
             LineArity::One(line) => Ok(Some(line)),

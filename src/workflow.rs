@@ -186,3 +186,56 @@ fn purge(git: &GitBinary, user: &User, remote: &Remote, host_filter: Filter<Host
     git.prune_nomad_refs(remote, prune.into_iter())?;
     Ok(())
 }
+
+#[cfg(test)]
+mod test {
+    use crate::{git_testing::GitRemote, output::OutputStream, workflow::sync};
+
+    use super::{Filter, LsPrinter, Workflow};
+
+    #[test]
+    fn ls_printer() {
+        let remote = GitRemote::init();
+
+        let clone = remote.clone("user0", "host0");
+        let commit_id = clone.current_commit();
+
+        sync(
+            &clone.git,
+            &mut OutputStream::new_sink(),
+            &clone.user,
+            &clone.host,
+            &clone.remote,
+        )
+        .unwrap();
+
+        for (printer, expected) in &[
+            (
+                LsPrinter::Grouped,
+                format!(
+                    "{}\n  refs/nomad/{}/master -> {}\n",
+                    clone.host.0, clone.host.0, commit_id.commit_id
+                ),
+            ),
+            (
+                LsPrinter::Ref,
+                format!("refs/nomad/{}/master\n", clone.host.0),
+            ),
+            (LsPrinter::Commit, format!("{}\n", commit_id.commit_id)),
+        ] {
+            let mut output = OutputStream::new_vec();
+
+            Workflow::Ls {
+                printer: *printer,
+                user: clone.user.clone(),
+                fetch_remote: Some(clone.remote.clone()),
+                host_filter: Filter::All,
+                branch_filter: Filter::All,
+            }
+            .execute(&clone.git, &mut output)
+            .unwrap();
+
+            assert_eq!(output.as_str(), expected);
+        }
+    }
+}

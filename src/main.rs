@@ -366,7 +366,7 @@ mod test_e2e {
         Workflow::Sync {
             user: clone.user.always_borrow(),
             host: clone.host.always_borrow(),
-            remote: clone.remote(),
+            remote: clone.remote.always_borrow(),
         }
         .execute(&clone.git, &mut OutputStream::new_vec())
         .unwrap();
@@ -473,7 +473,7 @@ mod test_e2e {
         // pruning refs for host0 from host1
         Workflow::Purge {
             user: host1.user.always_borrow(),
-            remote: host1.remote(),
+            remote: host1.remote.always_borrow(),
             host_filter: Filter::Allow(HashSet::from_iter([host0.host.always_borrow()])),
         }
         .execute(&host1.git, &mut OutputStream::new_vec())
@@ -512,7 +512,7 @@ mod test_e2e {
         // pruning refs for all hosts from host1
         Workflow::Purge {
             user: host1.user.always_borrow(),
-            remote: host1.remote(),
+            remote: host1.remote,
             host_filter: Filter::All,
         }
         .execute(&host1.git, &mut OutputStream::new_vec())

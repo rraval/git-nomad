@@ -690,7 +690,10 @@ mod test_impl {
 
     use tempfile::{tempdir, TempDir};
 
-    use crate::{types::Branch, verbosity::{run_notable, Verbosity}};
+    use crate::{
+        types::Branch,
+        verbosity::{run_notable, Verbosity},
+    };
 
     use super::{git_command, GitBinary};
     use anyhow::Result;
@@ -815,7 +818,10 @@ mod test_impl {
 
 #[cfg(test)]
 mod test_backend {
-    use crate::{git_testing::{GitCommitId, GitRemote, INITIAL_BRANCH}, verbosity::Verbosity};
+    use crate::{
+        git_testing::{GitCommitId, GitRemote, INITIAL_BRANCH},
+        verbosity::Verbosity,
+    };
     use std::{collections::HashSet, iter::FromIterator};
 
     use crate::types::NomadRef;

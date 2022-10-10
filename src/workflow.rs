@@ -209,7 +209,7 @@ mod test {
         )
         .unwrap();
 
-        for (printer, expected) in &[
+        for (printer, expected) in [
             (
                 LsPrinter::Grouped,
                 format!(
@@ -226,7 +226,7 @@ mod test {
             let mut output = OutputStream::new_vec();
 
             Workflow::Ls {
-                printer: *printer,
+                printer,
                 user: clone.user.clone(),
                 fetch_remote: Some(clone.remote.clone()),
                 host_filter: Filter::All,
@@ -236,6 +236,19 @@ mod test {
             .unwrap();
 
             assert_eq!(output.as_str(), expected);
+        }
+    }
+
+    #[test]
+    fn filter_does_filtering() {
+        for (filter, expected) in [
+            (Filter::All, vec!["foo", "bar"]),
+            (Filter::Allow(["foo"].into()), vec!["foo"]),
+            (Filter::Deny(["foo"].into()), vec!["bar"]),
+        ] {
+            let mut got = vec!["foo", "bar"];
+            got.retain(|i| filter.contains(i));
+            assert_eq!(got, expected);
         }
     }
 }

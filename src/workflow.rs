@@ -194,7 +194,7 @@ mod test {
     use super::{Filter, LsPrinter, Workflow};
 
     #[test]
-    fn ls_printer() {
+    fn ls_one_host() {
         let remote = GitRemote::init(None);
 
         let clone = remote.clone("user0", "host0");
@@ -237,6 +237,46 @@ mod test {
 
             assert_eq!(output.as_str(), expected);
         }
+    }
+
+    /// Exercise `LsPrinter::Grouped` with a bunch of `Filter::Deny`s.
+    #[test]
+    fn ls_two_hosts() {
+        let remote = GitRemote::init(None);
+
+        let host0 = remote.clone("user0", "host0");
+        let host1 = remote.clone("user0", "host1");
+
+        sync(
+            &host0.git,
+            &mut OutputStream::new_sink(),
+            &host0.user,
+            &host0.host,
+            &host0.remote,
+        )
+        .unwrap();
+
+        sync(
+            &host1.git,
+            &mut OutputStream::new_sink(),
+            &host1.user,
+            &host1.host,
+            &host1.remote,
+        )
+        .unwrap();
+
+        let mut output = OutputStream::new_vec();
+        Workflow::Ls {
+            printer: LsPrinter::Grouped,
+            user: host1.user,
+            fetch_remote: Some(host1.remote),
+            host_filter: Filter::Deny([host0.host].into()),
+            branch_filter: Filter::Deny([host1.git.current_branch().unwrap()].into()),
+        }
+        .execute(&host1.git, &mut output)
+        .unwrap();
+
+        assert_eq!(output.as_str(), "host1\n");
     }
 
     #[test]

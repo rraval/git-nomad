@@ -144,7 +144,7 @@ fn sync(
 
 /// List all nomad managed refs organized by host.
 ///
-/// Does not respect [`Progress::is_output_allowed`] because output is the whole point of this
+/// Does not respect [`GitBinary::is_output_allowed`] because output is the whole point of this
 /// command.
 fn ls(
     git: &GitBinary,

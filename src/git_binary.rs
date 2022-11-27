@@ -13,7 +13,7 @@ use crate::{
 /// Attempt to run a git binary without impurities from the environment slipping in.
 ///
 /// Doing this correctly seems to have a long and complicated history:
-/// https://stackoverflow.com/a/67512433
+/// <https://stackoverflow.com/a/67512433>
 pub fn git_command<S: AsRef<OsStr>>(name: S) -> Command {
     let mut command = Command::new(name);
 

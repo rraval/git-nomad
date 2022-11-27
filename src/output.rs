@@ -8,7 +8,7 @@ pub struct OutputStream<Writer: Write, Data> {
 }
 
 impl<'a> OutputStream<Stdout, StdoutLock<'a>> {
-    /// An [`OutputStream`] for stdout, which should be used for all [`Workflow`] output.
+    /// An [`OutputStream`] for stdout, which should be used for all [`crate::workflow::Workflow`] output.
     ///
     /// Implicitly acquires [`StdoutLock`] since the whole application is single threaded.
     pub fn new_stdout() -> Self {

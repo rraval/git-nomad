@@ -1,4 +1,4 @@
-//! See [`Progress`] for the primary entry point.
+//! Helpers for executing [`Command`]s and parsing their [`Output`].
 
 use std::{
     process::{Command, Output},

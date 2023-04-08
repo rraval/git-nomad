@@ -245,7 +245,7 @@ impl<'name> GitBinary<'name> {
             "Resolving .git directory",
             git_command(name.as_ref())
                 .current_dir(cwd)
-                .args(&["rev-parse", "--absolute-git-dir"]),
+                .args(["rev-parse", "--absolute-git-dir"]),
         )
         .and_then(output_stdout)
         .map(LineArity::from)
@@ -264,7 +264,7 @@ impl GitBinary<'_> {
     /// directory it is invoked from.
     pub fn command(&self) -> Command {
         let mut command = git_command(self.name.as_ref());
-        command.args(&["--git-dir", &self.git_dir]);
+        command.args(["--git-dir", &self.git_dir]);
         command
     }
 
@@ -273,7 +273,7 @@ impl GitBinary<'_> {
         run_trivial(
             self.verbosity,
             format!("Get config {}", key),
-            self.command().args(&[
+            self.command().args([
                 "config",
                 // Use a default to prevent git from returning a non-zero exit code when the value does
                 // not exist.
@@ -294,7 +294,7 @@ impl GitBinary<'_> {
         run_trivial(
             self.verbosity,
             format!("Set config {} = {}", key, value),
-            self.command().args(&[
+            self.command().args([
                 "config",
                 "--local",
                 "--replace-all",
@@ -325,7 +325,7 @@ impl GitBinary<'_> {
         run_notable(
             self.verbosity,
             description,
-            self.command().args(&["fetch", &remote.0]).args(refspecs),
+            self.command().args(["fetch", &remote.0]).args(refspecs),
         )?;
         Ok(())
     }
@@ -351,7 +351,7 @@ impl GitBinary<'_> {
             self.verbosity,
             description,
             self.command()
-                .args(&["push", "--no-verify", &remote.0])
+                .args(["push", "--no-verify", &remote.0])
                 .args(refspecs),
         )?;
         Ok(())
@@ -372,7 +372,7 @@ impl GitBinary<'_> {
             self.verbosity,
             description,
             self.command()
-                .args(&["show-ref", "--verify", ref_name.as_ref()]),
+                .args(["show-ref", "--verify", ref_name.as_ref()]),
         )
         .and_then(output_stdout)
         .map(LineArity::from)
@@ -414,7 +414,7 @@ impl GitBinary<'_> {
             description,
             self.command()
                 .arg("ls-remote")
-                .arg(&remote.0.as_ref())
+                .arg(remote.0.as_ref())
                 .args(refspecs),
         )
         .and_then(output_stdout)?;
@@ -432,7 +432,7 @@ impl GitBinary<'_> {
         Description: AsRef<str>,
     {
         let mut command = self.command();
-        command.args(&["update-ref", "-d", &git_ref.name, &git_ref.commit_id]);
+        command.args(["update-ref", "-d", &git_ref.name, &git_ref.commit_id]);
         run_notable(self.verbosity, description, &mut command)?;
         Ok(())
     }
@@ -440,7 +440,7 @@ impl GitBinary<'_> {
     /// Get the current branch, which may fail if the work tree is in a detached HEAD state.
     pub fn current_branch(&self) -> Result<Branch<'static>> {
         let mut command = self.command();
-        command.args(&["symbolic-ref", "--short", "HEAD"]);
+        command.args(["symbolic-ref", "--short", "HEAD"]);
         run_trivial(self.verbosity, "Reading current branch", &mut command)
             .and_then(output_stdout)
             .map(LineArity::from)
@@ -452,7 +452,7 @@ impl GitBinary<'_> {
     #[cfg(test)]
     pub fn create_branch(&self, description: impl AsRef<str>, branch_name: &Branch) -> Result<()> {
         let mut command = self.command();
-        command.args(&["branch", &branch_name.0]);
+        command.args(["branch", &branch_name.0]);
         run_notable(self.verbosity, description, &mut command)?;
         Ok(())
     }
@@ -461,7 +461,7 @@ impl GitBinary<'_> {
     #[cfg(test)]
     pub fn delete_branch(&self, description: impl AsRef<str>, branch_name: &Branch) -> Result<()> {
         let mut command = self.command();
-        command.args(&["branch", "-d", &branch_name.0]);
+        command.args(["branch", "-d", &branch_name.0]);
         run_notable(self.verbosity, description, &mut command)?;
         Ok(())
     }
@@ -708,7 +708,7 @@ mod test_impl {
         run_notable(
             Some(Verbosity::max()),
             "",
-            git_command(&name).current_dir(tmpdir.path()).args(&[
+            git_command(&name).current_dir(tmpdir.path()).args([
                 "init",
                 "--initial-branch",
                 INITIAL_BRANCH,
@@ -799,14 +799,14 @@ mod test_impl {
             verbosity,
             "Create an initial commit",
             git.command()
-                .args(&["commit", "--allow-empty", "-m", "initial commit"]),
+                .args(["commit", "--allow-empty", "-m", "initial commit"]),
         )?;
 
         let head = git.get_ref("Get commit ID for HEAD", "HEAD")?;
         run_notable(
             verbosity,
             "Switch to detached HEAD state",
-            git.command().args(&["checkout", &head.commit_id]),
+            git.command().args(["checkout", &head.commit_id]),
         )?;
 
         let branch_result = git.current_branch();

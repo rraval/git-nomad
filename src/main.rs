@@ -50,7 +50,7 @@ const VERSION: &str = git_version!(
 
 fn main() -> anyhow::Result<()> {
     nomad(
-        &mut env::args_os(),
+        env::args_os(),
         current_dir()?.as_path(),
         &mut OutputStream::new_stdout(),
     )

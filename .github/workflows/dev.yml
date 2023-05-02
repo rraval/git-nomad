@@ -4,7 +4,6 @@ on:
     branches-ignore:
       - "dependabot/**"
   pull_request:
-    types: [opened, reopened]
 jobs:
   all:
     uses: rraval/workflows/.github/workflows/rust_dev.yml@v1

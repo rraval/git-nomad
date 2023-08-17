@@ -11,7 +11,7 @@ license = "MIT"
 anyhow = "^1.0.72"
 git-version = "^0.3.5"
 indicatif = "^0.17.6"
-tempfile = "^3.7.0"
+tempfile = "^3.7.1"
 whoami = "^1.4.1"
 
 [dependencies.clap]

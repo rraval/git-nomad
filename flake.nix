@@ -25,6 +25,10 @@
         darwin.apple_sdk.frameworks.SystemConfiguration
       ];
 
+      preBuild = ''
+        export GIT_NOMAD_BUILD_VERSION='${version}'
+      '';
+
       nativeCheckInputs = [
         git
       ];

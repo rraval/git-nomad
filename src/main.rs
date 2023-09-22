@@ -40,13 +40,19 @@ const ENV_REMOTE: &str = "GIT_NOMAD_REMOTE";
 const CONFIG_USER: &str = "user";
 const CONFIG_HOST: &str = "host";
 
+const BUILD_VERSION: Option<&str> = option_env!("GIT_NOMAD_BUILD_VERSION");
+
 // This value is only conditionally used if `git_version!` cannot find any other version.
-const _FALLBACK_VERSION: &str = crate_version!();
-const VERSION: &str = git_version!(
+const _CARGO_VERSION: &str = crate_version!();
+const GIT_VERSION: &str = git_version!(
     prefix = "git:",
     args = ["--tags", "--always", "--dirty=-modified"],
-    fallback = _FALLBACK_VERSION,
+    fallback = _CARGO_VERSION,
 );
+
+fn version() -> &'static str {
+    BUILD_VERSION.unwrap_or(GIT_VERSION)
+}
 
 fn main() -> anyhow::Result<()> {
     nomad(
@@ -69,7 +75,7 @@ fn nomad(
 
     if verbosity.map_or(false, |v| v.display_version) {
         eprintln!();
-        eprintln!("Version: {}", VERSION);
+        eprintln!("Version: {}", version());
     }
 
     let git = GitBinary::new(verbosity, Cow::from(specified_git(&mut matches)), cwd)?;
@@ -91,7 +97,7 @@ fn cli(
 ) -> clap::error::Result<ArgMatches> {
     Command::new(crate_name!())
         .arg_required_else_help(true)
-        .version(VERSION)
+        .version(version())
         .author(crate_authors!())
         .about(crate_description!())
         .arg(

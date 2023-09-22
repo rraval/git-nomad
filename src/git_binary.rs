@@ -10,28 +10,29 @@ use crate::{
     verbosity::{is_output_allowed, output_stdout, run_notable, run_trivial, Verbosity},
 };
 
-/// Attempt to run a git binary without impurities from the environment slipping in.
-///
-/// Doing this correctly seems to have a long and complicated history:
-/// <https://stackoverflow.com/a/67512433>
-pub fn git_command<S: AsRef<OsStr>>(name: S) -> Command {
+/// Run the git binary inheriting the same environment that this git-nomad
+/// binary is running under.
+#[cfg(not(test))]
+pub fn git_command(name: impl AsRef<OsStr>) -> Command {
+    Command::new(name)
+}
+
+/// Constructs a standalone git invocation that works in test environments without any ambient
+/// configuration.
+#[cfg(test)]
+pub fn git_command(name: impl AsRef<OsStr>) -> Command {
     let mut command = Command::new(name);
-
-    let author_name = "git-nomad";
-    let author_email = "git-nomad@invalid";
-    let author_date = "1970-01-01T00:00:00";
-
     command
-        .env("GIT_CONFIG_NOSYSTEM", "1")
-        .env("GIT_CONFIG_NOGLOBAL", "1")
-        .env("HOME", "")
-        .env("XDG_CONFIG_HOME", "")
-        .env("GIT_AUTHOR_NAME", author_name)
-        .env("GIT_AUTHOR_EMAIL", author_email)
-        .env("GIT_AUTHOR_DATE", author_date)
-        .env("GIT_COMMITTER_NAME", author_name)
-        .env("GIT_COMMITTER_EMAIL", author_email)
-        .env("GIT_COMMITTER_DATE", author_date);
+        // These allow tests to exercise global config reading behaviour
+        .env_remove("GIT_CONFIG_SYSTEM")
+        .env_remove("GIT_CONFIG_GLOBAL")
+        // This allows `git commit` to work
+        .args([
+            "-c",
+            "user.name=git-nomad",
+            "-c",
+            "user.email=git-nomad@invalid",
+        ]);
     command
 }
 
@@ -45,7 +46,7 @@ mod namespace {
 
     /// The main name that we declare to be ours and nobody elses. This lays claim to the section
     /// in `git config` and the `refs/{PREFIX}` hierarchy in all git repos!
-    const PREFIX: &str = "nomad";
+    pub const PREFIX: &str = "nomad";
 
     /// Where information is stored for `git config`.
     pub fn config_key(key: &str) -> String {
@@ -270,10 +271,18 @@ impl GitBinary<'_> {
 
     /// Wraps `git config` to read a single namespaced value.
     pub fn get_config(&self, key: &str) -> Result<Option<String>> {
+        self.get_config_with_env(key, [] as [(&str, &str); 0])
+    }
+
+    fn get_config_with_env(
+        &self,
+        key: &str,
+        vars: impl IntoIterator<Item = (impl AsRef<OsStr>, impl AsRef<OsStr>)>,
+    ) -> Result<Option<String>> {
         run_trivial(
             self.verbosity,
             format!("Get config {}", key),
-            self.command().args([
+            self.command().envs(vars).args([
                 "config",
                 // Use a default to prevent git from returning a non-zero exit code when the value does
                 // not exist.
@@ -686,7 +695,7 @@ mod test_line_arity {
 
 #[cfg(test)]
 mod test_impl {
-    use std::{borrow::Cow, fs::create_dir};
+    use std::{borrow::Cow, fs};
 
     use tempfile::{tempdir, TempDir};
 
@@ -737,7 +746,7 @@ mod test_impl {
     fn toplevel_in_subdir() -> Result<()> {
         let (name, tmpdir) = git_init()?;
         let subdir = tmpdir.path().join("subdir");
-        create_dir(&subdir)?;
+        fs::create_dir(&subdir)?;
 
         let git = GitBinary::new(None, name, subdir.as_path())?;
         assert_eq!(
@@ -770,6 +779,67 @@ mod test_impl {
         let got = git.get_config("key")?;
 
         assert_eq!(got, Some("testvalue".to_string()));
+
+        Ok(())
+    }
+
+    /// Generates git config files for testing.
+    mod gitconfig {
+        use std::{fs, path::Path};
+
+        use anyhow::Result;
+        use tempfile::{tempdir, TempDir};
+
+        use crate::git_binary::namespace;
+
+        pub const KEY: &str = "testkey";
+        pub const VALUE: &str = "testvalue";
+
+        pub fn write(
+            dirs: impl IntoIterator<Item = impl AsRef<Path>>,
+            filename: impl AsRef<Path>,
+        ) -> Result<TempDir> {
+            let root = tempdir()?;
+
+            let mut path = root.path().to_path_buf();
+            path.extend(dirs);
+
+            fs::create_dir_all(&path)?;
+
+            path.push(filename);
+            fs::write(
+                &path,
+                format!("[{}]\n    {} = {}", namespace::PREFIX, KEY, VALUE),
+            )?;
+
+            Ok(root)
+        }
+    }
+
+    /// Git invocations should read from `$HOME/.gitconfig`
+    #[test]
+    fn read_home_config() -> Result<()> {
+        let (name, tmpdir) = git_init()?;
+        let git = GitBinary::new(None, name, tmpdir.path())?;
+
+        let home = gitconfig::write([] as [&str; 0], ".gitconfig")?;
+        let got = git.get_config_with_env(gitconfig::KEY, [("HOME", home.path())])?;
+
+        assert_eq!(got, Some(gitconfig::VALUE.into()));
+
+        Ok(())
+    }
+
+    /// Git invocations should read from `$XDG_CONFIG_HOME/git/config`
+    #[test]
+    fn read_xdg_config() -> Result<()> {
+        let (name, tmpdir) = git_init()?;
+        let git = GitBinary::new(None, name, tmpdir.path())?;
+
+        let xdg = gitconfig::write(["git"], "config")?;
+        let got = git.get_config_with_env(gitconfig::KEY, [("XDG_CONFIG_HOME", xdg.path())])?;
+
+        assert_eq!(got, Some(gitconfig::VALUE.into()));
 
         Ok(())
     }

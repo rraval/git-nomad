@@ -13,6 +13,10 @@ However, the output of the application is designed for humans, not machines, and
 
 ## [Unreleased]
 
+### Changed
+
+- `git` invocations will now read system and global configuration, so things like credential helpers will will be respected in the underlying `git push` that `git nomad sync` makes. Fixes [#125][i125].
+
 ## [0.6.0] - 2022-10-10
 
 ### Added
@@ -120,3 +124,4 @@ An initial release with a reasonable complete implementation.
 [i3]: https://github.com/rraval/git-nomad/issues/3
 [i4]: https://github.com/rraval/git-nomad/issues/4
 [i5]: https://github.com/rraval/git-nomad/issues/5
+[i125]: https://github.com/rraval/git-nomad/issues/125

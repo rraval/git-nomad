@@ -10,8 +10,27 @@
     eachSystem = fn: flake-utils.lib.eachDefaultSystem (system:
       fn nixpkgs.legacyPackages.${system}
     );
-  in eachSystem (pkgs: {
-    devShell = pkgs.mkShell {
+  in eachSystem (pkgs: let
+    gitNomadPkg = with pkgs; rustPlatform.buildRustPackage rec {
+      pname = "git-nomad";
+      version = self.shortRev or self.dirtyShortRev;
+
+      src = self;
+
+      cargoLock = {
+        lockFile = ./Cargo.lock;
+      };
+
+      buildInputs = lib.optionals stdenv.isDarwin [
+        darwin.apple_sdk.frameworks.SystemConfiguration
+      ];
+
+      nativeCheckInputs = [
+        git
+      ];
+    };
+  in {
+    devShells.default = pkgs.mkShell {
       buildInputs = with pkgs; [
         asciinema
         cargo
@@ -28,6 +47,13 @@
           asciinema rec --overwrite -c 'doitlive play --commentecho --quiet --shell bash demo.doitlive.sh' demo.asciinema.cast
         '')
       ];
+    };
+
+    checks.git-nomad = gitNomadPkg;
+    packages.default = gitNomadPkg;
+    apps.default = {
+      type = "app";
+      program = "${gitNomadPkg}/bin/git-nomad";
     };
   });
 }

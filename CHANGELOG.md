@@ -13,6 +13,8 @@ However, the output of the application is designed for humans, not machines, and
 
 ## [Unreleased]
 
+## [0.7.0] - 2023-09-22
+
 ### Changed
 
 - `git` invocations will now read system and global configuration, so things like credential helpers will will be respected in the underlying `git push` that `git nomad sync` makes. Fixes [#125][i125].

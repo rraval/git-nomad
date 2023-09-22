@@ -141,14 +141,28 @@ Releases on GitHub have prebuilt binary assets: https://github.com/rraval/git-no
 
 ### On NixOS / via Nix
 
-There is a [prototype Nix package available][nixpkg] but it has not been integrated into Nixpkgs yet.
+Install via [nixpkgs][nixpkg]:
+
+```
+$ nix-env --install git-nomad
+```
 
 ### From source
 
 If you have [`cargo`][cargo] available:
 
 ```
-cargo install git-nomad
+$ cargo install git-nomad
+```
+
+## Bleeding Edge
+
+### Via `nix run`
+
+Nix can build and run the binary directly from GitHub via:
+
+```
+$ nix run github:rraval/git-nomad
 ```
 
 ## Contributing
@@ -162,4 +176,4 @@ There are a few ways to make this project better:
 [git-cafs]: https://git-scm.com/book/en/v2/Git-Internals-Git-Objects
 [git-refs]: https://git-scm.com/book/en/v2/Git-Internals-Git-References
 [new-issue]: https://github.com/rraval/git-nomad/issues/new
-[nixpkg]: https://github.com/rraval/nix/blob/master/box/packages/git-nomad.nix
+[nixpkg]: https://github.com/NixOS/nixpkgs/blob/master/pkgs/applications/version-management/git-nomad/default.nix

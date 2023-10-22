@@ -98,7 +98,7 @@ impl<'a, Ref> Snapshot<'a, Ref> {
         for nomad_ref in nomad_refs {
             by_host
                 .entry(nomad_ref.host.clone())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(nomad_ref);
         }
 

@@ -13,6 +13,10 @@ However, the output of the application is designed for humans, not machines, and
 
 ## [Unreleased]
 
+### Security
+
+- Upgraded `rustix` dependency to mitigate [GHSA-c827-hfw6-qwvm](https://github.com/advisories/GHSA-c827-hfw6-qwvm). Cursory review indicates that `git-nomad` only uses this dependency via `tempfile`, which is only used by testing. Still, users are advised to upgrade out of an abundance of caution.
+
 ## [0.7.0] - 2023-09-22
 
 ### Changed

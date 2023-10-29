@@ -1,0 +1,6 @@
+name: Auto-merge dependabot PRs
+on: pull_request_target
+jobs:
+  all:
+    uses: rraval/workflows/.github/workflows/auto-merge-pr.yml@v1
+    if: github.actor == 'dependabot[bot]'

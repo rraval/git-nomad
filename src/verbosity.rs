@@ -1,12 +1,10 @@
 //! Helpers for executing [`Command`]s and parsing their [`Output`].
 
-use std::{
-    process::{Command, Output},
-    time::Duration,
-};
+use std::process::{Command, Output};
 
 use anyhow::{bail, Context, Result};
-use indicatif::{ProgressBar, ProgressStyle};
+
+use crate::renderer::Renderer;
 
 /// What commands to display during workflow execution.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -29,11 +27,18 @@ pub enum CommandVerbosity {
 }
 
 impl CommandVerbosity {
-    fn run<S: AsRef<str>>(&self, description: S, command: &mut Command) -> Result<Output> {
+    fn run(
+        &self,
+        renderer: &mut impl Renderer,
+        description: impl AsRef<str>,
+        command: &mut Command,
+    ) -> Result<Output> {
         match self {
-            Self::Spinner => run_spinner(description, command),
-            Self::Invocation => run_with_invocation(description, command),
-            Self::InvocationAndOutput => run_with_invocation_and_output(description, command),
+            Self::Spinner => run_spinner(renderer, description, command),
+            Self::Invocation => run_with_invocation(renderer, description, command),
+            Self::InvocationAndOutput => {
+                run_with_invocation_and_output(renderer, description, command)
+            }
         }
     }
 }
@@ -90,30 +95,32 @@ pub fn is_output_allowed(verbosity: Option<Verbosity>) -> bool {
     verbosity.is_some()
 }
 
-pub fn run_trivial<S: AsRef<str>>(
+pub fn run_trivial(
+    renderer: &mut impl Renderer,
     verbosity: Option<Verbosity>,
-    description: S,
+    description: impl AsRef<str>,
     command: &mut Command,
 ) -> Result<Output> {
     match verbosity {
         None => run_silent(description, command),
         Some(verbosity) => match verbosity.significance {
             SignificanceVerbosity::OnlyNotable => run_silent(description, command),
-            SignificanceVerbosity::All => verbosity.command.run(description, command),
+            SignificanceVerbosity::All => verbosity.command.run(renderer, description, command),
         },
     }
 }
 
-pub fn run_notable<S: AsRef<str>>(
+pub fn run_notable(
+    renderer: &mut impl Renderer,
     verbosity: Option<Verbosity>,
-    description: S,
+    description: impl AsRef<str>,
     command: &mut Command,
 ) -> Result<Output> {
     match verbosity {
         None => run_silent(description, command),
         Some(verbosity) => match verbosity.significance {
             SignificanceVerbosity::OnlyNotable | SignificanceVerbosity::All => {
-                verbosity.command.run(description, command)
+                verbosity.command.run(renderer, description, command)
             }
         },
     }
@@ -162,50 +169,56 @@ fn dump_command_failure<T>(command: &Command, output: &Output) -> Result<T> {
     );
 }
 
-fn run_spinner<S: AsRef<str>>(description: S, command: &mut Command) -> Result<Output> {
-    let spinner = ProgressBar::new_spinner();
-    spinner.set_style(
-        ProgressStyle::default_spinner()
-            .tick_strings(&[" ..", ". .", ".. ", "..."])
-            .template("{msg}{spinner} {elapsed}")
-            .unwrap(),
-    );
-    spinner.set_message(description.as_ref().to_owned());
-    spinner.enable_steady_tick(Duration::from_millis(150));
-
-    let output = run_silent(description, command);
-    spinner.finish();
-
-    output
+fn run_spinner(
+    renderer: &mut impl Renderer,
+    description: impl AsRef<str>,
+    command: &mut Command,
+) -> Result<Output> {
+    renderer.spinner(description.as_ref().to_owned(), || {
+        run_silent(description, command)
+    })
 }
 
-fn run_with_invocation<S: AsRef<str>>(description: S, command: &mut Command) -> Result<Output> {
-    eprintln!();
-    eprintln!("# {}", description.as_ref());
-    eprintln!("$ {:#?}", command);
+fn run_with_invocation(
+    renderer: &mut impl Renderer,
+    description: impl AsRef<str>,
+    command: &mut Command,
+) -> Result<Output> {
+    renderer.writer(|w| {
+        writeln!(w)?;
+        writeln!(w, "# {}", description.as_ref())?;
+        writeln!(w, "$ {:#?}", command)?;
+        Ok(())
+    })?;
     run_silent(description, command)
 }
 
-fn run_with_invocation_and_output<S: AsRef<str>>(
-    description: S,
+fn run_with_invocation_and_output(
+    renderer: &mut impl Renderer,
+    description: impl AsRef<str>,
     command: &mut Command,
 ) -> Result<Output> {
-    let output = run_with_invocation(description, command)?;
+    let output = run_with_invocation(renderer, description, command)?;
 
-    let forward = |name: &str, stream: &[u8]| {
+    let mut forward = |name: &str, stream: &[u8]| -> Result<()> {
         if !stream.is_empty() {
             // Ideally this would use `stderr.write_all` to simply forward the raw bytes
             // onward, but that does not play nice with `cargo test`s output capturing.
             //
             // In practice, we only wrap `git` which produces UTF8, so a conversion here is
             // okay.
-            eprintln!("{}", String::from_utf8_lossy(stream));
-            eprintln!("# ---- END {} ----", name);
+            renderer.writer(|w| {
+                writeln!(w, "{}", String::from_utf8_lossy(stream))?;
+                writeln!(w, "# ---- END {} ----", name)?;
+                Ok(())
+            })?;
         }
+
+        Ok(())
     };
 
-    forward("STDOUT", &output.stdout);
-    forward("STDERR", &output.stderr);
+    forward("STDOUT", &output.stdout)?;
+    forward("STDERR", &output.stderr)?;
 
     Ok(output)
 }
@@ -217,7 +230,10 @@ mod test {
         process::{Command, ExitStatus, Output},
     };
 
-    use crate::verbosity::{run_notable, run_silent};
+    use crate::{
+        renderer::test::NoRenderer,
+        verbosity::{run_notable, run_silent},
+    };
 
     use super::{dump_command_failure, output_stdout, run_trivial, Verbosity};
 
@@ -232,9 +248,14 @@ mod test {
     fn test_trivial_success() {
         for verbosity in ALL_VERBOSITIES {
             println!("{:?}", verbosity);
-            let output = run_trivial(*verbosity, "echo", Command::new("echo").arg("foo"))
-                .and_then(output_stdout)
-                .unwrap();
+            let output = run_trivial(
+                &mut NoRenderer,
+                *verbosity,
+                "echo",
+                Command::new("echo").arg("foo"),
+            )
+            .and_then(output_stdout)
+            .unwrap();
             assert_eq!(output, "foo\n");
         }
     }
@@ -243,9 +264,14 @@ mod test {
     fn test_notable_success() {
         for verbosity in ALL_VERBOSITIES {
             println!("{:?}", verbosity);
-            let output = run_notable(*verbosity, "echo", Command::new("echo").arg("foo"))
-                .and_then(output_stdout)
-                .unwrap();
+            let output = run_notable(
+                &mut NoRenderer,
+                *verbosity,
+                "echo",
+                Command::new("echo").arg("foo"),
+            )
+            .and_then(output_stdout)
+            .unwrap();
             assert_eq!(output, "foo\n");
         }
     }

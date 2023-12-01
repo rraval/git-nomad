@@ -3,7 +3,6 @@ use std::{
     collections::HashSet,
     env::{self, current_dir},
     ffi::OsString,
-    io::Write,
     path::Path,
 };
 
@@ -12,7 +11,7 @@ use clap::{
     parser::ValueSource, value_parser, Arg, ArgAction, ArgMatches, Command, ValueHint,
 };
 use git_version::git_version;
-use output::OutputStream;
+use renderer::{Renderer, TerminalRenderer};
 use types::Branch;
 use verbosity::Verbosity;
 
@@ -24,7 +23,7 @@ use crate::{
 
 mod git_binary;
 mod git_ref;
-mod output;
+mod renderer;
 mod snapshot;
 mod types;
 mod verbosity;
@@ -56,16 +55,16 @@ fn version() -> &'static str {
 
 fn main() -> anyhow::Result<()> {
     nomad(
+        &mut TerminalRenderer::stdout(),
         env::args_os(),
         current_dir()?.as_path(),
-        &mut OutputStream::new_stdout(),
     )
 }
 
 fn nomad(
+    renderer: &mut impl Renderer,
     args: impl IntoIterator<Item = impl Into<OsString> + Clone>,
     cwd: &Path,
-    output: &mut dyn Write,
 ) -> anyhow::Result<()> {
     let default_user = User::from(whoami::username());
     let default_host = Host::from(whoami::hostname());
@@ -74,19 +73,30 @@ fn nomad(
     let verbosity = specified_verbosity(&mut matches);
 
     if verbosity.map_or(false, |v| v.display_version) {
-        eprintln!();
-        eprintln!("Version: {}", version());
+        renderer.writer(|w| {
+            writeln!(w)?;
+            writeln!(w, "Version: {}", version())?;
+            Ok(())
+        })?;
     }
 
-    let git = GitBinary::new(verbosity, Cow::from(specified_git(&mut matches)), cwd)?;
-    let workflow = specified_workflow(&mut matches, &git)?;
+    let git = GitBinary::new(
+        renderer,
+        verbosity,
+        Cow::from(specified_git(&mut matches)),
+        cwd,
+    )?;
+    let workflow = specified_workflow(renderer, &mut matches, &git)?;
 
     if verbosity.map_or(false, |v| v.display_workflow) {
-        eprintln!();
-        eprintln!("Workflow: {:?}", workflow);
+        renderer.writer(|w| {
+            writeln!(w)?;
+            writeln!(w, "Workflow: {:?}", workflow)?;
+            Ok(())
+        })?;
     }
 
-    workflow.execute(&git, output)
+    workflow.execute(renderer, &git)
 }
 
 /// Use [`clap`] to implement the intended command line interface.
@@ -249,15 +259,18 @@ fn specified_git(matches: &mut ArgMatches) -> String {
 ///
 /// If [`clap`] does not prevent certain assumed invalid states.
 fn specified_workflow<'a>(
+    renderer: &mut impl Renderer,
     matches: &'a mut ArgMatches,
     git: &GitBinary,
 ) -> anyhow::Result<Workflow<'a>> {
     let user = resolve(matches, "user", || {
-        git.get_config(CONFIG_USER).map(|opt| opt.map(User::from))
+        git.get_config(renderer, CONFIG_USER)
+            .map(|opt| opt.map(User::from))
     })?;
 
     let host = resolve(matches, "host", || {
-        git.get_config(CONFIG_HOST).map(|opt| opt.map(Host::from))
+        git.get_config(renderer, CONFIG_HOST)
+            .map(|opt| opt.map(Host::from))
     })?;
 
     let remote = Remote::from(
@@ -302,7 +315,7 @@ fn specified_workflow<'a>(
                 let mut branch_set = HashSet::<Branch>::new();
 
                 if matches.remove_one::<bool>("head").expect("has default") {
-                    branch_set.insert(git.current_branch()?);
+                    branch_set.insert(git.current_branch(renderer)?);
                 }
 
                 if let Some(branches) = matches.remove_many::<String>("branch") {
@@ -349,7 +362,7 @@ fn specified_workflow<'a>(
 fn resolve<T: Clone + From<String>>(
     matches: &mut ArgMatches,
     arg_name: &str,
-    from_git_config: impl Fn() -> anyhow::Result<Option<T>>,
+    from_git_config: impl FnOnce() -> anyhow::Result<Option<T>>,
 ) -> anyhow::Result<T> {
     match (
         matches.value_source(arg_name).expect("default value"),
@@ -373,7 +386,7 @@ mod test_e2e {
     use crate::{
         git_testing::{GitClone, GitRemote, INITIAL_BRANCH},
         nomad,
-        output::OutputStream,
+        renderer::test::{MemoryRenderer, NoRenderer},
         types::Branch,
         verbosity::Verbosity,
         workflow::{Filter, Workflow},
@@ -385,7 +398,7 @@ mod test_e2e {
             host: clone.host.always_borrow(),
             remote: clone.remote.always_borrow(),
         }
-        .execute(&clone.git, &mut OutputStream::new_vec())
+        .execute(&mut NoRenderer, &clone.git)
         .unwrap();
     }
 
@@ -393,14 +406,14 @@ mod test_e2e {
     #[test]
     fn nomad_ls() {
         let origin = GitRemote::init(None);
-        let mut output = OutputStream::new_vec();
+        let mut renderer = MemoryRenderer::new();
         nomad(
-            ["git-nomad", "ls", "-vv"],
+            &mut renderer,
+            ["git-nomad", "ls"],
             origin.working_directory(),
-            &mut output,
         )
         .unwrap();
-        assert_eq!(output.as_str(), "");
+        assert_eq!(renderer.as_str(), "");
     }
 
     /// Syncing should pick up nomad refs from other hosts.
@@ -420,7 +433,7 @@ mod test_e2e {
         let host1 = origin.clone("user0", "host1");
         host1
             .git
-            .create_branch("Start feature branch", feature)
+            .create_branch(&mut NoRenderer, "Start feature branch", feature)
             .unwrap();
         sync_host(&host1);
 
@@ -455,7 +468,7 @@ mod test_e2e {
         // host1 deletes the branch and syncs, removing it from origin
         host1
             .git
-            .delete_branch("Abandon feature branch", feature)
+            .delete_branch(&mut NoRenderer, "Abandon feature branch", feature)
             .unwrap();
         sync_host(&host1);
 
@@ -507,7 +520,7 @@ mod test_e2e {
             remote: host1.remote.always_borrow(),
             host_filter: Filter::Allow(HashSet::from_iter([host0.host.always_borrow()])),
         }
-        .execute(&host1.git, &mut OutputStream::new_vec())
+        .execute(&mut NoRenderer, &host1.git)
         .unwrap();
 
         // the origin should only have refs for host1
@@ -546,7 +559,7 @@ mod test_e2e {
             remote: host1.remote,
             host_filter: Filter::All,
         }
-        .execute(&host1.git, &mut OutputStream::new_vec())
+        .execute(&mut NoRenderer, &host1.git)
         .unwrap();
 
         // the origin should have no refs
@@ -564,6 +577,7 @@ mod test_cli {
     use crate::{
         cli,
         git_testing::GitRemote,
+        renderer::test::NoRenderer,
         specified_git, specified_verbosity, specified_workflow,
         types::{Branch, Host, Remote, User},
         verbosity::Verbosity,
@@ -602,12 +616,15 @@ mod test_cli {
 
     impl CliTestRemote {
         fn set_config(&mut self, key: &str, value: &str) -> &mut Self {
-            self.remote.git.set_config(key, value).unwrap();
+            self.remote
+                .git
+                .set_config(&mut NoRenderer, key, value)
+                .unwrap();
             self
         }
 
         fn workflow(&mut self) -> Workflow<'_> {
-            specified_workflow(&mut self.matches, &self.remote.git).unwrap()
+            specified_workflow(&mut NoRenderer, &mut self.matches, &self.remote.git).unwrap()
         }
     }
 
@@ -923,7 +940,7 @@ mod test_cli {
             println!("{:?}", args);
             let cli_test = CliTest::default();
             assert_eq!(
-                cli_test.remote(*args).workflow(),
+                cli_test.remote(args).workflow(),
                 Workflow::Sync {
                     user: User::from("user0"),
                     host: Host::from("host0"),

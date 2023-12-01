@@ -123,6 +123,7 @@ version = "0.7.1"
 dependencies = [
  "anyhow",
  "clap",
+ "console",
  "git-version",
  "indicatif",
  "tempfile",

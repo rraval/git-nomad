@@ -5,6 +5,7 @@ use std::{borrow::Cow, collections::HashSet, ffi::OsStr, path::Path, process::Co
 
 use crate::{
     git_ref::GitRef,
+    renderer::Renderer,
     snapshot::{PruneFrom, Snapshot},
     types::{Branch, Host, NomadRef, Remote, User},
     verbosity::{is_output_allowed, output_stdout, run_notable, run_trivial, Verbosity},
@@ -240,8 +241,14 @@ pub struct GitBinary<'name> {
 impl<'name> GitBinary<'name> {
     /// Create a new [`GitBinary`] by finding the `.git` dir relative to `cwd`, which implements
     /// the usual git rules of searching ancestor directories.
-    pub fn new(verbosity: Option<Verbosity>, name: Cow<'name, str>, cwd: &Path) -> Result<Self> {
+    pub fn new(
+        renderer: &mut impl Renderer,
+        verbosity: Option<Verbosity>,
+        name: Cow<'name, str>,
+        cwd: &Path,
+    ) -> Result<Self> {
         let git_dir = run_trivial(
+            renderer,
             verbosity,
             "Resolving .git directory",
             git_command(name.as_ref())
@@ -270,16 +277,18 @@ impl GitBinary<'_> {
     }
 
     /// Wraps `git config` to read a single namespaced value.
-    pub fn get_config(&self, key: &str) -> Result<Option<String>> {
-        self.get_config_with_env(key, [] as [(&str, &str); 0])
+    pub fn get_config(&self, renderer: &mut impl Renderer, key: &str) -> Result<Option<String>> {
+        self.get_config_with_env(renderer, key, [] as [(&str, &str); 0])
     }
 
     fn get_config_with_env(
         &self,
+        renderer: &mut impl Renderer,
         key: &str,
         vars: impl IntoIterator<Item = (impl AsRef<OsStr>, impl AsRef<OsStr>)>,
     ) -> Result<Option<String>> {
         run_trivial(
+            renderer,
             self.verbosity,
             format!("Get config {}", key),
             self.command().envs(vars).args([
@@ -299,8 +308,9 @@ impl GitBinary<'_> {
 
     /// Wraps `git config` to write a single namespaced value.
     #[cfg(test)]
-    pub fn set_config(&self, key: &str, value: &str) -> Result<()> {
+    pub fn set_config(&self, renderer: &mut impl Renderer, key: &str, value: &str) -> Result<()> {
         run_trivial(
+            renderer,
             self.verbosity,
             format!("Set config {} = {}", key, value),
             self.command().args([
@@ -322,6 +332,7 @@ impl GitBinary<'_> {
     /// which is definitely not what we want.
     fn fetch_refspecs<Description, RefSpec>(
         &self,
+        renderer: &mut impl Renderer,
         description: Description,
         remote: &Remote,
         refspecs: &[RefSpec],
@@ -332,6 +343,7 @@ impl GitBinary<'_> {
     {
         assert!(!refspecs.is_empty());
         run_notable(
+            renderer,
             self.verbosity,
             description,
             self.command().args(["fetch", &remote.0]).args(refspecs),
@@ -347,6 +359,7 @@ impl GitBinary<'_> {
     /// which is definitely not what we want.
     fn push_refspecs<Description, RefSpec>(
         &self,
+        renderer: &mut impl Renderer,
         description: Description,
         remote: &Remote,
         refspecs: &[RefSpec],
@@ -357,6 +370,7 @@ impl GitBinary<'_> {
     {
         assert!(!refspecs.is_empty());
         run_notable(
+            renderer,
             self.verbosity,
             description,
             self.command()
@@ -370,6 +384,7 @@ impl GitBinary<'_> {
     #[cfg(test)]
     pub fn get_ref<Description, RefName>(
         &self,
+        renderer: &mut impl Renderer,
         description: Description,
         ref_name: RefName,
     ) -> Result<GitRef>
@@ -378,6 +393,7 @@ impl GitBinary<'_> {
         RefName: AsRef<str>,
     {
         run_trivial(
+            renderer,
             self.verbosity,
             description,
             self.command()
@@ -390,12 +406,21 @@ impl GitBinary<'_> {
     }
 
     /// List all the non-HEAD refs in the repository as `GitRef`s.
-    pub fn list_refs<Description>(&self, description: Description) -> Result<Vec<GitRef>>
+    pub fn list_refs<Description>(
+        &self,
+        renderer: &mut impl Renderer,
+        description: Description,
+    ) -> Result<Vec<GitRef>>
     where
         Description: AsRef<str>,
     {
-        let output = run_trivial(self.verbosity, description, self.command().arg("show-ref"))
-            .and_then(output_stdout)?;
+        let output = run_trivial(
+            renderer,
+            self.verbosity,
+            description,
+            self.command().arg("show-ref"),
+        )
+        .and_then(output_stdout)?;
         output
             .lines()
             .map(|line| GitRef::parse_show_ref_line(line).map_err(Into::into))
@@ -409,6 +434,7 @@ impl GitBinary<'_> {
     /// If `refspecs` is empty, which means git will list all refs, which is never what we want.
     fn list_remote_refs<Description, RefSpec>(
         &self,
+        renderer: &mut impl Renderer,
         description: Description,
         remote: &Remote,
         refspecs: &[RefSpec],
@@ -419,6 +445,7 @@ impl GitBinary<'_> {
     {
         assert!(!refspecs.is_empty());
         let output = run_notable(
+            renderer,
             self.verbosity,
             description,
             self.command()
@@ -436,42 +463,62 @@ impl GitBinary<'_> {
     /// Delete a ref from the repository.
     ///
     /// Note that deleting refs on a remote is done via [`GitBinary::push_refspecs`].
-    fn delete_ref<Description>(&self, description: Description, git_ref: &GitRef) -> Result<()>
+    fn delete_ref<Description>(
+        &self,
+        renderer: &mut impl Renderer,
+        description: Description,
+        git_ref: &GitRef,
+    ) -> Result<()>
     where
         Description: AsRef<str>,
     {
         let mut command = self.command();
         command.args(["update-ref", "-d", &git_ref.name, &git_ref.commit_id]);
-        run_notable(self.verbosity, description, &mut command)?;
+        run_notable(renderer, self.verbosity, description, &mut command)?;
         Ok(())
     }
 
     /// Get the current branch, which may fail if the work tree is in a detached HEAD state.
-    pub fn current_branch(&self) -> Result<Branch<'static>> {
+    pub fn current_branch(&self, renderer: &mut impl Renderer) -> Result<Branch<'static>> {
         let mut command = self.command();
         command.args(["symbolic-ref", "--short", "HEAD"]);
-        run_trivial(self.verbosity, "Reading current branch", &mut command)
-            .and_then(output_stdout)
-            .map(LineArity::from)
-            .and_then(LineArity::one)
-            .map(Branch::from)
+        run_trivial(
+            renderer,
+            self.verbosity,
+            "Reading current branch",
+            &mut command,
+        )
+        .and_then(output_stdout)
+        .map(LineArity::from)
+        .and_then(LineArity::one)
+        .map(Branch::from)
     }
 
     /// Create a git branch named `branch_name`.
     #[cfg(test)]
-    pub fn create_branch(&self, description: impl AsRef<str>, branch_name: &Branch) -> Result<()> {
+    pub fn create_branch(
+        &self,
+        renderer: &mut impl Renderer,
+        description: impl AsRef<str>,
+        branch_name: &Branch,
+    ) -> Result<()> {
         let mut command = self.command();
         command.args(["branch", &branch_name.0]);
-        run_notable(self.verbosity, description, &mut command)?;
+        run_notable(renderer, self.verbosity, description, &mut command)?;
         Ok(())
     }
 
     /// Delete a git branch named `branch_name`.
     #[cfg(test)]
-    pub fn delete_branch(&self, description: impl AsRef<str>, branch_name: &Branch) -> Result<()> {
+    pub fn delete_branch(
+        &self,
+        renderer: &mut impl Renderer,
+        description: impl AsRef<str>,
+        branch_name: &Branch,
+    ) -> Result<()> {
         let mut command = self.command();
         command.args(["branch", "-d", &branch_name.0]);
-        run_notable(self.verbosity, description, &mut command)?;
+        run_notable(renderer, self.verbosity, description, &mut command)?;
         Ok(())
     }
 
@@ -482,8 +529,12 @@ impl GitBinary<'_> {
 
     /// Build a point in time snapshot for all refs that nomad cares about from the state in the
     /// local git clone.
-    pub fn snapshot<'a>(&self, user: &'a User) -> Result<Snapshot<'a, GitRef>> {
-        let refs = self.list_refs("Fetching all refs")?;
+    pub fn snapshot<'a>(
+        &self,
+        renderer: &mut impl Renderer,
+        user: &'a User,
+    ) -> Result<Snapshot<'a, GitRef>> {
+        let refs = self.list_refs(renderer, "Fetching all refs")?;
 
         let mut local_branches = HashSet::<Branch>::new();
         let mut nomad_refs = Vec::<NomadRef<'a, GitRef>>::new();
@@ -502,8 +553,14 @@ impl GitBinary<'_> {
     }
 
     /// Fetch all nomad managed refs from a given remote.
-    pub fn fetch_nomad_refs(&self, user: &User, remote: &Remote) -> Result<()> {
+    pub fn fetch_nomad_refs(
+        &self,
+        renderer: &mut impl Renderer,
+        user: &User,
+        remote: &Remote,
+    ) -> Result<()> {
         self.fetch_refspecs(
+            renderer,
             format!("Fetching branches from {}", remote.0),
             remote,
             &[&namespace::fetch_refspec(user)],
@@ -516,6 +573,7 @@ impl GitBinary<'_> {
     /// of actually listing the fetched refs.
     pub fn list_nomad_refs(
         &self,
+        renderer: &mut impl Renderer,
         user: &User,
         remote: &Remote,
     ) -> Result<impl Iterator<Item = NomadRef<GitRef>>> {
@@ -525,6 +583,7 @@ impl GitBinary<'_> {
         // output, so do an entirely separate network fetch with the plumbing `git ls-remote` which
         // we can parse instead.
         let remote_refs = self.list_remote_refs(
+            renderer,
             format!("Listing branches at {}", remote.0),
             remote,
             &[&namespace::list_refspec(user)],
@@ -536,8 +595,15 @@ impl GitBinary<'_> {
     }
 
     /// Push local branches to nomad managed refs in the remote.
-    pub fn push_nomad_refs(&self, user: &User, host: &Host, remote: &Remote) -> Result<()> {
+    pub fn push_nomad_refs(
+        &self,
+        renderer: &mut impl Renderer,
+        user: &User,
+        host: &Host,
+        remote: &Remote,
+    ) -> Result<()> {
         self.push_refspecs(
+            renderer,
             format!("Pushing local branches to {}", remote.0),
             remote,
             &[&namespace::push_refspec(user, host)],
@@ -547,6 +613,7 @@ impl GitBinary<'_> {
     /// Delete the given nomad managed refs.
     pub fn prune_nomad_refs<'a>(
         &self,
+        renderer: &mut impl Renderer,
         remote: &Remote,
         prune: impl Iterator<Item = PruneFrom<'a, GitRef>>,
     ) -> Result<()> {
@@ -571,6 +638,7 @@ impl GitBinary<'_> {
         // Delete from the remote first
         if !refspecs.is_empty() {
             self.push_refspecs(
+                renderer,
                 format!("Pruning branches at {}", remote.0),
                 remote,
                 &refspecs,
@@ -585,7 +653,11 @@ impl GitBinary<'_> {
         //
         // But that is non-local reasoning and this ordering is theoretically correct.
         for r in refs {
-            self.delete_ref(format!("  Delete {} (was {})", r.name, r.commit_id), &r)?;
+            self.delete_ref(
+                renderer,
+                format!("  Delete {} (was {})", r.name, r.commit_id),
+                &r,
+            )?;
         }
 
         Ok(())
@@ -700,6 +772,7 @@ mod test_impl {
     use tempfile::{tempdir, TempDir};
 
     use crate::{
+        renderer::test::NoRenderer,
         types::Branch,
         verbosity::{run_notable, Verbosity},
     };
@@ -715,6 +788,7 @@ mod test_impl {
         let tmpdir = tempdir()?;
 
         run_notable(
+            &mut NoRenderer,
             Some(Verbosity::max()),
             "",
             git_command(&name).current_dir(tmpdir.path()).args([
@@ -732,7 +806,7 @@ mod test_impl {
     fn toplevel_at_root() -> Result<()> {
         let (name, tmpdir) = git_init()?;
 
-        let git = GitBinary::new(None, name, tmpdir.path())?;
+        let git = GitBinary::new(&mut NoRenderer, None, name, tmpdir.path())?;
         assert_eq!(
             Some(git.git_dir.as_str()),
             tmpdir.path().join(".git").to_str()
@@ -748,7 +822,7 @@ mod test_impl {
         let subdir = tmpdir.path().join("subdir");
         fs::create_dir(&subdir)?;
 
-        let git = GitBinary::new(None, name, subdir.as_path())?;
+        let git = GitBinary::new(&mut NoRenderer, None, name, subdir.as_path())?;
         assert_eq!(
             Some(git.git_dir.as_str()),
             tmpdir.path().join(".git").to_str(),
@@ -761,9 +835,9 @@ mod test_impl {
     #[test]
     fn read_empty_config() -> Result<()> {
         let (name, tmpdir) = git_init()?;
-        let git = GitBinary::new(None, name, tmpdir.path())?;
+        let git = GitBinary::new(&mut NoRenderer, None, name, tmpdir.path())?;
 
-        let got = git.get_config("test.key")?;
+        let got = git.get_config(&mut NoRenderer, "test.key")?;
         assert_eq!(got, None);
 
         Ok(())
@@ -773,10 +847,10 @@ mod test_impl {
     #[test]
     fn write_then_read_config() -> Result<()> {
         let (name, tmpdir) = git_init()?;
-        let git = GitBinary::new(None, name, tmpdir.path())?;
+        let git = GitBinary::new(&mut NoRenderer, None, name, tmpdir.path())?;
 
-        git.set_config("key", "testvalue")?;
-        let got = git.get_config("key")?;
+        git.set_config(&mut NoRenderer, "key", "testvalue")?;
+        let got = git.get_config(&mut NoRenderer, "key")?;
 
         assert_eq!(got, Some("testvalue".to_string()));
 
@@ -820,10 +894,11 @@ mod test_impl {
     #[test]
     fn read_home_config() -> Result<()> {
         let (name, tmpdir) = git_init()?;
-        let git = GitBinary::new(None, name, tmpdir.path())?;
+        let git = GitBinary::new(&mut NoRenderer, None, name, tmpdir.path())?;
 
         let home = gitconfig::write([] as [&str; 0], ".gitconfig")?;
-        let got = git.get_config_with_env(gitconfig::KEY, [("HOME", home.path())])?;
+        let got =
+            git.get_config_with_env(&mut NoRenderer, gitconfig::KEY, [("HOME", home.path())])?;
 
         assert_eq!(got, Some(gitconfig::VALUE.into()));
 
@@ -834,10 +909,14 @@ mod test_impl {
     #[test]
     fn read_xdg_config() -> Result<()> {
         let (name, tmpdir) = git_init()?;
-        let git = GitBinary::new(None, name, tmpdir.path())?;
+        let git = GitBinary::new(&mut NoRenderer, None, name, tmpdir.path())?;
 
         let xdg = gitconfig::write(["git"], "config")?;
-        let got = git.get_config_with_env(gitconfig::KEY, [("XDG_CONFIG_HOME", xdg.path())])?;
+        let got = git.get_config_with_env(
+            &mut NoRenderer,
+            gitconfig::KEY,
+            [("XDG_CONFIG_HOME", xdg.path())],
+        )?;
 
         assert_eq!(got, Some(gitconfig::VALUE.into()));
 
@@ -849,9 +928,9 @@ mod test_impl {
     #[test]
     fn current_branch() -> Result<()> {
         let (name, tmpdir) = git_init()?;
-        let git = GitBinary::new(None, name, tmpdir.path())?;
+        let git = GitBinary::new(&mut NoRenderer, None, name, tmpdir.path())?;
 
-        let branch = git.current_branch()?;
+        let branch = git.current_branch(&mut NoRenderer)?;
         assert_eq!(branch, Branch::from(INITIAL_BRANCH));
 
         Ok(())
@@ -863,23 +942,25 @@ mod test_impl {
         let verbosity = Some(Verbosity::max());
 
         let (name, tmpdir) = git_init()?;
-        let git = GitBinary::new(verbosity, name, tmpdir.path())?;
+        let git = GitBinary::new(&mut NoRenderer, verbosity, name, tmpdir.path())?;
 
         run_notable(
+            &mut NoRenderer,
             verbosity,
             "Create an initial commit",
             git.command()
                 .args(["commit", "--allow-empty", "-m", "initial commit"]),
         )?;
 
-        let head = git.get_ref("Get commit ID for HEAD", "HEAD")?;
+        let head = git.get_ref(&mut NoRenderer, "Get commit ID for HEAD", "HEAD")?;
         run_notable(
+            &mut NoRenderer,
             verbosity,
             "Switch to detached HEAD state",
             git.command().args(["checkout", &head.commit_id]),
         )?;
 
-        let branch_result = git.current_branch();
+        let branch_result = git.current_branch(&mut NoRenderer);
         assert!(branch_result.is_err());
 
         Ok(())

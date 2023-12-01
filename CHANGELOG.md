@@ -13,6 +13,10 @@ However, the output of the application is designed for humans, not machines, and
 
 ## [Unreleased]
 
+### Fixed
+
+- Glitchy output where progress bars would sometimes overwrite normal text.
+
 ## [0.7.1] - 2023-10-22
 
 ### Security

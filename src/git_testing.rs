@@ -10,6 +10,7 @@ use tempfile::{tempdir, TempDir};
 use crate::{
     git_binary::{git_command, GitBinary, LineArity},
     git_ref::GitRef,
+    renderer::test::NoRenderer,
     snapshot::PruneFrom,
     types::{Branch, Host, NomadRef, Remote, User},
     verbosity::{output_stdout, run_notable, Verbosity},
@@ -64,6 +65,7 @@ impl GitRemote {
 
             let git = |args: &[&str]| {
                 run_notable(
+                    &mut NoRenderer,
                     verbosity,
                     "",
                     git_command(GIT).current_dir(remote_dir).args(args),
@@ -81,7 +83,7 @@ impl GitRemote {
             git(&["commit", "-m", "commit0"]);
         }
 
-        let git = GitBinary::new(verbosity, Cow::from(GIT), &remote_dir).unwrap();
+        let git = GitBinary::new(&mut NoRenderer, verbosity, Cow::from(GIT), &remote_dir).unwrap();
 
         GitRemote {
             root_dir,
@@ -108,6 +110,7 @@ impl GitRemote {
         };
 
         run_notable(
+            &mut NoRenderer,
             self.verbosity(),
             "",
             git_command(GIT)
@@ -119,7 +122,13 @@ impl GitRemote {
         )
         .unwrap();
 
-        let git = GitBinary::new(self.verbosity(), Cow::from(GIT), &clone_dir).unwrap();
+        let git = GitBinary::new(
+            &mut NoRenderer,
+            self.verbosity(),
+            Cow::from(GIT),
+            &clone_dir,
+        )
+        .unwrap();
 
         GitClone {
             git_remote: self,
@@ -134,7 +143,7 @@ impl GitRemote {
     /// List all nomad managed refs in the remote.
     pub fn nomad_refs(&self) -> HashSet<NomadRef<GitCommitId>> {
         self.git
-            .list_refs("")
+            .list_refs(&mut NoRenderer, "")
             .unwrap()
             .into_iter()
             .filter_map(|git_ref| {
@@ -160,6 +169,7 @@ impl<'a> GitClone<'a> {
     /// Get the commit ID at HEAD.
     pub fn current_commit(&self) -> GitCommitId {
         let commit_id = run_notable(
+            &mut NoRenderer,
             self.git_remote.verbosity(),
             "Get current commit",
             self.git.command().arg("rev-parse").arg("HEAD"),
@@ -175,18 +185,22 @@ impl<'a> GitClone<'a> {
     /// Push all nomad managed refs to the remote.
     pub fn push(&self) {
         self.git
-            .push_nomad_refs(&self.user, &self.host, &self.remote)
+            .push_nomad_refs(&mut NoRenderer, &self.user, &self.host, &self.remote)
             .unwrap();
     }
 
     /// Fetch all nomad managed refs from the remote.
     pub fn fetch(&self) {
-        self.git.fetch_nomad_refs(&self.user, &self.remote).unwrap()
+        self.git
+            .fetch_nomad_refs(&mut NoRenderer, &self.user, &self.remote)
+            .unwrap()
     }
 
     /// List all nomad managed refs in the current clone.
     pub fn list(&self) -> impl Iterator<Item = NomadRef<GitRef>> {
-        self.git.list_nomad_refs(&self.user, &self.remote).unwrap()
+        self.git
+            .list_nomad_refs(&mut NoRenderer, &self.user, &self.remote)
+            .unwrap()
     }
 
     /// Delete the nomad managed refs backed by `branch_names` from both the local and remote.
@@ -205,19 +219,21 @@ impl<'a> GitClone<'a> {
                 user: nomad_ref.user,
                 host: nomad_ref.host,
                 branch: nomad_ref.branch,
-                ref_: self.git.get_ref("", ref_name).unwrap(),
+                ref_: self.git.get_ref(&mut NoRenderer, "", ref_name).unwrap(),
             };
 
             PruneFrom::LocalAndRemote(nomad_ref)
         });
 
-        self.git.prune_nomad_refs(&self.remote, prune_from).unwrap();
+        self.git
+            .prune_nomad_refs(&mut NoRenderer, &self.remote, prune_from)
+            .unwrap();
     }
 
     /// Resolve a specific nomad managed ref in the local clone by `branch` name.
     pub fn get_nomad_ref(&'a self, branch: &'a str) -> Option<NomadRef<'a, GitCommitId>> {
         self.git
-            .get_ref("", format!("refs/heads/{}", branch))
+            .get_ref(&mut NoRenderer, "", format!("refs/heads/{}", branch))
             .ok()
             .map(|git_ref| NomadRef {
                 user: self.user.always_borrow(),
@@ -230,7 +246,7 @@ impl<'a> GitClone<'a> {
     /// Get all nomad managed refs in the local clone.
     pub fn nomad_refs(&self) -> HashSet<NomadRef<GitCommitId>> {
         self.git
-            .list_refs(&self.host.0)
+            .list_refs(&mut NoRenderer, &self.host.0)
             .unwrap()
             .into_iter()
             .filter_map(|git_ref| {

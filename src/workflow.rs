@@ -7,6 +7,7 @@ use anyhow::{Context, Result};
 use crate::{
     git_binary::GitBinary,
     git_ref::GitRef,
+    renderer::{add_newline_if_spinners_are_visible, Renderer},
     types::{Branch, Host, NomadRef, Remote, User},
 };
 
@@ -34,9 +35,9 @@ pub enum Workflow<'a> {
 
 impl Workflow<'_> {
     /// Imperatively execute the workflow.
-    pub fn execute(self, git: &GitBinary, output: &mut dyn Write) -> Result<()> {
+    pub fn execute(self, renderer: &mut impl Renderer, git: &GitBinary) -> Result<()> {
         match self {
-            Self::Sync { user, host, remote } => sync(git, output, &user, &host, &remote),
+            Self::Sync { user, host, remote } => sync(renderer, git, &user, &host, &remote),
             Self::Ls {
                 printer,
                 user,
@@ -44,8 +45,8 @@ impl Workflow<'_> {
                 host_filter,
                 branch_filter,
             } => ls(
+                renderer,
                 git,
-                output,
                 printer,
                 &user,
                 fetch_remote,
@@ -56,7 +57,7 @@ impl Workflow<'_> {
                 user,
                 remote,
                 host_filter,
-            } => purge(git, &user, &remote, host_filter),
+            } => purge(renderer, git, &user, &remote, host_filter),
         }
     }
 }
@@ -109,17 +110,18 @@ impl LsPrinter {
 
 /// Synchronize current local branches with nomad managed refs in the given remote.
 fn sync(
+    renderer: &mut impl Renderer,
     git: &GitBinary,
-    output: &mut dyn Write,
     user: &User,
     host: &Host,
     remote: &Remote,
 ) -> Result<()> {
-    git.push_nomad_refs(user, host, remote)?;
-    git.fetch_nomad_refs(user, remote)?;
-    let remote_nomad_refs = git.list_nomad_refs(user, remote)?.collect();
-    let snapshot = git.snapshot(user)?;
+    git.push_nomad_refs(renderer, user, host, remote)?;
+    git.fetch_nomad_refs(renderer, user, remote)?;
+    let remote_nomad_refs = git.list_nomad_refs(renderer, user, remote)?.collect();
+    let snapshot = git.snapshot(renderer, user)?;
     git.prune_nomad_refs(
+        renderer,
         remote,
         snapshot
             .prune_deleted_branches(host, &remote_nomad_refs)
@@ -127,10 +129,11 @@ fn sync(
     )?;
 
     if git.is_output_allowed() {
-        writeln!(output)?;
+        add_newline_if_spinners_are_visible(renderer)?;
+
         ls(
+            renderer,
             git,
-            output,
             LsPrinter::Grouped,
             user,
             None,
@@ -147,8 +150,8 @@ fn sync(
 /// Does not respect [`GitBinary::is_output_allowed`] because output is the whole point of this
 /// command.
 fn ls(
+    renderer: &mut impl Renderer,
     git: &GitBinary,
-    output: &mut dyn Write,
     printer: LsPrinter,
     user: &User,
     fetch_remote: Option<Remote>,
@@ -156,40 +159,54 @@ fn ls(
     branch_filter: Filter<Branch>,
 ) -> Result<()> {
     if let Some(remote) = fetch_remote {
-        git.fetch_nomad_refs(user, &remote)?;
+        git.fetch_nomad_refs(renderer, user, &remote)?;
     }
 
-    let snapshot = git.snapshot(user)?;
+    let snapshot = git.snapshot(renderer, user)?;
 
     for (host, branches) in snapshot.sorted_hosts_and_branches() {
         if !host_filter.contains(&host) {
             continue;
         }
 
-        printer.print_host(output, &host)?;
+        renderer.writer(|w| {
+            printer.print_host(w, &host)?;
 
-        for NomadRef { ref_, branch, .. } in branches {
-            if branch_filter.contains(&branch) {
-                printer.print_ref(output, &ref_)?;
+            for NomadRef { ref_, branch, .. } in branches {
+                if branch_filter.contains(&branch) {
+                    printer.print_ref(w, &ref_)?;
+                }
             }
-        }
+
+            Ok(())
+        })?;
     }
 
     Ok(())
 }
 
 /// Delete nomad managed refs returned by `to_prune`.
-fn purge(git: &GitBinary, user: &User, remote: &Remote, host_filter: Filter<Host>) -> Result<()> {
-    git.fetch_nomad_refs(user, remote)?;
-    let snapshot = git.snapshot(user)?;
+fn purge(
+    renderer: &mut impl Renderer,
+    git: &GitBinary,
+    user: &User,
+    remote: &Remote,
+    host_filter: Filter<Host>,
+) -> Result<()> {
+    git.fetch_nomad_refs(renderer, user, remote)?;
+    let snapshot = git.snapshot(renderer, user)?;
     let prune = snapshot.prune_by_hosts(|h| host_filter.contains(h));
-    git.prune_nomad_refs(remote, prune.into_iter())?;
+    git.prune_nomad_refs(renderer, remote, prune.into_iter())?;
     Ok(())
 }
 
 #[cfg(test)]
 mod test {
-    use crate::{git_testing::GitRemote, output::OutputStream, workflow::sync};
+    use crate::{
+        git_testing::GitRemote,
+        renderer::test::{MemoryRenderer, NoRenderer},
+        workflow::sync,
+    };
 
     use super::{Filter, LsPrinter, Workflow};
 
@@ -201,8 +218,8 @@ mod test {
         let commit_id = clone.current_commit();
 
         sync(
+            &mut NoRenderer,
             &clone.git,
-            &mut OutputStream::new_sink(),
             &clone.user,
             &clone.host,
             &clone.remote,
@@ -223,7 +240,7 @@ mod test {
             ),
             (LsPrinter::Commit, format!("{}\n", commit_id.0)),
         ] {
-            let mut output = OutputStream::new_vec();
+            let mut renderer = MemoryRenderer::new();
 
             Workflow::Ls {
                 printer,
@@ -232,10 +249,10 @@ mod test {
                 host_filter: Filter::All,
                 branch_filter: Filter::All,
             }
-            .execute(&clone.git, &mut output)
+            .execute(&mut renderer, &clone.git)
             .unwrap();
 
-            assert_eq!(output.as_str(), expected);
+            assert_eq!(renderer.as_str(), expected);
         }
     }
 
@@ -248,8 +265,8 @@ mod test {
         let host1 = remote.clone("user0", "host1");
 
         sync(
+            &mut NoRenderer,
             &host0.git,
-            &mut OutputStream::new_sink(),
             &host0.user,
             &host0.host,
             &host0.remote,
@@ -257,26 +274,26 @@ mod test {
         .unwrap();
 
         sync(
+            &mut NoRenderer,
             &host1.git,
-            &mut OutputStream::new_sink(),
             &host1.user,
             &host1.host,
             &host1.remote,
         )
         .unwrap();
 
-        let mut output = OutputStream::new_vec();
+        let mut renderer = MemoryRenderer::new();
         Workflow::Ls {
             printer: LsPrinter::Grouped,
             user: host1.user,
             fetch_remote: Some(host1.remote),
             host_filter: Filter::Deny([host0.host].into()),
-            branch_filter: Filter::Deny([host1.git.current_branch().unwrap()].into()),
+            branch_filter: Filter::Deny([host1.git.current_branch(&mut renderer).unwrap()].into()),
         }
-        .execute(&host1.git, &mut output)
+        .execute(&mut renderer, &host1.git)
         .unwrap();
 
-        assert_eq!(output.as_str(), "host1\n");
+        assert_eq!(renderer.as_str(), "host1\n");
     }
 
     #[test]

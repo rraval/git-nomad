@@ -40,12 +40,12 @@
         cargo
         cargo-outdated
         clippy
-        doitlive
-        figlet
         gdb
+        just
         rust-analyzer
         rustc
         rustfmt
+        shellcheck
 
         (pkgs.writeShellScriptBin "recordDemo" ''
           asciinema rec --overwrite -c 'doitlive play --commentecho --quiet --shell bash demo.doitlive.sh' demo.asciinema.cast

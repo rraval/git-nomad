@@ -5,5 +5,12 @@ on:
     - master
   pull_request:
 jobs:
-  all:
+  rust:
     uses: rraval/workflows/.github/workflows/rust_dev.yml@v1
+
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Run ShellCheck
+        uses: ludeeus/action-shellcheck@master

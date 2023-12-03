@@ -410,7 +410,21 @@ mod test_e2e {
             origin.working_directory(),
         )
         .unwrap();
-        assert_eq!(renderer.as_str(), "");
+        assert!(renderer.as_str().is_empty());
+    }
+
+    /// Invoking all the real logic in `nomad` should not panic.
+    #[test]
+    fn nomad_ls_verbose() {
+        let origin = GitRemote::init(None);
+        let mut renderer = MemoryRenderer::new();
+        nomad(
+            &mut renderer,
+            ["git-nomad", "ls", "-vv"],
+            origin.working_directory(),
+        )
+        .unwrap();
+        assert!(!renderer.as_str().is_empty());
     }
 
     /// Syncing should pick up nomad refs from other hosts.

@@ -1,17 +1,11 @@
-use std::{
-    borrow::Cow,
-    collections::HashSet,
-    env::{self, current_dir},
-    ffi::OsString,
-    path::Path,
-};
+use std::{borrow::Cow, collections::HashSet, ffi::OsString, path::Path};
 
 use clap::{
     builder::PossibleValue, crate_authors, crate_description, crate_name, crate_version,
     parser::ValueSource, value_parser, Arg, ArgAction, ArgMatches, Command, ValueHint,
 };
 use git_version::git_version;
-use renderer::{Renderer, TerminalRenderer};
+use renderer::Renderer;
 use types::Branch;
 use verbosity::Verbosity;
 
@@ -53,11 +47,14 @@ fn version() -> &'static str {
     BUILD_VERSION.unwrap_or(GIT_VERSION)
 }
 
+// This cfg skips gathering coverage for this function, since the entrypoint can't be effectively
+// tested.
+#[cfg(not(test))]
 fn main() -> anyhow::Result<()> {
     nomad(
-        &mut TerminalRenderer::stdout(),
-        env::args_os(),
-        current_dir()?.as_path(),
+        &mut renderer::TerminalRenderer::stdout(),
+        std::env::args_os(),
+        std::env::current_dir()?.as_path(),
     )
 }
 

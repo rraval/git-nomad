@@ -8,6 +8,7 @@ release:
 # Demonstrate all features as an asciinema screencast
 record-demo:
     @mkdir -p target/
+    cargo clean
     cargo build --release
     PATH="$(pwd)/target/release:$PATH"                          \
         asciinema rec                                           \
@@ -18,19 +19,5 @@ record-demo:
         --overwrite target/demo.cast
 
 # Upload the recorded demo to asciinema.org
-upload-demo: record-demo
-    #!/usr/bin/env bash
-    set -euo pipefail
-
-    if [[ -z "${ASCIINEMA_INSTALL_ID:-}" ]]; then
-        echo 'Must specify $ASCIINEMA_INSTALL_ID'
-        exit 1
-    fi
-
-    asciinema_config=$(mktemp -d)
-    trap "rm -rf '${asciinema_config}'" EXIT
-
-    echo "${ASCIINEMA_INSTALL_ID}" > "${asciinema_config}"/install-id
-    export ASCIINEMA_CONFIG_HOME="${asciinema_config}"
-
-    asciinema upload target/demo.cast
+upload-demo:
+    @scripts/asciinema-upload.sh target/demo.cast

@@ -130,6 +130,8 @@ Using refs like this has advantages:
 
 ## Installation
 
+[![Packaging status](https://repology.org/badge/vertical-allrepos/git-nomad.svg)](https://repology.org/project/git-nomad/versions)
+
 ### On Linux or Mac OS X
 
 Releases on GitHub have prebuilt binary assets: https://github.com/rraval/git-nomad/releases

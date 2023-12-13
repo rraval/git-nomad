@@ -10,7 +10,7 @@ license = "MIT"
 [dependencies]
 anyhow = "^1.0.75"
 console = "^0.15.7"
-git-version = "^0.3.8"
+git-version = "^0.3.9"
 indicatif = "^0.17.7"
 tempfile = "^3.8.1"
 whoami = "^1.4.1"

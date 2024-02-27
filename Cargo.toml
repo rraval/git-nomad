@@ -12,7 +12,7 @@ anyhow = "^1.0.80"
 console = "^0.15.8"
 git-version = "^0.3.9"
 indicatif = "^0.17.8"
-tempfile = "^3.10.0"
+tempfile = "^3.10.1"
 whoami = "^1.4.1"
 
 [dependencies.clap]

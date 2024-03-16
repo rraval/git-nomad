@@ -63,8 +63,8 @@ fn nomad(
     args: impl IntoIterator<Item = impl Into<OsString> + Clone>,
     cwd: &Path,
 ) -> anyhow::Result<()> {
-    let default_user = User::from(whoami::username());
-    let default_host = Host::from(whoami::hostname());
+    let default_user = whoami::fallible::username().ok().map(User::from);
+    let default_host = whoami::fallible::hostname().ok().map(Host::from);
 
     let mut matches = cli(default_user, default_host, args).unwrap_or_else(|e| e.exit());
     let verbosity = specified_verbosity(&mut matches);
@@ -96,10 +96,37 @@ fn nomad(
     workflow.execute(renderer, &git)
 }
 
+fn maybe_apply_default(arg: Arg, optional_default: Option<String>) -> Arg {
+    if let Some(default) = optional_default {
+        arg.default_value(default)
+    } else {
+        arg
+    }
+}
+
+#[cfg(test)]
+mod test_maybe_apply_default {
+    use clap::{builder::OsStr, Arg};
+
+    use super::maybe_apply_default;
+
+    #[test]
+    fn apply_some() {
+        let arg = maybe_apply_default(Arg::new("test"), Some("default".into()));
+        assert_eq!(arg.get_default_values(), &["default"]);
+    }
+
+    #[test]
+    fn apply_none() {
+        let arg = maybe_apply_default(Arg::new("test"), None);
+        assert_eq!(arg.get_default_values(), &[] as &[OsStr]);
+    }
+}
+
 /// Use [`clap`] to implement the intended command line interface.
 fn cli(
-    default_user: User,
-    default_host: Host,
+    default_user: Option<User>,
+    default_host: Option<Host>,
     args: impl IntoIterator<Item = impl Into<OsString> + Clone>,
 ) -> clap::error::Result<ArgMatches> {
     Command::new(crate_name!())
@@ -135,26 +162,30 @@ fn cli(
                 .action(ArgAction::Count),
         )
         .arg(
-            Arg::new("user")
-                .global(true)
-                .short('U')
-                .long("user")
-                .help("User name, shared by multiple clones, unique per remote")
-                .value_parser(value_parser!(String))
-                .value_hint(ValueHint::Username)
-                .env(ENV_USER)
-                .default_value(default_user.0.into_owned()),
+            maybe_apply_default(
+                Arg::new("user")
+                    .global(true)
+                    .short('U')
+                    .long("user")
+                    .help("User name, shared by multiple clones, unique per remote")
+                    .value_parser(value_parser!(String))
+                    .value_hint(ValueHint::Username)
+                    .env(ENV_USER),
+                default_user.map(|u| u.0.into_owned()),
+            )
         )
         .arg(
-            Arg::new("host")
-                .global(true)
-                .short('H')
-                .long("host")
-                .value_parser(value_parser!(String))
-                .value_hint(ValueHint::Hostname)
-                .env(ENV_HOST)
-                .default_value(default_host.0.into_owned())
-                .help("Host name, unique per clone"),
+            maybe_apply_default(
+                Arg::new("host")
+                    .global(true)
+                    .short('H')
+                    .long("host")
+                    .value_parser(value_parser!(String))
+                    .value_hint(ValueHint::Hostname)
+                    .env(ENV_HOST)
+                    .help("Host name, unique per clone"),
+                default_host.map(|h| h.0.into_owned()),
+            )
         )
         .arg(
             Arg::new("remote")
@@ -609,7 +640,11 @@ mod test_cli {
         fn matches(&self, args: &[&str]) -> clap::error::Result<ArgMatches> {
             let mut vec = vec!["git-nomad"];
             vec.extend_from_slice(args);
-            cli(self.default_user.clone(), self.default_host.clone(), &vec)
+            cli(
+                Some(self.default_user.clone()),
+                Some(self.default_host.clone()),
+                &vec,
+            )
         }
 
         fn remote(&self, args: &[&str]) -> CliTestRemote {

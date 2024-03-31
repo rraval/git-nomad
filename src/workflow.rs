@@ -116,14 +116,23 @@ fn sync(
     host: &Host,
     remote: &Remote,
 ) -> Result<()> {
-    git.push_nomad_refs(renderer, user, host, remote)?;
-    let mut mutations = git.fetch_nomad_refs(renderer, user, remote)?;
-    let remote_nomad_refs = git.list_nomad_refs(renderer, user, remote)?.collect();
+    git.push_nomad_refs(
+        renderer,
+        description::push(host, remote),
+        user,
+        host,
+        remote,
+    )?;
+    let mut mutations = git.fetch_nomad_refs(renderer, description::fetch(remote), user, remote)?;
+    let remote_nomad_refs = git
+        .list_nomad_refs(renderer, description::list(remote), user, remote)?
+        .collect();
     let snapshot = git.snapshot(renderer, user)?;
 
     mutations.extend(
         git.prune_nomad_refs(
             renderer,
+            description::prune(host, remote),
             remote,
             snapshot
                 .prune_deleted_branches(host, &remote_nomad_refs)
@@ -156,7 +165,7 @@ fn ls(
     branch_filter: Filter<Branch>,
 ) -> Result<()> {
     if let Some(remote) = fetch_remote {
-        let _ = git.fetch_nomad_refs(renderer, user, &remote)?;
+        let _ = git.fetch_nomad_refs(renderer, description::fetch(&remote), user, &remote)?;
     }
 
     let snapshot = git.snapshot(renderer, user)?;
@@ -190,12 +199,17 @@ fn purge(
     remote: &Remote,
     host_filter: Filter<Host>,
 ) -> Result<()> {
-    let _ = git.fetch_nomad_refs(renderer, user, remote)?;
+    let _ = git.fetch_nomad_refs(renderer, description::fetch(remote), user, remote)?;
     let snapshot = git.snapshot(renderer, user)?;
     let prune = snapshot.prune_by_hosts(|h| host_filter.contains(h));
 
     let mut mutations: Vec<_> = git
-        .prune_nomad_refs(renderer, remote, prune.into_iter())?
+        .prune_nomad_refs(
+            renderer,
+            description::purge(remote),
+            remote,
+            prune.into_iter(),
+        )?
         .collect();
     mutations.sort_unstable_by_key(GitRefMutation::sort_key);
 
@@ -204,6 +218,30 @@ fn purge(
     }
 
     Ok(())
+}
+
+mod description {
+    use crate::types::{Host, Remote};
+
+    pub fn push(host: &Host, remote: &Remote) -> String {
+        format!("[push] {} branches -> {} nomad refs", host, remote)
+    }
+
+    pub fn fetch(remote: &Remote) -> String {
+        format!("[fetch] {} nomad refs -> local nomad refs", remote)
+    }
+
+    pub fn list(remote: &Remote) -> String {
+        format!("[list] {} nomad refs", remote)
+    }
+
+    pub fn prune(host: &Host, remote: &Remote) -> String {
+        format!("[prune] {} deleted branches -> {}", host, remote)
+    }
+
+    pub fn purge(remote: &Remote) -> String {
+        format!("[purge] {} nomad refs", remote)
+    }
 }
 
 #[cfg(test)]

@@ -1,11 +1,12 @@
 use std::{
     borrow::{Borrow, Cow},
     collections::HashSet,
+    fmt::Display,
     iter::FromIterator,
 };
 
-/// Convenient [`From`] implementations for `Cow<'_, str>` based newtypes.
-macro_rules! impl_str_from {
+/// Convenient [`From`] and [`Display`] implementations for `Cow<'_, str>` based newtypes.
+macro_rules! impl_str_helpers {
     ($typename:ident) => {
         impl<'a> From<&'a str> for $typename<'a> {
             fn from(s: &'a str) -> Self {
@@ -13,9 +14,15 @@ macro_rules! impl_str_from {
             }
         }
 
-        impl<'a> From<String> for $typename<'a> {
+        impl From<String> for $typename<'_> {
             fn from(s: String) -> Self {
                 Self(Cow::from(s))
+            }
+        }
+
+        impl Display for $typename<'_> {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                self.0.fmt(f)
             }
         }
     };
@@ -55,7 +62,7 @@ macro_rules! impl_str_always_borrow {
 /// A remote git repository identified by name, like `origin`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Remote<'a>(pub Cow<'a, str>);
-impl_str_from!(Remote);
+impl_str_helpers!(Remote);
 
 #[cfg(test)]
 impl_str_always_borrow!(Remote);
@@ -63,7 +70,7 @@ impl_str_always_borrow!(Remote);
 /// The branch name part of a ref. `refs/head/master` would be `Branch::from("master")`.
 #[derive(Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Branch<'a>(pub Cow<'a, str>);
-impl_str_from!(Branch);
+impl_str_helpers!(Branch);
 impl_str_possibly_clone!(Branch);
 impl_str_always_borrow!(Branch);
 
@@ -74,7 +81,7 @@ impl_str_always_borrow!(Branch);
 /// nomad on that remote without overwriting each others refs.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct User<'a>(pub Cow<'a, str>);
-impl_str_from!(User);
+impl_str_helpers!(User);
 impl_str_possibly_clone!(User);
 impl_str_always_borrow!(User);
 
@@ -88,7 +95,7 @@ impl_str_always_borrow!(User);
 /// and for detecting when branches have been deleted.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Host<'a>(pub Cow<'a, str>);
-impl_str_from!(Host);
+impl_str_helpers!(Host);
 impl_str_possibly_clone!(Host);
 impl_str_always_borrow!(Host);
 

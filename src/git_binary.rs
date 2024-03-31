@@ -100,6 +100,11 @@ mod namespace {
                 PREFIX, self.user.0, self.host.0, self.branch.0
             )
         }
+
+        /// A refspec that when pushed, deletes the remote ref.
+        pub fn to_git_remote_delete_refspec(&self) -> String {
+            format!(":{}", self.to_git_remote_ref())
+        }
     }
 
     impl NomadRef<'_, GitRef> {
@@ -605,15 +610,14 @@ impl GitBinary<'_> {
     pub fn get_ref(
         &self,
         renderer: &mut impl Renderer,
-        description: impl AsRef<str>,
         ref_name: impl AsRef<str>,
     ) -> Result<GitRef> {
+        let ref_name = ref_name.as_ref();
         run_trivial(
             renderer,
             self.verbosity,
-            description,
-            self.command()
-                .args(["show-ref", "--verify", ref_name.as_ref()]),
+            format!("Read ref {ref_name}"),
+            self.command().args(["show-ref", "--verify", ref_name]),
         )
         .and_then(output_stdout)
         .map(LineArity::from)
@@ -622,15 +626,11 @@ impl GitBinary<'_> {
     }
 
     /// List all the non-HEAD refs in the repository as `GitRef`s.
-    pub fn list_refs(
-        &self,
-        renderer: &mut impl Renderer,
-        description: impl AsRef<str>,
-    ) -> Result<Vec<GitRef>> {
+    pub fn list_refs(&self, renderer: &mut impl Renderer) -> Result<Vec<GitRef>> {
         let output = run_trivial(
             renderer,
             self.verbosity,
-            description,
+            "Reading all refs",
             self.command().arg("show-ref"),
         )
         .and_then(output_stdout)?;
@@ -672,15 +672,15 @@ impl GitBinary<'_> {
     /// Delete a ref from the repository.
     ///
     /// Note that deleting refs on a remote is done via [`GitBinary::push_refspecs`].
-    fn delete_ref(
-        &self,
-        renderer: &mut impl Renderer,
-        description: impl AsRef<str>,
-        git_ref: &GitRef,
-    ) -> Result<()> {
+    fn delete_ref(&self, renderer: &mut impl Renderer, git_ref: &GitRef) -> Result<()> {
         let mut command = self.command();
         command.args(["update-ref", "-d", &git_ref.name, &git_ref.commit_id]);
-        run_trivial(renderer, self.verbosity, description, &mut command)?;
+        run_trivial(
+            renderer,
+            self.verbosity,
+            format!("Delete ref {}", git_ref.name),
+            &mut command,
+        )?;
         Ok(())
     }
 
@@ -691,7 +691,7 @@ impl GitBinary<'_> {
         run_trivial(
             renderer,
             self.verbosity,
-            "Reading current branch",
+            "Reading current branch name",
             &mut command,
         )
         .and_then(output_stdout)
@@ -702,29 +702,29 @@ impl GitBinary<'_> {
 
     /// Create a git branch named `branch_name`.
     #[cfg(test)]
-    pub fn create_branch(
-        &self,
-        renderer: &mut impl Renderer,
-        description: impl AsRef<str>,
-        branch_name: &Branch,
-    ) -> Result<()> {
+    pub fn create_branch(&self, renderer: &mut impl Renderer, branch_name: &Branch) -> Result<()> {
         let mut command = self.command();
         command.args(["branch", &branch_name.0]);
-        run_notable(renderer, self.verbosity, description, &mut command)?;
+        run_trivial(
+            renderer,
+            self.verbosity,
+            format!("Create branch {}", branch_name.0),
+            &mut command,
+        )?;
         Ok(())
     }
 
     /// Delete a git branch named `branch_name`.
     #[cfg(test)]
-    pub fn delete_branch(
-        &self,
-        renderer: &mut impl Renderer,
-        description: impl AsRef<str>,
-        branch_name: &Branch,
-    ) -> Result<()> {
+    pub fn delete_branch(&self, renderer: &mut impl Renderer, branch_name: &Branch) -> Result<()> {
         let mut command = self.command();
         command.args(["branch", "-d", &branch_name.0]);
-        run_notable(renderer, self.verbosity, description, &mut command)?;
+        run_trivial(
+            renderer,
+            self.verbosity,
+            format!("Delete branch {}", branch_name.0),
+            &mut command,
+        )?;
         Ok(())
     }
 
@@ -740,7 +740,7 @@ impl GitBinary<'_> {
         renderer: &mut impl Renderer,
         user: &'a User,
     ) -> Result<Snapshot<'a, GitRef>> {
-        let refs = self.list_refs(renderer, "Fetching all refs")?;
+        let refs = self.list_refs(renderer)?;
 
         let mut local_branches = HashSet::<Branch>::new();
         let mut nomad_refs = Vec::<NomadRef<'a, GitRef>>::new();
@@ -762,12 +762,13 @@ impl GitBinary<'_> {
     pub fn fetch_nomad_refs(
         &self,
         renderer: &mut impl Renderer,
+        description: impl AsRef<str>,
         user: &User,
         remote: &Remote,
     ) -> Result<Vec<GitRefMutation>> {
         self.fetch_refspecs(
             renderer,
-            format!("Fetching branches from {}", remote.0),
+            description,
             remote,
             &[&namespace::fetch_refspec(user)],
         )
@@ -780,6 +781,7 @@ impl GitBinary<'_> {
     pub fn list_nomad_refs(
         &self,
         renderer: &mut impl Renderer,
+        description: impl AsRef<str>,
         user: &User,
         remote: &Remote,
     ) -> Result<impl Iterator<Item = NomadRef<GitRef>>> {
@@ -790,7 +792,7 @@ impl GitBinary<'_> {
         // we can parse instead.
         let remote_refs = self.list_remote_refs(
             renderer,
-            format!("Listing branches at {}", remote.0),
+            description,
             remote,
             &[&namespace::list_refspec(user)],
         )?;
@@ -804,13 +806,14 @@ impl GitBinary<'_> {
     pub fn push_nomad_refs(
         &self,
         renderer: &mut impl Renderer,
+        description: impl AsRef<str>,
         user: &User,
         host: &Host,
         remote: &Remote,
     ) -> Result<()> {
         self.push_refspecs(
             renderer,
-            format!("Pushing local branches to {}", remote.0),
+            description,
             remote,
             &[&namespace::push_refspec(user, host)],
         )
@@ -820,6 +823,7 @@ impl GitBinary<'_> {
     pub fn prune_nomad_refs<'a>(
         &self,
         renderer: &mut impl Renderer,
+        description: impl AsRef<str>,
         remote: &Remote,
         prune: impl Iterator<Item = PruneFrom<'a, GitRef>>,
     ) -> Result<impl Iterator<Item = GitRefMutation>> {
@@ -828,7 +832,7 @@ impl GitBinary<'_> {
 
         for prune_from in prune {
             if let PruneFrom::LocalAndRemote(ref nomad_ref) = prune_from {
-                refspecs.push(format!(":{}", nomad_ref.to_git_remote_ref()));
+                refspecs.push(nomad_ref.to_git_remote_delete_refspec());
             }
 
             refs.push(
@@ -843,12 +847,7 @@ impl GitBinary<'_> {
 
         // Delete from the remote first
         if !refspecs.is_empty() {
-            self.push_refspecs(
-                renderer,
-                format!("Pruning branches at {}", remote.0),
-                remote,
-                &refspecs,
-            )?;
+            self.push_refspecs(renderer, description, remote, &refspecs)?;
         }
 
         // ... then delete locally. This order means that interruptions leave the local ref around
@@ -859,7 +858,7 @@ impl GitBinary<'_> {
         //
         // But that is non-local reasoning and this ordering is theoretically correct.
         for r in refs.iter() {
-            self.delete_ref(renderer, format!("Delete {}", r.name), r)?;
+            self.delete_ref(renderer, r)?;
         }
 
         Ok(refs.into_iter().map(|git_ref| {
@@ -1160,7 +1159,7 @@ mod test_impl {
                 .args(["commit", "--allow-empty", "-m", "initial commit"]),
         )?;
 
-        let head = git.get_ref(&mut NoRenderer, "Get commit ID for HEAD", "HEAD")?;
+        let head = git.get_ref(&mut NoRenderer, "HEAD")?;
         run_notable(
             &mut NoRenderer,
             verbosity,

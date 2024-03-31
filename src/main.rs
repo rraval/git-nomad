@@ -473,10 +473,7 @@ mod test_e2e {
         sync_host(&host0);
 
         let host1 = origin.clone("user0", "host1");
-        host1
-            .git
-            .create_branch(&mut NoRenderer, "Start feature branch", feature)
-            .unwrap();
+        host1.git.create_branch(&mut NoRenderer, feature).unwrap();
         sync_host(&host1);
 
         // both hosts have synced, the origin should have refs from both (including the one for the
@@ -508,10 +505,7 @@ mod test_e2e {
         );
 
         // host1 deletes the branch and syncs, removing it from origin
-        host1
-            .git
-            .delete_branch(&mut NoRenderer, "Abandon feature branch", feature)
-            .unwrap();
+        host1.git.delete_branch(&mut NoRenderer, feature).unwrap();
         sync_host(&host1);
 
         assert_eq!(

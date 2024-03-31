@@ -699,7 +699,7 @@ impl GitBinary<'_> {
     {
         let mut command = self.command();
         command.args(["update-ref", "-d", &git_ref.name, &git_ref.commit_id]);
-        run_notable(renderer, self.verbosity, description, &mut command)?;
+        run_trivial(renderer, self.verbosity, description, &mut command)?;
         Ok(())
     }
 
@@ -878,11 +878,7 @@ impl GitBinary<'_> {
         //
         // But that is non-local reasoning and this ordering is theoretically correct.
         for r in refs {
-            self.delete_ref(
-                renderer,
-                format!("  Delete {} (was {})", r.name, r.commit_id),
-                &r,
-            )?;
+            self.delete_ref(renderer, format!("Delete {}", r.name), &r)?;
         }
 
         Ok(())

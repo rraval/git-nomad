@@ -320,7 +320,7 @@ impl GitRefMutation {
             } => {
                 let old_commit_id = git.abbrev_commit_id(renderer, old_commit_id)?;
                 let new_commit_id = git.abbrev_commit_id(renderer, new_commit_id)?;
-                renderer.writer(|w| {
+                renderer.out(|w| {
                     writeln!(w, "   {old_commit_id}..{new_commit_id}  {name}")
                         .context("printing fast forward fetched ref")
                 })
@@ -333,7 +333,7 @@ impl GitRefMutation {
             } => {
                 let old_commit_id = git.abbrev_commit_id(renderer, old_commit_id)?;
                 let new_commit_id = git.abbrev_commit_id(renderer, new_commit_id)?;
-                renderer.writer(|w| {
+                renderer.out(|w| {
                     writeln!(w, " + {old_commit_id}...{new_commit_id}  {name}")
                         .context("printing forced update fetched ref")
                 })
@@ -344,7 +344,7 @@ impl GitRefMutation {
                 new_commit_id,
             } => {
                 let new_commit_id = git.abbrev_commit_id(renderer, new_commit_id)?;
-                renderer.writer(|w| {
+                renderer.out(|w| {
                     writeln!(w, " * {new_commit_id}  {name}").context("printing new fetched ref")
                 })
             }
@@ -354,7 +354,7 @@ impl GitRefMutation {
                 old_commit_id,
             } => {
                 let old_commit_id = git.abbrev_commit_id(renderer, old_commit_id)?;
-                renderer.writer(|w| {
+                renderer.out(|w| {
                     writeln!(w, " - {old_commit_id}  {name}").context("printing new fetched ref")
                 })
             }
@@ -367,14 +367,15 @@ impl GitRefMutation {
             } => {
                 let old_commit_id = git.abbrev_commit_id(renderer, old_commit_id)?;
                 let new_commit_id = git.abbrev_commit_id(renderer, new_commit_id)?;
-                renderer.writer(|w| {
+                renderer.out(|w| {
                     writeln!(w, " {flag} {old_commit_id}...{new_commit_id}  {name}")
                         .context("printing unknown fetched ref")
                 })
             }
 
-            GitRefMutation::Unparseable { line } => renderer
-                .writer(|w| writeln!(w, "{line}").context("printing unparseable fetched ref")),
+            GitRefMutation::Unparseable { line } => {
+                renderer.out(|w| writeln!(w, "{line}").context("printing unparseable fetched ref"))
+            }
         }
     }
 }

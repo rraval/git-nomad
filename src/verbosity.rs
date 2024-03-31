@@ -184,7 +184,7 @@ fn run_with_invocation(
     description: impl AsRef<str>,
     command: &mut Command,
 ) -> Result<Output> {
-    renderer.writer(|w| {
+    renderer.err(|w| {
         writeln!(w)?;
         writeln!(w, "# {}", description.as_ref())?;
         writeln!(w, "$ {:#?}", command)?;
@@ -207,7 +207,7 @@ fn run_with_invocation_and_output(
             //
             // In practice, we only wrap `git` which produces UTF8, so a conversion here is
             // okay.
-            renderer.writer(|w| {
+            renderer.err(|w| {
                 writeln!(w, "{}", String::from_utf8_lossy(stream))?;
                 writeln!(w, "# ---- END {} ----", name)?;
                 Ok(())

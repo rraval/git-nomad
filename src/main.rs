@@ -52,7 +52,7 @@ fn version() -> &'static str {
 #[cfg(not(test))]
 fn main() -> anyhow::Result<()> {
     nomad(
-        &mut renderer::TerminalRenderer::stdout(),
+        &mut renderer::TerminalRenderer::new(),
         std::env::args_os(),
         std::env::current_dir()?.as_path(),
     )
@@ -70,7 +70,7 @@ fn nomad(
     let verbosity = specified_verbosity(&mut matches);
 
     if verbosity.map_or(false, |v| v.display_version) {
-        renderer.writer(|w| {
+        renderer.out(|w| {
             writeln!(w)?;
             writeln!(w, "Version: {}", version())?;
             Ok(())
@@ -86,7 +86,7 @@ fn nomad(
     let workflow = specified_workflow(renderer, &mut matches, &git)?;
 
     if verbosity.map_or(false, |v| v.display_workflow) {
-        renderer.writer(|w| {
+        renderer.err(|w| {
             writeln!(w)?;
             writeln!(w, "Workflow: {:?}", workflow)?;
             Ok(())

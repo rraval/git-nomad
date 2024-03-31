@@ -166,7 +166,7 @@ fn ls(
             continue;
         }
 
-        renderer.writer(|w| {
+        renderer.out(|w| {
             printer.print_host(w, &host)?;
 
             for NomadRef { ref_, branch, .. } in branches {

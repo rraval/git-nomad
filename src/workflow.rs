@@ -117,7 +117,7 @@ fn sync(
     remote: &Remote,
 ) -> Result<()> {
     git.push_nomad_refs(renderer, user, host, remote)?;
-    git.fetch_nomad_refs(renderer, user, remote)?;
+    let _ = git.fetch_nomad_refs(renderer, user, remote)?;
     let remote_nomad_refs = git.list_nomad_refs(renderer, user, remote)?.collect();
     let snapshot = git.snapshot(renderer, user)?;
     git.prune_nomad_refs(
@@ -159,7 +159,7 @@ fn ls(
     branch_filter: Filter<Branch>,
 ) -> Result<()> {
     if let Some(remote) = fetch_remote {
-        git.fetch_nomad_refs(renderer, user, &remote)?;
+        let _ = git.fetch_nomad_refs(renderer, user, &remote)?;
     }
 
     let snapshot = git.snapshot(renderer, user)?;
@@ -193,7 +193,7 @@ fn purge(
     remote: &Remote,
     host_filter: Filter<Host>,
 ) -> Result<()> {
-    git.fetch_nomad_refs(renderer, user, remote)?;
+    let _ = git.fetch_nomad_refs(renderer, user, remote)?;
     let snapshot = git.snapshot(renderer, user)?;
     let prune = snapshot.prune_by_hosts(|h| host_filter.contains(h));
     git.prune_nomad_refs(renderer, remote, prune.into_iter())?;

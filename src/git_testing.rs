@@ -8,7 +8,7 @@ use std::{
 use tempfile::{tempdir, TempDir};
 
 use crate::{
-    git_binary::{git_command, GitBinary, LineArity},
+    git_binary::{git_command, GitBinary, GitFetchedRef, LineArity},
     git_ref::GitRef,
     renderer::test::NoRenderer,
     snapshot::PruneFrom,
@@ -190,7 +190,7 @@ impl<'a> GitClone<'a> {
     }
 
     /// Fetch all nomad managed refs from the remote.
-    pub fn fetch(&self) {
+    pub fn fetch(&self) -> Vec<GitFetchedRef> {
         self.git
             .fetch_nomad_refs(&mut NoRenderer, &self.user, &self.remote)
             .unwrap()
@@ -255,5 +255,29 @@ impl<'a> GitClone<'a> {
                     .map(Into::into)
             })
             .collect::<HashSet<_>>()
+    }
+
+    pub fn new_commit(&self) {
+        run_notable(
+            &mut NoRenderer,
+            self.git.verbosity,
+            "new commit",
+            self.git
+                .command()
+                .args(["commit", "--allow-empty", "-m", "new commit"]),
+        )
+        .unwrap();
+    }
+
+    pub(crate) fn amend_commit(&self) {
+        run_notable(
+            &mut NoRenderer,
+            self.git.verbosity,
+            "new commit",
+            self.git
+                .command()
+                .args(["commit", "--amend", "--allow-empty", "-m", "amended commit"]),
+        )
+        .unwrap();
     }
 }

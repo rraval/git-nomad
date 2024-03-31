@@ -223,6 +223,138 @@ mod namespace {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum GitFetchedRef {
+    FastForward {
+        name: String,
+        old_commit_id: String,
+        new_commit_id: String,
+    },
+    ForcedUpdate {
+        name: String,
+        old_commit_id: String,
+        new_commit_id: String,
+    },
+    New {
+        name: String,
+        new_commit_id: String,
+    },
+    Unknown {
+        flag: String,
+        name: String,
+        old_commit_id: String,
+        new_commit_id: String,
+    },
+    Unparseable {
+        line: String,
+    },
+}
+
+impl GitFetchedRef {
+    // https://git-scm.com/docs/git-fetch#_output
+    pub fn from_porcelain_line(line: &str) -> Self {
+        // use rsplitn because `' '` is a valid flag
+        let parts = line.rsplitn(4, ' ').collect::<Vec<_>>();
+        match parts[..] {
+            // rsplitn puts things in reverse order
+            [name, new_commit_id, old_commit_id, flag] => {
+                let name = name.into();
+                let new_commit_id = new_commit_id.into();
+
+                match flag {
+                    " " => Self::FastForward {
+                        name,
+                        old_commit_id: old_commit_id.into(),
+                        new_commit_id,
+                    },
+
+                    "+" => Self::ForcedUpdate {
+                        name,
+                        old_commit_id: old_commit_id.into(),
+                        new_commit_id,
+                    },
+
+                    "*" => Self::New {
+                        name,
+                        new_commit_id,
+                    },
+
+                    _ => Self::Unknown {
+                        flag: flag.into(),
+                        name,
+                        old_commit_id: old_commit_id.into(),
+                        new_commit_id,
+                    },
+                }
+            }
+
+            _ => GitFetchedRef::Unparseable { line: line.into() },
+        }
+    }
+
+    fn post_fetch_git_ref(&self) -> Option<GitRef> {
+        match self {
+            GitFetchedRef::FastForward {
+                name,
+                new_commit_id,
+                ..
+            }
+            | GitFetchedRef::ForcedUpdate {
+                name,
+                new_commit_id,
+                ..
+            }
+            | GitFetchedRef::New {
+                name,
+                new_commit_id,
+            }
+            | GitFetchedRef::Unknown {
+                name,
+                new_commit_id,
+                ..
+            } => Some(GitRef {
+                name: name.clone(),
+                commit_id: new_commit_id.clone(),
+            }),
+            GitFetchedRef::Unparseable { .. } => None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod test_git_fetched_ref {
+    use super::GitFetchedRef;
+
+    #[test]
+    fn from_porcelain_line_unknown() {
+        assert_eq!(
+            GitFetchedRef::from_porcelain_line("f old_commit new_commit some_ref"),
+            GitFetchedRef::Unknown {
+                flag: "f".into(),
+                old_commit_id: "old_commit".into(),
+                new_commit_id: "new_commit".into(),
+                name: "some_ref".into(),
+            }
+        );
+    }
+
+    #[test]
+    fn from_porcelain_line_unparseable_empty() {
+        assert_eq!(
+            GitFetchedRef::from_porcelain_line(""),
+            GitFetchedRef::Unparseable { line: "".into() }
+        );
+    }
+
+    #[test]
+    fn from_porcelain_line_unparseable_abc() {
+        assert_eq!(
+            GitFetchedRef::from_porcelain_line("abc"),
+            GitFetchedRef::Unparseable { line: "abc".into() }
+        );
+    }
+}
+
 /// Implements repository manipulations by delegating to some ambient `git` binary that exists
 /// somewhere on the system.
 #[derive(PartialEq, Eq)]
@@ -336,7 +468,7 @@ impl GitBinary<'_> {
         description: Description,
         remote: &Remote,
         refspecs: &[RefSpec],
-    ) -> Result<()>
+    ) -> Result<Vec<GitFetchedRef>>
     where
         Description: AsRef<str>,
         RefSpec: AsRef<OsStr>,
@@ -346,9 +478,17 @@ impl GitBinary<'_> {
             renderer,
             self.verbosity,
             description,
-            self.command().args(["fetch", &remote.0]).args(refspecs),
-        )?;
-        Ok(())
+            self.command()
+                .args(["fetch", "--porcelain", &remote.0])
+                .args(refspecs),
+        )
+        .and_then(output_stdout)
+        .map(|stdout| {
+            stdout
+                .lines()
+                .map(GitFetchedRef::from_porcelain_line)
+                .collect()
+        })
     }
 
     /// Wraps `git push` to push refs from the local repository into the given remote.
@@ -558,7 +698,7 @@ impl GitBinary<'_> {
         renderer: &mut impl Renderer,
         user: &User,
         remote: &Remote,
-    ) -> Result<()> {
+    ) -> Result<Vec<GitFetchedRef>> {
         self.fetch_refspecs(
             renderer,
             format!("Fetching branches from {}", remote.0),
@@ -970,6 +1110,7 @@ mod test_impl {
 #[cfg(test)]
 mod test_backend {
     use crate::{
+        git_binary::GitFetchedRef,
         git_testing::{GitCommitId, GitRemote, INITIAL_BRANCH},
         verbosity::Verbosity,
     };
@@ -1051,5 +1192,69 @@ mod test_backend {
         host0.prune_local_and_remote([INITIAL_BRANCH]);
         assert_eq!(origin.nomad_refs(), HashSet::new());
         assert_eq!(host0.nomad_refs(), HashSet::new());
+    }
+
+    #[test]
+    fn fetch_new() {
+        let origin = GitRemote::init(Some(Verbosity::max()));
+        let host0 = origin.clone("user0", "host0");
+        let host1 = origin.clone("user0", "host1");
+
+        host0.push();
+
+        let refs = host1.fetch();
+        assert!(
+            match refs.as_slice() {
+                [GitFetchedRef::New { ref name, .. }] => name.contains("host0"),
+                _ => false,
+            },
+            "{refs:?}"
+        );
+    }
+
+    #[test]
+    fn fetch_fast_forward() {
+        let origin = GitRemote::init(Some(Verbosity::max()));
+        let host0 = origin.clone("user0", "host0");
+        let host1 = origin.clone("user0", "host1");
+
+        host0.push();
+        host1.fetch();
+
+        host0.new_commit();
+        host0.push();
+
+        let refs = host1.fetch();
+
+        assert!(
+            match refs.as_slice() {
+                [GitFetchedRef::FastForward { name, .. }] => name.contains("host0"),
+                _ => false,
+            },
+            "{refs:?}"
+        );
+    }
+
+    #[test]
+    fn fetch_forced_update() {
+        let origin = GitRemote::init(Some(Verbosity::max()));
+        let host0 = origin.clone("user0", "host0");
+        let host1 = origin.clone("user0", "host1");
+
+        host0.push();
+        host1.fetch();
+
+        host0.amend_commit();
+        host0.push();
+
+        let refs = host1.fetch();
+
+        assert!(
+            match refs.as_slice() {
+                [GitFetchedRef::ForcedUpdate { name, .. }] => name.contains("host0"),
+                _ => false,
+            },
+            "{refs:?}"
+        );
     }
 }

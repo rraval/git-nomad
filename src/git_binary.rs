@@ -300,14 +300,14 @@ impl GitRefMutation {
         }
     }
 
-    pub fn sort_key(&self) -> &str {
+    pub fn sort_key(&self) -> String {
         match self {
             GitRefMutation::FastForward { name, .. }
             | GitRefMutation::ForcedUpdate { name, .. }
             | GitRefMutation::New { name, .. }
             | GitRefMutation::Removed { name, .. }
-            | GitRefMutation::Unknown { name, .. } => name,
-            GitRefMutation::Unparseable { line, .. } => line,
+            | GitRefMutation::Unknown { name, .. } => name.into(),
+            GitRefMutation::Unparseable { line, .. } => line.into(),
         }
     }
 
@@ -843,7 +843,7 @@ impl GitBinary<'_> {
         renderer: &mut impl Renderer,
         remote: &Remote,
         prune: impl Iterator<Item = PruneFrom<'a, GitRef>>,
-    ) -> Result<()> {
+    ) -> Result<impl Iterator<Item = GitRefMutation>> {
         let mut refspecs = Vec::<String>::new();
         let mut refs = Vec::<GitRef>::new();
 
@@ -879,11 +879,17 @@ impl GitBinary<'_> {
         // ref if this code deleted local refs first and then was interrupted.
         //
         // But that is non-local reasoning and this ordering is theoretically correct.
-        for r in refs {
-            self.delete_ref(renderer, format!("Delete {}", r.name), &r)?;
+        for r in refs.iter() {
+            self.delete_ref(renderer, format!("Delete {}", r.name), r)?;
         }
 
-        Ok(())
+        Ok(refs.into_iter().map(|git_ref| {
+            let GitRef { commit_id, name } = git_ref;
+            GitRefMutation::Removed {
+                name,
+                old_commit_id: commit_id,
+            }
+        }))
     }
 }
 
@@ -1272,7 +1278,23 @@ mod test_backend {
         );
 
         // Pruning removes the ref remotely and locally
-        host0.prune_local_and_remote([INITIAL_BRANCH]);
+        let pruned: Vec<_> = host0.prune_local_and_remote([INITIAL_BRANCH]).collect();
+
+        assert_eq!(
+            pruned,
+            vec![host0
+                .get_nomad_ref(INITIAL_BRANCH)
+                .map(|nomad_ref| {
+                    let name = nomad_ref.to_git_local_ref();
+                    let NomadRef { ref_, .. } = nomad_ref;
+                    GitRefMutation::Removed {
+                        name,
+                        old_commit_id: ref_.0,
+                    }
+                })
+                .unwrap()]
+        );
+
         assert_eq!(origin.nomad_refs(), HashSet::new());
         assert_eq!(host0.nomad_refs(), HashSet::new());
     }

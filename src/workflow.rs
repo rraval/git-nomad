@@ -5,7 +5,7 @@ use std::{collections::HashSet, hash::Hash, io::Write};
 use anyhow::{Context, Result};
 
 use crate::{
-    git_binary::GitBinary,
+    git_binary::{GitBinary, GitRefMutation},
     git_ref::GitRef,
     renderer::Renderer,
     types::{Branch, Host, NomadRef, Remote, User},
@@ -117,22 +117,25 @@ fn sync(
     remote: &Remote,
 ) -> Result<()> {
     git.push_nomad_refs(renderer, user, host, remote)?;
-    let mut fetched_refs = git.fetch_nomad_refs(renderer, user, remote)?;
+    let mut mutations = git.fetch_nomad_refs(renderer, user, remote)?;
     let remote_nomad_refs = git.list_nomad_refs(renderer, user, remote)?.collect();
     let snapshot = git.snapshot(renderer, user)?;
-    git.prune_nomad_refs(
-        renderer,
-        remote,
-        snapshot
-            .prune_deleted_branches(host, &remote_nomad_refs)
-            .into_iter(),
-    )?;
+
+    mutations.extend(
+        git.prune_nomad_refs(
+            renderer,
+            remote,
+            snapshot
+                .prune_deleted_branches(host, &remote_nomad_refs)
+                .into_iter(),
+        )?,
+    );
 
     if git.is_output_allowed() {
-        fetched_refs.sort_unstable_by_key(|fr| String::from(fr.sort_key()));
+        mutations.sort_unstable_by_key(GitRefMutation::sort_key);
 
-        for fr in fetched_refs {
-            fr.print(renderer, git)?;
+        for mtn in mutations {
+            mtn.print(renderer, git)?;
         }
     }
 
@@ -190,7 +193,16 @@ fn purge(
     let _ = git.fetch_nomad_refs(renderer, user, remote)?;
     let snapshot = git.snapshot(renderer, user)?;
     let prune = snapshot.prune_by_hosts(|h| host_filter.contains(h));
-    git.prune_nomad_refs(renderer, remote, prune.into_iter())?;
+
+    let mut mutations: Vec<_> = git
+        .prune_nomad_refs(renderer, remote, prune.into_iter())?
+        .collect();
+    mutations.sort_unstable_by_key(GitRefMutation::sort_key);
+
+    for mtn in mutations {
+        mtn.print(renderer, git)?;
+    }
+
     Ok(())
 }
 

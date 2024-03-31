@@ -116,7 +116,7 @@ impl GitRemote {
             git_command(GIT)
                 .current_dir(&self.root_dir)
                 .arg("clone")
-                .args(&["--origin", ORIGIN])
+                .args(["--origin", ORIGIN])
                 .arg(&self.remote_dir)
                 .arg(&clone_dir),
         )
@@ -204,7 +204,10 @@ impl<'a> GitClone<'a> {
     }
 
     /// Delete the nomad managed refs backed by `branch_names` from both the local and remote.
-    pub fn prune_local_and_remote(&'a self, branch_names: impl IntoIterator<Item = &'a str>) {
+    pub fn prune_local_and_remote(
+        &'a self,
+        branch_names: impl IntoIterator<Item = &'a str> + 'a,
+    ) -> impl Iterator<Item = GitRefMutation> + 'a {
         let prune_from = branch_names.into_iter().map(|name| {
             let nomad_ref = NomadRef::<()> {
                 user: self.user.always_borrow(),
@@ -227,7 +230,7 @@ impl<'a> GitClone<'a> {
 
         self.git
             .prune_nomad_refs(&mut NoRenderer, &self.remote, prune_from)
-            .unwrap();
+            .unwrap()
     }
 
     /// Resolve a specific nomad managed ref in the local clone by `branch` name.

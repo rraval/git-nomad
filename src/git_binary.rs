@@ -550,17 +550,13 @@ impl GitBinary<'_> {
     ///
     /// If `refspecs` is empty, which means git will use the user configured default behaviour
     /// which is definitely not what we want.
-    fn fetch_refspecs<Description, RefSpec>(
+    fn fetch_refspecs(
         &self,
         renderer: &mut impl Renderer,
-        description: Description,
+        description: impl AsRef<str>,
         remote: &Remote,
-        refspecs: &[RefSpec],
-    ) -> Result<Vec<GitRefMutation>>
-    where
-        Description: AsRef<str>,
-        RefSpec: AsRef<OsStr>,
-    {
+        refspecs: &[impl AsRef<OsStr>],
+    ) -> Result<Vec<GitRefMutation>> {
         assert!(!refspecs.is_empty());
         run_notable(
             renderer,
@@ -585,17 +581,13 @@ impl GitBinary<'_> {
     ///
     /// If `refspecs` is empty, which means git will use the user configured default behaviour
     /// which is definitely not what we want.
-    fn push_refspecs<Description, RefSpec>(
+    fn push_refspecs(
         &self,
         renderer: &mut impl Renderer,
-        description: Description,
+        description: impl AsRef<str>,
         remote: &Remote,
-        refspecs: &[RefSpec],
-    ) -> Result<()>
-    where
-        Description: AsRef<str>,
-        RefSpec: AsRef<OsStr>,
-    {
+        refspecs: &[impl AsRef<OsStr>],
+    ) -> Result<()> {
         assert!(!refspecs.is_empty());
         run_notable(
             renderer,
@@ -610,16 +602,12 @@ impl GitBinary<'_> {
 
     /// Extract a single `GitRef` for a given `ref_name`.
     #[cfg(test)]
-    pub fn get_ref<Description, RefName>(
+    pub fn get_ref(
         &self,
         renderer: &mut impl Renderer,
-        description: Description,
-        ref_name: RefName,
-    ) -> Result<GitRef>
-    where
-        Description: AsRef<str>,
-        RefName: AsRef<str>,
-    {
+        description: impl AsRef<str>,
+        ref_name: impl AsRef<str>,
+    ) -> Result<GitRef> {
         run_trivial(
             renderer,
             self.verbosity,
@@ -634,14 +622,11 @@ impl GitBinary<'_> {
     }
 
     /// List all the non-HEAD refs in the repository as `GitRef`s.
-    pub fn list_refs<Description>(
+    pub fn list_refs(
         &self,
         renderer: &mut impl Renderer,
-        description: Description,
-    ) -> Result<Vec<GitRef>>
-    where
-        Description: AsRef<str>,
-    {
+        description: impl AsRef<str>,
+    ) -> Result<Vec<GitRef>> {
         let output = run_trivial(
             renderer,
             self.verbosity,
@@ -660,17 +645,13 @@ impl GitBinary<'_> {
     /// # Panics
     ///
     /// If `refspecs` is empty, which means git will list all refs, which is never what we want.
-    fn list_remote_refs<Description, RefSpec>(
+    fn list_remote_refs(
         &self,
         renderer: &mut impl Renderer,
-        description: Description,
+        description: impl AsRef<str>,
         remote: &Remote,
-        refspecs: &[RefSpec],
-    ) -> Result<Vec<GitRef>>
-    where
-        Description: AsRef<str>,
-        RefSpec: AsRef<OsStr>,
-    {
+        refspecs: &[impl AsRef<OsStr>],
+    ) -> Result<Vec<GitRef>> {
         assert!(!refspecs.is_empty());
         let output = run_notable(
             renderer,
@@ -691,15 +672,12 @@ impl GitBinary<'_> {
     /// Delete a ref from the repository.
     ///
     /// Note that deleting refs on a remote is done via [`GitBinary::push_refspecs`].
-    fn delete_ref<Description>(
+    fn delete_ref(
         &self,
         renderer: &mut impl Renderer,
-        description: Description,
+        description: impl AsRef<str>,
         git_ref: &GitRef,
-    ) -> Result<()>
-    where
-        Description: AsRef<str>,
-    {
+    ) -> Result<()> {
         let mut command = self.command();
         command.args(["update-ref", "-d", &git_ref.name, &git_ref.commit_id]);
         run_trivial(renderer, self.verbosity, description, &mut command)?;

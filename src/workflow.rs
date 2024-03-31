@@ -131,13 +131,9 @@ fn sync(
     if git.is_output_allowed() {
         fetched_refs.sort_unstable_by_key(|fr| String::from(fr.sort_key()));
 
-        renderer.writer(|w| {
-            for fr in fetched_refs {
-                fr.print(w)?;
-            }
-
-            Ok(())
-        })?;
+        for fr in fetched_refs {
+            fr.print(renderer, git)?;
+        }
     }
 
     Ok(())

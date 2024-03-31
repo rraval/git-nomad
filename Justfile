@@ -5,6 +5,11 @@ _list:
 release:
     scripts/release.sh
 
+# Run the demo as fast as possible
+demo:
+    cargo build --release
+    PATH="$(pwd)/target/release:$PATH" scripts/demo.sh --fast
+
 # Demonstrate all features as an asciinema screencast
 record-demo:
     @mkdir -p target/

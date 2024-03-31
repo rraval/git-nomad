@@ -330,31 +330,61 @@ impl GitFetchedRef {
         }
     }
 
-    pub fn print(&self, output: &mut dyn Write) -> Result<()> {
+    pub fn print(&self, renderer: &mut impl Renderer, git: &GitBinary) -> Result<()> {
         match self {
             GitFetchedRef::FastForward {
                 name,
                 old_commit_id,
                 new_commit_id,
-            } => writeln!(output, "   {old_commit_id}..{new_commit_id}  {name}"),
+            } => {
+                let old_commit_id = git.abbrev_commit_id(renderer, old_commit_id)?;
+                let new_commit_id = git.abbrev_commit_id(renderer, new_commit_id)?;
+                renderer.writer(|w| {
+                    writeln!(w, "   {old_commit_id}..{new_commit_id}  {name}")
+                        .context("printing fast forward fetched ref")
+                })
+            }
+
             GitFetchedRef::ForcedUpdate {
                 name,
                 old_commit_id,
                 new_commit_id,
-            } => writeln!(output, " + {old_commit_id}...{new_commit_id}  {name}"),
+            } => {
+                let old_commit_id = git.abbrev_commit_id(renderer, old_commit_id)?;
+                let new_commit_id = git.abbrev_commit_id(renderer, new_commit_id)?;
+                renderer.writer(|w| {
+                    writeln!(w, " + {old_commit_id}...{new_commit_id}  {name}")
+                        .context("printing forced update fetched ref")
+                })
+            }
+
             GitFetchedRef::New {
                 name,
                 new_commit_id,
-            } => writeln!(output, " * {new_commit_id}  {name}"),
+            } => {
+                let new_commit_id = git.abbrev_commit_id(renderer, new_commit_id)?;
+                renderer.writer(|w| {
+                    writeln!(w, " * {new_commit_id}  {name}").context("printing new fetched ref")
+                })
+            }
+
             GitFetchedRef::Unknown {
                 flag,
                 name,
                 old_commit_id,
                 new_commit_id,
-            } => writeln!(output, " {flag} {old_commit_id}...{new_commit_id}  {name}"),
-            GitFetchedRef::Unparseable { line } => writeln!(output, "{line}"),
+            } => {
+                let old_commit_id = git.abbrev_commit_id(renderer, old_commit_id)?;
+                let new_commit_id = git.abbrev_commit_id(renderer, new_commit_id)?;
+                renderer.writer(|w| {
+                    writeln!(w, " {flag} {old_commit_id}...{new_commit_id}  {name}")
+                        .context("printing unknown fetched ref")
+                })
+            }
+
+            GitFetchedRef::Unparseable { line } => renderer
+                .writer(|w| writeln!(w, "{line}").context("printing unparseable fetched ref")),
         }
-        .context("")
     }
 }
 
@@ -491,6 +521,24 @@ impl GitBinary<'_> {
             ]),
         )?;
         Ok(())
+    }
+
+    pub fn abbrev_commit_id(
+        &self,
+        renderer: &mut impl Renderer,
+        commit_id: impl AsRef<str>,
+    ) -> Result<String> {
+        let commit_id = commit_id.as_ref();
+
+        run_trivial(
+            renderer,
+            self.verbosity,
+            format!("Abbreviate {commit_id}"),
+            self.command().args(["rev-parse", "--short", commit_id]),
+        )
+        .and_then(output_stdout)
+        .map(LineArity::from)
+        .and_then(LineArity::one)
     }
 
     /// Wraps `git fetch` to fetch refs from a given remote into the local repository.

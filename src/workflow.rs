@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use crate::{
     git_binary::GitBinary,
     git_ref::GitRef,
-    renderer::{add_newline_if_spinners_are_visible, Renderer},
+    renderer::Renderer,
     types::{Branch, Host, NomadRef, Remote, User},
 };
 
@@ -117,7 +117,7 @@ fn sync(
     remote: &Remote,
 ) -> Result<()> {
     git.push_nomad_refs(renderer, user, host, remote)?;
-    let _ = git.fetch_nomad_refs(renderer, user, remote)?;
+    let mut fetched_refs = git.fetch_nomad_refs(renderer, user, remote)?;
     let remote_nomad_refs = git.list_nomad_refs(renderer, user, remote)?.collect();
     let snapshot = git.snapshot(renderer, user)?;
     git.prune_nomad_refs(
@@ -129,17 +129,15 @@ fn sync(
     )?;
 
     if git.is_output_allowed() {
-        add_newline_if_spinners_are_visible(renderer)?;
+        fetched_refs.sort_unstable_by_key(|fr| String::from(fr.sort_key()));
 
-        ls(
-            renderer,
-            git,
-            LsPrinter::Grouped,
-            user,
-            None,
-            Filter::All,
-            Filter::All,
-        )?
+        renderer.writer(|w| {
+            for fr in fetched_refs {
+                fr.print(w)?;
+            }
+
+            Ok(())
+        })?;
     }
 
     Ok(())

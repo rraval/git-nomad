@@ -1,7 +1,7 @@
 //! See [`GitBinary`] for the primary entry point.
 
-use anyhow::{bail, Result};
-use std::{borrow::Cow, collections::HashSet, ffi::OsStr, path::Path, process::Command};
+use anyhow::{bail, Context, Result};
+use std::{borrow::Cow, collections::HashSet, ffi::OsStr, io::Write, path::Path, process::Command};
 
 use crate::{
     git_ref::GitRef,
@@ -292,6 +292,16 @@ impl GitFetchedRef {
         }
     }
 
+    pub fn sort_key(&self) -> &str {
+        match self {
+            GitFetchedRef::FastForward { name, .. }
+            | GitFetchedRef::ForcedUpdate { name, .. }
+            | GitFetchedRef::New { name, .. }
+            | GitFetchedRef::Unknown { name, .. } => name,
+            GitFetchedRef::Unparseable { line, .. } => line,
+        }
+    }
+
     fn post_fetch_git_ref(&self) -> Option<GitRef> {
         match self {
             GitFetchedRef::FastForward {
@@ -318,6 +328,33 @@ impl GitFetchedRef {
             }),
             GitFetchedRef::Unparseable { .. } => None,
         }
+    }
+
+    pub fn print(&self, output: &mut dyn Write) -> Result<()> {
+        match self {
+            GitFetchedRef::FastForward {
+                name,
+                old_commit_id,
+                new_commit_id,
+            } => writeln!(output, "   {old_commit_id}..{new_commit_id}  {name}"),
+            GitFetchedRef::ForcedUpdate {
+                name,
+                old_commit_id,
+                new_commit_id,
+            } => writeln!(output, " + {old_commit_id}...{new_commit_id}  {name}"),
+            GitFetchedRef::New {
+                name,
+                new_commit_id,
+            } => writeln!(output, " * {new_commit_id}  {name}"),
+            GitFetchedRef::Unknown {
+                flag,
+                name,
+                old_commit_id,
+                new_commit_id,
+            } => writeln!(output, " {flag} {old_commit_id}...{new_commit_id}  {name}"),
+            GitFetchedRef::Unparseable { line } => writeln!(output, "{line}"),
+        }
+        .context("")
     }
 }
 

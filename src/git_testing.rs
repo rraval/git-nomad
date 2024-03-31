@@ -8,7 +8,7 @@ use std::{
 use tempfile::{tempdir, TempDir};
 
 use crate::{
-    git_binary::{git_command, GitBinary, GitFetchedRef, LineArity},
+    git_binary::{git_command, GitBinary, GitRefMutation, LineArity},
     git_ref::GitRef,
     renderer::test::NoRenderer,
     snapshot::PruneFrom,
@@ -190,7 +190,7 @@ impl<'a> GitClone<'a> {
     }
 
     /// Fetch all nomad managed refs from the remote.
-    pub fn fetch(&self) -> Vec<GitFetchedRef> {
+    pub fn fetch(&self) -> Vec<GitRefMutation> {
         self.git
             .fetch_nomad_refs(&mut NoRenderer, &self.user, &self.remote)
             .unwrap()

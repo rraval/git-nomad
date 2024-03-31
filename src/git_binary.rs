@@ -224,7 +224,7 @@ mod namespace {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub enum GitFetchedRef {
+pub enum GitRefMutation {
     FastForward {
         name: String,
         old_commit_id: String,
@@ -239,6 +239,10 @@ pub enum GitFetchedRef {
         name: String,
         new_commit_id: String,
     },
+    Removed {
+        name: String,
+        old_commit_id: String,
+    },
     Unknown {
         flag: String,
         name: String,
@@ -250,7 +254,7 @@ pub enum GitFetchedRef {
     },
 }
 
-impl GitFetchedRef {
+impl GitRefMutation {
     // https://git-scm.com/docs/git-fetch#_output
     pub fn from_porcelain_line(line: &str) -> Self {
         // use rsplitn because `' '` is a valid flag
@@ -259,52 +263,57 @@ impl GitFetchedRef {
             // rsplitn puts things in reverse order
             [name, new_commit_id, old_commit_id, flag] => {
                 let name = name.into();
-                let new_commit_id = new_commit_id.into();
 
                 match flag {
                     " " => Self::FastForward {
                         name,
                         old_commit_id: old_commit_id.into(),
-                        new_commit_id,
+                        new_commit_id: new_commit_id.into(),
                     },
 
                     "+" => Self::ForcedUpdate {
                         name,
                         old_commit_id: old_commit_id.into(),
-                        new_commit_id,
+                        new_commit_id: new_commit_id.into(),
                     },
 
                     "*" => Self::New {
                         name,
-                        new_commit_id,
+                        new_commit_id: new_commit_id.into(),
+                    },
+
+                    "-" => Self::Removed {
+                        name,
+                        old_commit_id: old_commit_id.into(),
                     },
 
                     _ => Self::Unknown {
                         flag: flag.into(),
                         name,
                         old_commit_id: old_commit_id.into(),
-                        new_commit_id,
+                        new_commit_id: new_commit_id.into(),
                     },
                 }
             }
 
-            _ => GitFetchedRef::Unparseable { line: line.into() },
+            _ => GitRefMutation::Unparseable { line: line.into() },
         }
     }
 
     pub fn sort_key(&self) -> &str {
         match self {
-            GitFetchedRef::FastForward { name, .. }
-            | GitFetchedRef::ForcedUpdate { name, .. }
-            | GitFetchedRef::New { name, .. }
-            | GitFetchedRef::Unknown { name, .. } => name,
-            GitFetchedRef::Unparseable { line, .. } => line,
+            GitRefMutation::FastForward { name, .. }
+            | GitRefMutation::ForcedUpdate { name, .. }
+            | GitRefMutation::New { name, .. }
+            | GitRefMutation::Removed { name, .. }
+            | GitRefMutation::Unknown { name, .. } => name,
+            GitRefMutation::Unparseable { line, .. } => line,
         }
     }
 
     pub fn print(&self, renderer: &mut impl Renderer, git: &GitBinary) -> Result<()> {
         match self {
-            GitFetchedRef::FastForward {
+            GitRefMutation::FastForward {
                 name,
                 old_commit_id,
                 new_commit_id,
@@ -317,7 +326,7 @@ impl GitFetchedRef {
                 })
             }
 
-            GitFetchedRef::ForcedUpdate {
+            GitRefMutation::ForcedUpdate {
                 name,
                 old_commit_id,
                 new_commit_id,
@@ -330,7 +339,7 @@ impl GitFetchedRef {
                 })
             }
 
-            GitFetchedRef::New {
+            GitRefMutation::New {
                 name,
                 new_commit_id,
             } => {
@@ -340,7 +349,17 @@ impl GitFetchedRef {
                 })
             }
 
-            GitFetchedRef::Unknown {
+            GitRefMutation::Removed {
+                name,
+                old_commit_id,
+            } => {
+                let old_commit_id = git.abbrev_commit_id(renderer, old_commit_id)?;
+                renderer.writer(|w| {
+                    writeln!(w, " - {old_commit_id}  {name}").context("printing new fetched ref")
+                })
+            }
+
+            GitRefMutation::Unknown {
                 flag,
                 name,
                 old_commit_id,
@@ -354,21 +373,32 @@ impl GitFetchedRef {
                 })
             }
 
-            GitFetchedRef::Unparseable { line } => renderer
+            GitRefMutation::Unparseable { line } => renderer
                 .writer(|w| writeln!(w, "{line}").context("printing unparseable fetched ref")),
         }
     }
 }
 
 #[cfg(test)]
-mod test_git_fetched_ref {
-    use super::GitFetchedRef;
+mod test_git_ref_mutation {
+    use super::GitRefMutation;
+
+    #[test]
+    fn from_porcelain_line_removed() {
+        assert_eq!(
+            GitRefMutation::from_porcelain_line("- old_commit new_commit some_ref"),
+            GitRefMutation::Removed {
+                old_commit_id: "old_commit".into(),
+                name: "some_ref".into(),
+            }
+        );
+    }
 
     #[test]
     fn from_porcelain_line_unknown() {
         assert_eq!(
-            GitFetchedRef::from_porcelain_line("f old_commit new_commit some_ref"),
-            GitFetchedRef::Unknown {
+            GitRefMutation::from_porcelain_line("f old_commit new_commit some_ref"),
+            GitRefMutation::Unknown {
                 flag: "f".into(),
                 old_commit_id: "old_commit".into(),
                 new_commit_id: "new_commit".into(),
@@ -380,16 +410,16 @@ mod test_git_fetched_ref {
     #[test]
     fn from_porcelain_line_unparseable_empty() {
         assert_eq!(
-            GitFetchedRef::from_porcelain_line(""),
-            GitFetchedRef::Unparseable { line: "".into() }
+            GitRefMutation::from_porcelain_line(""),
+            GitRefMutation::Unparseable { line: "".into() }
         );
     }
 
     #[test]
     fn from_porcelain_line_unparseable_abc() {
         assert_eq!(
-            GitFetchedRef::from_porcelain_line("abc"),
-            GitFetchedRef::Unparseable { line: "abc".into() }
+            GitRefMutation::from_porcelain_line("abc"),
+            GitRefMutation::Unparseable { line: "abc".into() }
         );
     }
 }
@@ -525,7 +555,7 @@ impl GitBinary<'_> {
         description: Description,
         remote: &Remote,
         refspecs: &[RefSpec],
-    ) -> Result<Vec<GitFetchedRef>>
+    ) -> Result<Vec<GitRefMutation>>
     where
         Description: AsRef<str>,
         RefSpec: AsRef<OsStr>,
@@ -543,7 +573,7 @@ impl GitBinary<'_> {
         .map(|stdout| {
             stdout
                 .lines()
-                .map(GitFetchedRef::from_porcelain_line)
+                .map(GitRefMutation::from_porcelain_line)
                 .collect()
         })
     }
@@ -755,7 +785,7 @@ impl GitBinary<'_> {
         renderer: &mut impl Renderer,
         user: &User,
         remote: &Remote,
-    ) -> Result<Vec<GitFetchedRef>> {
+    ) -> Result<Vec<GitRefMutation>> {
         self.fetch_refspecs(
             renderer,
             format!("Fetching branches from {}", remote.0),
@@ -1163,7 +1193,7 @@ mod test_impl {
 #[cfg(test)]
 mod test_backend {
     use crate::{
-        git_binary::GitFetchedRef,
+        git_binary::GitRefMutation,
         git_testing::{GitCommitId, GitRemote, INITIAL_BRANCH},
         verbosity::Verbosity,
     };
@@ -1258,7 +1288,7 @@ mod test_backend {
         let refs = host1.fetch();
         assert!(
             match refs.as_slice() {
-                [GitFetchedRef::New { ref name, .. }] => name.contains("host0"),
+                [GitRefMutation::New { ref name, .. }] => name.contains("host0"),
                 _ => false,
             },
             "{refs:?}"
@@ -1281,7 +1311,7 @@ mod test_backend {
 
         assert!(
             match refs.as_slice() {
-                [GitFetchedRef::FastForward { name, .. }] => name.contains("host0"),
+                [GitRefMutation::FastForward { name, .. }] => name.contains("host0"),
                 _ => false,
             },
             "{refs:?}"
@@ -1304,7 +1334,7 @@ mod test_backend {
 
         assert!(
             match refs.as_slice() {
-                [GitFetchedRef::ForcedUpdate { name, .. }] => name.contains("host0"),
+                [GitRefMutation::ForcedUpdate { name, .. }] => name.contains("host0"),
                 _ => false,
             },
             "{refs:?}"

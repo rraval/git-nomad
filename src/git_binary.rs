@@ -1,7 +1,7 @@
 //! See [`GitBinary`] for the primary entry point.
 
 use anyhow::{bail, Context, Result};
-use std::{borrow::Cow, collections::HashSet, ffi::OsStr, io::Write, path::Path, process::Command};
+use std::{borrow::Cow, collections::HashSet, ffi::OsStr, path::Path, process::Command};
 
 use crate::{
     git_ref::GitRef,
@@ -299,34 +299,6 @@ impl GitFetchedRef {
             | GitFetchedRef::New { name, .. }
             | GitFetchedRef::Unknown { name, .. } => name,
             GitFetchedRef::Unparseable { line, .. } => line,
-        }
-    }
-
-    fn post_fetch_git_ref(&self) -> Option<GitRef> {
-        match self {
-            GitFetchedRef::FastForward {
-                name,
-                new_commit_id,
-                ..
-            }
-            | GitFetchedRef::ForcedUpdate {
-                name,
-                new_commit_id,
-                ..
-            }
-            | GitFetchedRef::New {
-                name,
-                new_commit_id,
-            }
-            | GitFetchedRef::Unknown {
-                name,
-                new_commit_id,
-                ..
-            } => Some(GitRef {
-                name: name.clone(),
-                commit_id: new_commit_id.clone(),
-            }),
-            GitFetchedRef::Unparseable { .. } => None,
         }
     }
 

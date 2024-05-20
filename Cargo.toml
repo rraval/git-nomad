@@ -8,7 +8,7 @@ repository = "https://github.com/rraval/git-nomad"
 license = "MIT"
 
 [dependencies]
-anyhow = "^1.0.84"
+anyhow = "^1.0.86"
 console = "^0.15.8"
 git-version = "^0.3.9"
 indicatif = "^0.17.8"

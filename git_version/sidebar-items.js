@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"macro":["git_describe","git_submodule_versions","git_version"]};

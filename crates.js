@@ -1,0 +1,2 @@
+window.ALL_CRATES = ["anstyle","anyhow","bitflags","cfg_if","clap","clap_builder","clap_complete","clap_lex","console","fastrand","git_nomad","git_version","git_version_macro","indicatif","lazy_static","libc","linux_raw_sys","number_prefix","portable_atomic","proc_macro2","quote","rustix","strsim","syn","tempfile","terminal_size","unicode_ident","unicode_width","whoami"];
+//{"start":21,"fragment_lengths":[9,9,11,9,7,15,16,11,10,11,12,14,20,12,14,7,16,16,18,14,8,9,9,6,11,16,16,16,9]}

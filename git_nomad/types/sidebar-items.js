@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"macro":["impl_str_always_borrow","impl_str_from","impl_str_possibly_clone"],"struct":["Branch","Host","NomadRef","Remote","RemoteNomadRefSet","User"]};

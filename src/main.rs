@@ -254,6 +254,15 @@ fn build_cli(default_user: Option<User>, default_host: Option<Host>) -> Command 
                         .action(ArgAction::SetTrue),
                 ),
         )
+        .subcommand(Command::new("completions")
+                .about("Print tab-completion code for a given supported shell")
+                .arg(
+                    Arg::new("shell")
+                        .help("Shell dialect")
+                        .action(ArgAction::Set)
+                        .value_parser(value_parser!(clap_complete::Shell))
+                )
+        )
 }
 
 /// Use [`clap`] to implement the intended command line interface.
@@ -383,6 +392,14 @@ fn specified_workflow<'a>(
             });
         }
 
+        ("completions", matches) => {
+            if let Some(shell) = matches.get_one::<clap_complete::Shell>("shell").copied() {
+                return Ok(Workflow::Completions(shell));
+            } else {
+                return Err(anyhow::anyhow!("Unsupported shell"));
+            }
+        }
+
         _ => unreachable!("unknown subcommand"),
     };
 }
@@ -462,6 +479,20 @@ mod test_e2e {
         )
         .unwrap();
         assert!(!renderer.as_str().is_empty());
+    }
+
+    /// Invoking all the real logic in `nomad` should not panic.
+    #[test]
+    fn nomad_completions() {
+        let origin = GitRemote::init(None);
+        let mut renderer = MemoryRenderer::new();
+        nomad(
+            &mut renderer,
+            ["git-nomad", "completions", "bash"],
+            origin.working_directory(),
+        )
+        .unwrap();
+        assert!(renderer.as_str().contains("complete -F _git-nomad -o"));
     }
 
     /// Syncing should pick up nomad refs from other hosts.

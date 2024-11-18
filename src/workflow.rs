@@ -31,6 +31,7 @@ pub enum Workflow<'a> {
         remote: Remote<'a>,
         host_filter: Filter<Host<'a>>,
     },
+    Completions(clap_complete::Shell),
 }
 
 impl Workflow<'_> {
@@ -58,6 +59,7 @@ impl Workflow<'_> {
                 remote,
                 host_filter,
             } => purge(renderer, git, &user, &remote, host_filter),
+            Self::Completions(shell) => print_completions(renderer, shell),
         }
     }
 }
@@ -198,6 +200,19 @@ fn purge(
     let prune = snapshot.prune_by_hosts(|h| host_filter.contains(h));
     git.prune_nomad_refs(renderer, remote, prune.into_iter())?;
     Ok(())
+}
+
+/// Use [`clap_complete`] to emit shell syntax for tab-completions
+fn print_completions(
+    renderer: &mut impl Renderer,
+    gen: impl clap_complete::Generator,
+) -> Result<()> {
+    let mut cmd = crate::build_cli(None, None);
+    let bin_name = cmd.get_name().to_string();
+    renderer.writer(|writer| {
+        clap_complete::generate(gen, &mut cmd, bin_name, writer);
+        Ok(())
+    })
 }
 
 #[cfg(test)]

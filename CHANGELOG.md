@@ -16,6 +16,7 @@ However, the output of the application is designed for humans, not machines, and
 ### Fixed
 
 - Glitchy output where progress bars would sometimes overwrite normal text.
+- [#180][i180]: `git nomad ls` now properly displays branches with `/` in their name (thanks @shanesveller).
 
 ## [0.7.1] - 2023-10-22
 
@@ -137,3 +138,4 @@ An initial release with a reasonable complete implementation.
 [i4]: https://github.com/rraval/git-nomad/issues/4
 [i5]: https://github.com/rraval/git-nomad/issues/5
 [i125]: https://github.com/rraval/git-nomad/issues/125
+[i180]: https://github.com/rraval/git-nomad/issues/180

@@ -809,7 +809,7 @@ mod test_impl {
         let git = GitBinary::new(&mut NoRenderer, None, name, tmpdir.path())?;
         assert_eq!(
             Some(git.git_dir.as_str()),
-            tmpdir.path().join(".git").to_str()
+            tmpdir.path().join(".git").canonicalize()?.to_str()
         );
 
         Ok(())
@@ -825,7 +825,7 @@ mod test_impl {
         let git = GitBinary::new(&mut NoRenderer, None, name, subdir.as_path())?;
         assert_eq!(
             Some(git.git_dir.as_str()),
-            tmpdir.path().join(".git").to_str(),
+            tmpdir.path().join(".git").canonicalize()?.to_str(),
         );
 
         Ok(())

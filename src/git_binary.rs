@@ -111,7 +111,7 @@ mod namespace {
         ) -> Result<NomadRef<'a, GitRef>, GitRef> {
             let parts = git_ref.name.split('/').collect::<Vec<_>>();
             match parts.as_slice() {
-                ["refs", prefix, host, branch_name] => {
+                ["refs", prefix, host, branch_segments @ ..] => {
                     if prefix != &PREFIX {
                         return Err(git_ref);
                     }
@@ -119,7 +119,7 @@ mod namespace {
                     Ok(NomadRef {
                         user: user.always_borrow(),
                         host: Host::from(host.to_string()),
-                        branch: Branch::from(branch_name.to_string()),
+                        branch: Branch::from(branch_segments.join("/")),
                         ref_: git_ref,
                     })
                 }
@@ -183,6 +183,35 @@ mod namespace {
             assert_eq!(&nomad_ref.user.0, USER);
             assert_eq!(&nomad_ref.host.0, HOST);
             assert_eq!(&nomad_ref.branch.0, BRANCH);
+        }
+
+        #[test]
+        fn test_from_local_ref_with_slashes() {
+            for segment_count in 1..3 {
+                let segments: Vec<_> = std::iter::repeat(BRANCH).take(segment_count).collect();
+                let branch = segments.join("/");
+
+                let local_ref_name = NomadRef {
+                    user: User::from(USER),
+                    host: Host::from(HOST),
+                    branch: Branch::from(branch.clone()),
+                    ref_: (),
+                }
+                .to_git_local_ref();
+
+                let local_git_ref = GitRef {
+                    commit_id: "some_commit_id".to_string(),
+                    name: local_ref_name,
+                };
+
+                let user = &User::from(USER);
+                let nomad_ref =
+                    NomadRef::<GitRef>::from_git_local_ref(user, local_git_ref).unwrap();
+
+                assert_eq!(&nomad_ref.user.0, USER);
+                assert_eq!(&nomad_ref.host.0, HOST);
+                assert_eq!(nomad_ref.branch.0, std::borrow::Cow::from(branch));
+            }
         }
 
         /// [`NomadRef::from_git_remote_ref`] should be able to parse ref names produced by

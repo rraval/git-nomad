@@ -123,12 +123,10 @@ mod test_maybe_apply_default {
     }
 }
 
-/// Use [`clap`] to implement the intended command line interface.
-fn cli(
-    default_user: Option<User>,
-    default_host: Option<Host>,
-    args: impl IntoIterator<Item = impl Into<OsString> + Clone>,
-) -> clap::error::Result<ArgMatches> {
+/// Use [`clap`] to define the intended command line interface.
+///
+/// Available separately from execution to allow completions
+fn build_cli(default_user: Option<User>, default_host: Option<Host>) -> Command {
     Command::new(crate_name!())
         .arg_required_else_help(true)
         .version(version())
@@ -256,7 +254,15 @@ fn cli(
                         .action(ArgAction::SetTrue),
                 ),
         )
-        .try_get_matches_from(args)
+}
+
+/// Use [`clap`] to implement the intended command line interface.
+fn cli(
+    default_user: Option<User>,
+    default_host: Option<Host>,
+    args: impl IntoIterator<Item = impl Into<OsString> + Clone>,
+) -> clap::error::Result<ArgMatches> {
+    build_cli(default_user, default_host).try_get_matches_from(args)
 }
 
 /// The [`Verbosity`] intended by the user via the CLI.

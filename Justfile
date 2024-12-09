@@ -1,6 +1,9 @@
 _list:
     @just --list
 
+coverage:
+    cargo llvm-cov --html --open
+
 # Bump the version and git commit (does not publish a GitHub release yet)
 release:
     scripts/release.sh

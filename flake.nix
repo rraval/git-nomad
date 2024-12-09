@@ -43,7 +43,6 @@
         clippy
         gdb
         just
-        rust-analyzer
         rustc
         rustfmt
         shellcheck

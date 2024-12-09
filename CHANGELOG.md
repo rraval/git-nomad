@@ -13,6 +13,10 @@ However, the output of the application is designed for humans, not machines, and
 
 ## [Unreleased]
 
+### Added
+
+- [#170][i170]: A new `completions` subcommand that generates shell completions (thanks @shanesveller).
+
 ### Fixed
 
 - Glitchy output where progress bars would sometimes overwrite normal text.
@@ -138,4 +142,5 @@ An initial release with a reasonable complete implementation.
 [i4]: https://github.com/rraval/git-nomad/issues/4
 [i5]: https://github.com/rraval/git-nomad/issues/5
 [i125]: https://github.com/rraval/git-nomad/issues/125
+[i170]: https://github.com/rraval/git-nomad/issues/170
 [i180]: https://github.com/rraval/git-nomad/issues/180

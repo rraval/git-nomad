@@ -38,6 +38,7 @@
       buildInputs = with pkgs; [
         asciinema
         cargo
+        cargo-llvm-cov
         cargo-outdated
         clippy
         gdb
@@ -47,6 +48,11 @@
         rustfmt
         shellcheck
       ];
+
+      shellHook = ''
+        export LLVM_COV='${pkgs.cargo-llvm-cov.LLVM_COV}'
+        export LLVM_PROFDATA='${pkgs.cargo-llvm-cov.LLVM_PROFDATA}'
+      '';
     };
 
     checks.git-nomad = gitNomadPkg;

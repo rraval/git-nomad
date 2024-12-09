@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["LineArity"],"fn":["git_command"],"mod":["namespace"],"struct":["GitBinary"]};

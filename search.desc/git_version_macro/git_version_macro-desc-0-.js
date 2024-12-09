@@ -1,0 +1,1 @@
+searchState.loadedDescShard("git_version_macro", 0, "Get the git version of all submodules below the cargo …\nGet the git version for the source code.")

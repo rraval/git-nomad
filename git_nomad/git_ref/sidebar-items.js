@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["GitRefParseError"],"fn":["is_not_empty"],"struct":["GitRef"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["PREFIX"],"fn":["config_key","fetch_refspec","list_refspec","push_refspec"]};

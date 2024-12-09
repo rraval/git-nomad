@@ -214,6 +214,26 @@ mod namespace {
             }
         }
 
+        #[test]
+        fn test_from_local_ref_err() {
+            let user = &User::from(USER);
+            let nomad_ref = NomadRef::<GitRef>::from_git_local_ref(
+                user,
+                GitRef {
+                    commit_id: "some_commit_id".to_string(),
+                    name: "refs/not_a_nomad_ref".to_string(),
+                },
+            );
+
+            assert_eq!(
+                nomad_ref,
+                Err(GitRef {
+                    commit_id: "some_commit_id".to_string(),
+                    name: "refs/not_a_nomad_ref".to_string(),
+                })
+            );
+        }
+
         /// [`NomadRef::from_git_remote_ref`] should be able to parse ref names produced by
         /// [`NomadRef::to_git_local_ref`] (they are duals).
         #[test]

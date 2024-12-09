@@ -1,6 +1,17 @@
 _list:
     @just --list
 
+test:
+    cargo test
+
+fmt:
+    cargo fmt
+
+clippy:
+    cargo clippy --all
+
+lint: fmt clippy
+
 coverage:
     cargo llvm-cov --html --open
 

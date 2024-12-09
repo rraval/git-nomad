@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::HashSet, ffi::OsString, path::Path};
+use std::{borrow::Cow, collections::HashSet, env, ffi::OsString, path::Path};
 
 use clap::{
     builder::PossibleValue, crate_authors, crate_description, crate_name, crate_version,
@@ -55,6 +55,7 @@ fn main() -> anyhow::Result<()> {
         &mut renderer::TerminalRenderer::stdout(),
         std::env::args_os(),
         std::env::current_dir()?.as_path(),
+        env::var_os("SHELL"),
     )
 }
 
@@ -62,6 +63,7 @@ fn nomad(
     renderer: &mut impl Renderer,
     args: impl IntoIterator<Item = impl Into<OsString> + Clone>,
     cwd: &Path,
+    current_shell_path: Option<OsString>,
 ) -> anyhow::Result<()> {
     let default_user = whoami::fallible::username().ok().map(User::from);
     let default_host = whoami::fallible::hostname().ok().map(Host::from);
@@ -83,7 +85,7 @@ fn nomad(
         Cow::from(specified_git(&mut matches)),
         cwd,
     )?;
-    let workflow = specified_workflow(renderer, &mut matches, &git)?;
+    let workflow = specified_workflow(renderer, &mut matches, &git, current_shell_path)?;
 
     if verbosity.map_or(false, |v| v.display_workflow) {
         renderer.writer(|w| {
@@ -305,6 +307,7 @@ fn specified_workflow<'a>(
     renderer: &mut impl Renderer,
     matches: &'a mut ArgMatches,
     git: &GitBinary,
+    current_shell_path: Option<OsString>,
 ) -> anyhow::Result<Workflow<'a>> {
     let user = resolve(matches, "user", || {
         git.get_config(renderer, CONFIG_USER)
@@ -392,13 +395,11 @@ fn specified_workflow<'a>(
             });
         }
 
-        ("completions", matches) => {
-            if let Some(shell) = matches.get_one::<clap_complete::Shell>("shell").copied() {
-                return Ok(Workflow::Completions(shell));
-            } else {
-                return Err(anyhow::anyhow!("Unsupported shell"));
-            }
-        }
+        ("completions", mut matches) => matches
+            .remove_one::<clap_complete::Shell>("shell")
+            .or_else(|| current_shell_path.and_then(clap_complete::Shell::from_shell_path))
+            .map(Workflow::Completions)
+            .ok_or_else(|| anyhow::anyhow!("Unsupported shell")),
 
         _ => unreachable!("unknown subcommand"),
     };
@@ -462,6 +463,7 @@ mod test_e2e {
             &mut renderer,
             ["git-nomad", "ls"],
             origin.working_directory(),
+            None,
         )
         .unwrap();
         assert!(renderer.as_str().is_empty());
@@ -476,20 +478,53 @@ mod test_e2e {
             &mut renderer,
             ["git-nomad", "ls", "-vv"],
             origin.working_directory(),
+            None,
         )
         .unwrap();
         assert!(!renderer.as_str().is_empty());
     }
 
-    /// Invoking all the real logic in `nomad` should not panic.
+    /// Invoking completions for the current shell should not panic.
     #[test]
-    fn nomad_completions() {
+    fn nomad_completions_implicit_bash() {
+        let origin = GitRemote::init(None);
+        let mut renderer = MemoryRenderer::new();
+        nomad(
+            &mut renderer,
+            ["git-nomad", "completions"],
+            origin.working_directory(),
+            Some("/usr/bin/bash".into()),
+        )
+        .unwrap();
+
+        assert!(renderer.as_str().contains("complete -F _git-nomad -o"));
+    }
+
+    /// Invoking completions when there's no shell should error but not panic.
+    #[test]
+    fn nomad_completions_implicit_none() {
+        let origin = GitRemote::init(None);
+        let mut renderer = MemoryRenderer::new();
+        let result = nomad(
+            &mut renderer,
+            ["git-nomad", "completions"],
+            origin.working_directory(),
+            None,
+        );
+
+        assert!(result.is_err());
+    }
+
+    /// Invoking completions for a real shell should not panic.
+    #[test]
+    fn nomad_completions_bash() {
         let origin = GitRemote::init(None);
         let mut renderer = MemoryRenderer::new();
         nomad(
             &mut renderer,
             ["git-nomad", "completions", "bash"],
             origin.working_directory(),
+            None,
         )
         .unwrap();
         assert!(renderer.as_str().contains("complete -F _git-nomad -o"));
@@ -707,7 +742,7 @@ mod test_cli {
         }
 
         fn workflow(&mut self) -> Workflow<'_> {
-            specified_workflow(&mut NoRenderer, &mut self.matches, &self.remote.git).unwrap()
+            specified_workflow(&mut NoRenderer, &mut self.matches, &self.remote.git, None).unwrap()
         }
     }
 

@@ -1,8 +1,0 @@
-name: Doc
-on:
-  push:
-    branches:
-      - master
-jobs:
-  all:
-    uses: rraval/workflows/.github/workflows/rust_doc.yml@v1

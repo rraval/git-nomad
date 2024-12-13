@@ -11,7 +11,7 @@ clippy:
     cargo clippy --all
 
 shellcheck:
-    shellcheck -o all scripts/*.sh site/*.sh
+    shellcheck -o all scripts/*.sh site/*.sh demo/*.sh
 
 lint: fmt clippy shellcheck
 
@@ -27,16 +27,7 @@ release:
 
 # Demonstrate all features as an asciinema screencast
 record-demo:
-    @mkdir -p target/
-    cargo clean
-    cargo build --release
-    PATH="$(pwd)/target/release:$PATH"                          \
-        asciinema rec                                           \
-        --cols 120                                              \
-        --rows 36                                               \
-        --command scripts/demo.sh                               \
-        --title "$($(pwd)/target/release/git-nomad --version)"  \
-        --overwrite target/demo.cast
+    demo/record.sh
 
 # Upload the recorded demo to asciinema.org
 upload-demo:

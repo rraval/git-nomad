@@ -3,11 +3,14 @@ on:
   workflow_dispatch:
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # needed for up to date asciiinema
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: ./site/build.sh
+      - name: Build
+        run: |
+          sudo apt-get install -y asciinema pv
+          ./site/build.sh
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site/out

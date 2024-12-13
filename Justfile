@@ -10,10 +10,16 @@ fmt:
 clippy:
     cargo clippy --all
 
-lint: fmt clippy
+shellcheck:
+    shellcheck -o all scripts/*.sh site/*.sh
+
+lint: fmt clippy shellcheck
 
 coverage:
     cargo llvm-cov --html --open
+
+site:
+    site/build.sh
 
 # Bump the version and git commit (does not publish a GitHub release yet)
 release:

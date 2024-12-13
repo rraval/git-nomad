@@ -1,7 +1,7 @@
 # git-nomad
 
 [![Coverage](https://img.shields.io/coveralls/github/rraval/git-nomad)](https://coveralls.io/github/rraval/git-nomad)
-[![Documentation](https://img.shields.io/github/actions/workflow/status/rraval/git-nomad/doc.yml?label=docs)](https://rraval.github.io/git-nomad/git_nomad/)
+[![Website](https://img.shields.io/github/actions/workflow/status/rraval/git-nomad/github_pages.yml?label=website)](https://rraval.github.io/git-nomad/)
 [![Issues](https://img.shields.io/github/issues/rraval/git-nomad)](https://github.com/rraval/git-nomad/issues)
 [![Latest Release](https://img.shields.io/github/v/release/rraval/git-nomad)](https://github.com/rraval/git-nomad/releases/latest)
 [![Commits since latest release](https://img.shields.io/github/commits-since/rraval/git-nomad/latest)](https://github.com/rraval/git-nomad/commits/master)

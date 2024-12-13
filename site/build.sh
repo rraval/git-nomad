@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
-# This script should be invoked from the root of the repository.
 set -euo pipefail
+
+if [[ ! -f Cargo.toml ]]; then
+    echo "This script must be run from the root of the repository"
+    exit 1
+fi
 
 rm -rf site/out
 cp -r site/src site/out

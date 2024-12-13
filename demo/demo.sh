@@ -13,11 +13,10 @@ assert_command_exists() {
 
 assert_command_exists git-nomad
 assert_command_exists pv
-assert_command_exists setterm
 
-fgDesktop=$(setterm --foreground cyan)
-fgLaptop=$(setterm --foreground magenta)
-fgReset=$(setterm --foreground default)
+fgDesktop=$(printf "\e[0;36m")
+fgLaptop=$(printf "\e[0;35m")
+fgReset=$(printf "\e[0m")
 
 export GIT_NOMAD_USER=user
 export GIT_NOMAD_HOST=

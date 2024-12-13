@@ -2,26 +2,6 @@
 # shellcheck disable=SC2016,SC2215
 set -euo pipefail
 
-FAST=0
-while [[ "$#" -gt 0 ]]; do
-    case "$1" in
-        --fast)
-            FAST=1
-            shift
-            ;;
-
-        --trace)
-            set -x
-            shift
-            ;;
-
-        *)
-            echo "Unknown option: $1" >&2
-            exit 1
-            ;;
-    esac
-done
-
 die() {
     echo "$@" >&2
     exit 1
@@ -60,7 +40,7 @@ prompt() {
 
 # https://github.com/sharkdp/fd/blob/d62bbbb/doc/screencast.sh#L28C1-L30C2
 say() {
-    if ((FAST)); then
+    if [[ -n "${DEMO_FAST-}" ]]; then
         printf '%b\n' "$1"
     else
         printf '%b\n' "$1" | pv -qL $((20+(-2 + RANDOM%5)))
@@ -75,7 +55,7 @@ _() {
     prompt
     say "$1"
 
-    if ! ((FAST)); then
+    if [[ -z "${DEMO_FAST-}" ]]; then
         sleep 0.5
     fi
 
@@ -85,7 +65,7 @@ _() {
 ---() {
     echo
 
-    if ! ((FAST)); then
+    if [[ -z "${DEMO_FAST-}" ]]; then
         sleep 1
     fi
 }

@@ -19,7 +19,7 @@ coverage:
     cargo llvm-cov --html --open
 
 site:
-    site/build.sh
+    DEMO_FAST=1 site/build.sh
 
 record-demo:
     demo/record.sh

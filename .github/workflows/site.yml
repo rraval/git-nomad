@@ -4,6 +4,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-24.04  # needed for up to date asciiinema
+    environment:
+      name: site
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -11,6 +13,8 @@ jobs:
         run: |
           sudo apt-get install -y asciinema pv
           ./site/build.sh
+        env:
+          ASCIINEMA_INSTALL_ID: ${{ secrets.ASCIINEMA_INSTALL_ID }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site/out

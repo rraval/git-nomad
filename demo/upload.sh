@@ -13,9 +13,6 @@ if [[ ! -f demo/out/demo.cast ]]; then
 fi
 
 if [[ -n "${ASCIINEMA_INSTALL_ID:-}" ]]; then
-    if [[ -n "${CI-}" ]]; then
-        echo ":add-mask::${ASCIINEMA_INSTALL_ID}"
-    fi
     mkdir -p "${HOME}/.config/asciinema/"
     echo "${ASCIINEMA_INSTALL_ID}" > "${HOME}/.config/asciinema/install-id"
 fi

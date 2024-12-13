@@ -1,4 +1,4 @@
-name: GitHub Pages
+name: Site
 on:
   workflow_dispatch:
 jobs:

@@ -6,10 +6,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          path: src
       - uses: dtolnay/rust-toolchain@stable
-      - run: site/build.sh
+      - run: ./site/build.sh
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site/out

@@ -7,17 +7,17 @@ if [[ ! -f Cargo.toml ]]; then
 fi
 
 if [[ -n "${CI-}" ]]; then
-    REF=${GITHUB_REF_NAME}
+    ref=${GITHUB_REF_NAME?}
 else
-    REF=$(git describe --tags --always --dirty)
+    ref=$(git describe --tags --always --dirty)
 fi
 
 mkdir -p demo/out
-GIT_NOMAD_BUILD_VERSION=${REF} cargo build --release
-PATH="$PWD/target/release:$PATH"    \
-    asciinema rec                   \
-    --cols 120                      \
-    --rows 36                       \
-    --command demo/demo.sh          \
-    --title "git-nomad ${REF}"      \
+GIT_NOMAD_BUILD_VERSION=${ref} cargo build --release
+PATH="${PWD}/target/release:${PATH}"    \
+    asciinema rec                       \
+    --cols 120                          \
+    --rows 36                           \
+    --command demo/demo.sh              \
+    --title "git-nomad ${ref}"          \
     --overwrite demo/out/demo.cast

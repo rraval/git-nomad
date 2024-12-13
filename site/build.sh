@@ -12,14 +12,14 @@ cargo doc --all-features
 cp -r target/doc site/out/doc
 
 if [[ -n "${CI-}" ]]; then
-    REF=${GITHUB_REF_NAME}
-    SHA=${GITHUB_SHA}
+    ref=${GITHUB_REF_NAME?}
+    sha=${GITHUB_SHA?}
 else
-    REF=$(git describe --tags --always --dirty)
-    SHA=$(git rev-parse HEAD)
+    ref=$(git describe --tags --always --dirty)
+    sha=$(git rev-parse HEAD)
 fi
 
 sed -i \
-    -e 's/:REF/'"${REF}"'/g' \
-    -e 's/:SHA/'"${SHA}"'/g' \
+    -e 's/:REF/'"${ref}"'/g' \
+    -e 's/:SHA/'"${sha}"'/g' \
     site/out/index.html

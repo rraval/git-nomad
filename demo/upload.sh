@@ -23,3 +23,7 @@ fi
 output=$(asciinema upload demo/out/demo.cast 2>&1)
 url=$(sed -n -e '/asciinema.org\/a\//{ s/^ \+//; p }' <<< "${output}")
 echo "${url}"
+
+if [[ -n "${CI-}" ]]; then
+    echo "Demo URL: ${url}" >> "${GITHUB_STEP_SUMMARY?}"
+fi

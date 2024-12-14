@@ -2,7 +2,11 @@ name: Auto-merge PR
 on: pull_request_target
 jobs:
   enable_automerge:
-    if: github.actor == 'dependabot[bot]' || github.actor == 'rraval'
+    if: |
+      github.event.pull_request.draft == false && (
+        github.actor == 'dependabot[bot]' ||
+        github.actor == 'rraval'
+      )
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write

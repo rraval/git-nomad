@@ -1,0 +1,35 @@
+name: Release
+on:
+  workflow_dispatch:
+  push:
+    tags:
+    - "v*.*.*"
+jobs:
+  build:
+    uses: ./github/workflows/binaries.yml
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: src
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifact
+          merge-multiple: true
+
+      - name: Changelog entry for tag
+        run: |
+          sed -e '/^## \['"${GITHUB_REF_NAME}"'\]/,/^## /d' src/CHANGELOG.md | \
+            sed -e '1d;$d' | tee RELEASE.md
+
+      - uses: softprops/action-gh-release@v2
+        if: github.event_name == 'push'
+        with:
+          files: "artifact/*"
+          body_path: RELEASE.md

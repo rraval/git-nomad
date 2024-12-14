@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-toplevel=$(git rev-parse --show-toplevel)
-cd "${toplevel}"
+if [[ ! -f Cargo.toml ]]; then
+    echo "This script must be run from the root of the repository"
+    exit 1
+fi
 
 # use `|| true` to prevent premature exit since grep returns non-zero if no
 # matches are found.

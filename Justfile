@@ -11,7 +11,7 @@ clippy:
     cargo clippy --all
 
 shellcheck:
-    shellcheck -o all scripts/*.sh site/*.sh demo/*.sh
+    shellcheck -o all release.sh site/*.sh demo/*.sh
 
 lint: fmt clippy shellcheck
 

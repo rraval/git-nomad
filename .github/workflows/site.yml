@@ -1,6 +1,8 @@
 name: Site
 on:
   workflow_dispatch:
+  release:
+    types: [published]
 jobs:
   build:
     runs-on: ubuntu-24.04  # needed for up to date asciiinema

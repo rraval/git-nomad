@@ -22,19 +22,19 @@ However, the output of the application is designed for humans, not machines, and
 - Glitchy output where progress bars would sometimes overwrite normal text.
 - [#180][i180]: `git nomad ls` now properly displays branches with `/` in their name (thanks @shanesveller).
 
-## [0.7.1] - 2023-10-22
+## [v0.7.1] - 2023-10-22
 
 ### Security
 
 - Upgraded `rustix` dependency to mitigate [GHSA-c827-hfw6-qwvm](https://github.com/advisories/GHSA-c827-hfw6-qwvm). Cursory review indicates that `git-nomad` only uses this dependency via `tempfile`, which is only used by testing. Still, users are advised to upgrade out of an abundance of caution.
 
-## [0.7.0] - 2023-09-22
+## [v0.7.0] - 2023-09-22
 
 ### Changed
 
 - `git` invocations will now read system and global configuration, so things like credential helpers will will be respected in the underlying `git push` that `git nomad sync` makes. Fixes [#125][i125].
 
-## [0.6.0] - 2022-10-10
+## [v0.6.0] - 2022-10-10
 
 ### Added
 
@@ -58,7 +58,7 @@ However, the output of the application is designed for humans, not machines, and
 
 - Support for multiple hosts in the `purge` subcommand. Do it one at a time with the `--host` global option or via `--all`.
 
-## [0.5.0] - 2022-01-15
+## [v0.5.0] - 2022-01-15
 
 `git-nomad` is no longer considered a prototype and is approaching its (hopefully final) 1.0 release.
 
@@ -73,7 +73,7 @@ However, the output of the application is designed for humans, not machines, and
 
 - Adjust help message to only suggest `-vv` for max verbosity.
 
-## [0.4.0] - 2021-12-26
+## [v0.4.0] - 2021-12-26
 
 - An internal rewrite of the implementation to prevent entire categories of bugs like [#1][i1], [#2][i2], and [#3][i3] from sneaking in again.
 - End-to-end tests that validate the entire workflow.
@@ -88,28 +88,28 @@ However, the output of the application is designed for humans, not machines, and
 
 - [#2][i2]: A severe bug related to purging refs from other hosts, i.e. after you wish to stop using git-nomad.
 
-## [0.3.2] - 2021-12-18
+## [v0.3.2] - 2021-12-18
 
 - Patch release to test the automated release workflow.
 
-## [0.3.1] - 2021-12-18
+## [v0.3.1] - 2021-12-18
 
 - Updates some minor dependencies.
 - Patch release to test the automated release workflow.
 
-## [0.3.0] - 2021-12-18
+## [v0.3.0] - 2021-12-18
 
 ### Changed
 
 - Skip running pre-push hooks for git-nomad operations. This allows pushing work-in-progress branches with lint or compile errors (if the repo has pre-push hooks that check that).
 
-## [0.2.1] - 2021-11-06
+## [v0.2.1] - 2021-11-06
 
 ### Fixed
 
 - Allow non-git based builds to work again, with several fallbacks to compute the `--version`.
 
-## [0.2.0] - 2021-11-06
+## [v0.2.0] - 2021-11-06
 
 ### Changed
 
@@ -119,13 +119,13 @@ However, the output of the application is designed for humans, not machines, and
 
 - [#1][i1]: Clean up deleted branches from other hosts.
 
-## [0.1.1] - 2021-05-30
+## [v0.1.1] - 2021-05-30
 
 ### Added
 
 - Support for a `--version` flag that reports the crate version.
 
-## [0.1.0] - 2021-05-30
+## [v0.1.0] - 2021-05-30
 
 An initial release with a reasonable complete implementation.
 

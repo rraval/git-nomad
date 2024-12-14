@@ -116,7 +116,7 @@ impl GitRemote {
             git_command(GIT)
                 .current_dir(&self.root_dir)
                 .arg("clone")
-                .args(&["--origin", ORIGIN])
+                .args(["--origin", ORIGIN])
                 .arg(&self.remote_dir)
                 .arg(&clone_dir),
         )

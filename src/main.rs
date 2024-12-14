@@ -834,7 +834,7 @@ mod test_cli {
         ] {
             println!("{:?}", args);
             let cli_test = CliTest::default();
-            let mut matches = cli_test.matches(*args).unwrap();
+            let mut matches = cli_test.matches(args).unwrap();
             assert_eq!(specified_verbosity(&mut matches), Some(Verbosity::max()));
         }
     }

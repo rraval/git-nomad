@@ -40,11 +40,6 @@ a\
 # Sanity check and regenerates `Cargo.lock` with updated version from `Cargo.toml`
 cargo check
 
-# Override the version so it appears in the title and output of the demo.
-GIT_NOMAD_BUILD_VERSION="v${new_version_str}" just record-demo
-asciinema_url=$(just upload-demo)
-sed -i -e '/\[!\[asciicast\]/c '"[![asciicast](${asciinema_url}.svg)](${asciinema_url}?autoplay=1)" README.md
-
 # Get it into git
 git add Cargo.toml Cargo.lock CHANGELOG.md README.md
 git commit -m "Release ${new_version_str}"

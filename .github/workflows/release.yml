@@ -6,7 +6,7 @@ on:
     - "v*.*.*"
 jobs:
   build:
-    uses: ./github/workflows/binaries.yml
+    uses: ./.github/workflows/binaries.yml
 
   release:
     needs: build
@@ -25,7 +25,7 @@ jobs:
 
       - name: Changelog entry for tag
         run: |
-          sed -e '/^## \['"${GITHUB_REF_NAME}"'\]/,/^## /d' src/CHANGELOG.md | \
+          sed -n -e '/^## \['"${GITHUB_REF_NAME}"'\]/,/^## /p' src/CHANGELOG.md | \
             sed -e '1d;$d' | tee RELEASE.md
 
       - uses: softprops/action-gh-release@v2

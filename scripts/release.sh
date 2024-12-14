@@ -12,29 +12,24 @@ if [[ "${num_tags}" -gt 0 ]]; then
     exit 0
 fi
 
-# Assume `version` is always on line 3
-base_version_str=$(sed -n -e '3{s/^version = "//; s/"$//; p}' Cargo.toml)
+# Extract the next intended version from the "Unreleased" section of the
+# changelog.
+next_version=$(sed -n -e '/^##.*Unreleased/ s/^.*v\([0-9]\+\.[0-9]\+\.[0-9]\+\).*$/\1/p' CHANGELOG.md)
 
-IFS='.' read -r -a version_array <<< "${base_version_str}"
-if [[ "${#version_array[@]}" -ne 3 ]]; then
-    echo "${base_version_str} does not match the expected format"
+if [[ -z "${next_version}" ]]; then
+    echo "Next version not found in CHANGELOG.md"
     exit 1
 fi
 
-# Always increment patch version
-version_array[2]=$((version_array[2] + 1))
-
-new_version_str="${version_array[0]}.${version_array[1]}.${version_array[2]}"
-
 # In-place edit of various files
 today=$(date +%Y-%m-%d)
-sed -i -e '3c version = "'"${new_version_str}"'"' Cargo.toml
-sed -i -e '/^## \[Unreleased\]$/{
-a\
-
-a\
-## ['"${new_version_str}"'] - '"${today}"'
-
+# Assume version is always on line 3
+sed -i -e '3c version = "'"${next_version}"'"' Cargo.toml
+sed -i -e '/^##.*Unreleased/{
+c\
+## [vX.X.X] - Unreleased\
+\
+## ['"${next_version}"'] - '"${today}"'
 }' CHANGELOG.md
 
 # Sanity check and regenerates `Cargo.lock` with updated version from `Cargo.toml`
@@ -42,5 +37,5 @@ cargo check
 
 # Get it into git
 git add Cargo.toml Cargo.lock CHANGELOG.md README.md
-git commit -m "Release ${new_version_str}"
-git tag v"${new_version_str}"
+git commit -m "Release v${next_version}"
+git tag v"${next_version}"

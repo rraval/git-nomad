@@ -11,7 +11,9 @@ As an application (not a library!), backwards compatibility is defined as:
 
 However, the output of the application is designed for humans, not machines, and is thus exempt from these backwards compatibility promises. [File an issue](https://github.com/rraval/git-nomad/issues/new) if you have a use case for machine readable output.
 
-## [v0.8.0] - Unreleased
+## [vX.X.X] - Unreleased
+
+## [0.8.0] - 2024-12-14
 
 ### Added
 

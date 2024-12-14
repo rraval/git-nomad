@@ -1,0 +1,19 @@
+name: Publish to crates.io
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    environment:
+      name: crates-io
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Publish (Dry Run)
+        if: github.event_name == 'workflow_dispatch'
+        run: cargo publish --dry-run
+      - name: Publish
+        if: github.event_name == 'release'
+        run: cargo publish --token ${{ secrets.CRATES_IO_TOKEN }}

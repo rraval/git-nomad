@@ -5,10 +5,10 @@ test:
     cargo test
 
 fmt:
-    cargo fmt
+    cargo fmt --all
 
 clippy:
-    cargo clippy --all
+    cargo clippy --all-targets --all-features -- -D warnings
 
 shellcheck:
     shellcheck -o all release.sh site/*.sh demo/*.sh

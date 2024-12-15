@@ -5,11 +5,17 @@ on:
     tags:
     - "v*.*.*"
 jobs:
-  build:
+  site:
+    uses: ./.github/workflows/site.yml
+
+  crates-io:
+    uses: ./.github/workflows/crates-io.yml
+
+  binaries:
     uses: ./.github/workflows/binaries.yml
 
   release:
-    needs: build
+    needs: binaries
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -20,6 +26,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
+          pattern: "git-nomad_*"
           path: artifact
           merge-multiple: true
 

@@ -137,9 +137,8 @@ Using refs like this has advantages:
 Releases on GitHub have prebuilt binary assets: https://github.com/rraval/git-nomad/releases
 
 1. Download the latest version for your OS.
-2. `gunzip` the downloaded file.
-3. Place the binary somewhere in your `$PATH`.
-4. Check that things work with `git nomad --version`.
+2. Place the binary somewhere in your `$PATH` named `git-nomad`.
+3. Check that things work with `git nomad --version`.
 
 ### On NixOS / via Nix
 

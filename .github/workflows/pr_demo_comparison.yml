@@ -1,0 +1,53 @@
+name: PR Demo Comparison
+on:
+  pull_request:
+jobs:
+  transcript:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+        - name: base
+          ref: ${{ github.base_ref }}
+        - name: head
+          ref: ${{ github.head_ref }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.ref }}
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Demo Transcript
+        run: |
+          cargo build --release
+          export PATH="$PWD/target/release:$PATH"
+
+          # fixed timestamps for reproducible commit IDs
+          export GIT_AUTHOR_DATE='@0 +0000'
+          export GIT_COMMITTER_DATE='@0 +0000'
+
+          mkdir -p demo/out
+          # cat -v makes non-printable characters visible
+          demo/demo.sh 2>&1 | cat -v | tee 'demo/out/transcript-${{ matrix.name }}'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: transcript-${{ matrix.name }}
+          path: demo/out/transcript-${{ matrix.name }}
+          if-no-files-found: error
+
+  compare:
+    runs-on: ubuntu-latest
+    needs: transcript
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: "transcript-*"
+          path: demo/out
+          merge-multiple: true
+
+      - name: Comment
+        run: |
+          demo/compare.sh demo/out/transcript-base demo/out/transcript-head | \
+            gh pr comment '${{ github.event.pull_request.number }}' --body-file -
+        env:
+          GH_TOKEN: ${{ github.token }}

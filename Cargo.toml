@@ -9,7 +9,7 @@ license = "MIT"
 
 [dependencies]
 anyhow = "^1.0.95"
-clap_complete = "4.5.41"
+clap_complete = "4.5.45"
 console = "^0.15.10"
 git-version = "^0.3.9"
 indicatif = "^0.17.9"

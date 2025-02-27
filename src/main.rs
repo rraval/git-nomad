@@ -71,7 +71,7 @@ fn nomad(
     let mut matches = cli(default_user, default_host, args).unwrap_or_else(|e| e.exit());
     let verbosity = specified_verbosity(&mut matches);
 
-    if verbosity.map_or(false, |v| v.display_version) {
+    if verbosity.is_some_and(|v| v.display_version) {
         renderer.writer(|w| {
             writeln!(w)?;
             writeln!(w, "Version: {}", version())?;
@@ -87,7 +87,7 @@ fn nomad(
     )?;
     let workflow = specified_workflow(renderer, &mut matches, &git, current_shell_path)?;
 
-    if verbosity.map_or(false, |v| v.display_workflow) {
+    if verbosity.is_some_and(|v| v.display_workflow) {
         renderer.writer(|w| {
             writeln!(w)?;
             writeln!(w, "Workflow: {:?}", workflow)?;

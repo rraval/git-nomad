@@ -10,7 +10,7 @@ license = "MIT"
 [dependencies]
 anyhow = "^1.0.97"
 clap_complete = "4.5.46"
-console = "^0.15.10"
+console = "^0.15.11"
 git-version = "^0.3.9"
 indicatif = "^0.17.11"
 tempfile = "^3.10.1"

@@ -12,7 +12,7 @@ anyhow = "^1.0.97"
 clap_complete = "4.5.47"
 console = "^0.15.11"
 git-version = "^0.3.9"
-indicatif = "^0.17.11"
+indicatif = "^0.18.0"
 tempfile = "^3.10.1"
 whoami = "^1.6.0"
 

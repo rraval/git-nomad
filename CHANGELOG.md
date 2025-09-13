@@ -13,6 +13,10 @@ However, the output of the application is designed for humans, not machines, and
 
 ## [vX.X.X] - Unreleased
 
+### Changed
+
+- Update to the 2024 edition of Rust.
+
 ## [0.8.0] - 2024-12-14
 
 ### Added

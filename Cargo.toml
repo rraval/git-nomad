@@ -2,7 +2,7 @@
 name = "git-nomad"
 version = "0.8.0"
 authors = ["Ronuk Raval <ronuk.raval@gmail.com>"]
-edition = "2021"
+edition = "2024"
 description = "Synchronize work-in-progress git branches in a light weight fashion"
 repository = "https://github.com/rraval/git-nomad"
 license = "MIT"

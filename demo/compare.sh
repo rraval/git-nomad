@@ -6,7 +6,8 @@ if [[ "$#" -ne 2 ]]; then
     exit 1
 fi
 
-IFS=$'\t' read -r -a stat <<< "$(git diff --no-index --numstat "$1" "$2")"
+git_diff_output=$(git diff --no-index --numstat "$1" "$2")
+IFS=$'\t' read -r -a stat <<< "${git_diff_output}"
 
 if [[ -z "${stat[0]-}" ]]; then
     echo "Demo unchanged"

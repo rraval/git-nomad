@@ -2,7 +2,7 @@
 
 use std::process::{Command, Output};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 
 use crate::renderer::Renderer;
 
@@ -235,7 +235,7 @@ mod test {
         verbosity::{run_notable, run_silent},
     };
 
-    use super::{dump_command_failure, output_stdout, run_trivial, Verbosity};
+    use super::{Verbosity, dump_command_failure, output_stdout, run_trivial};
 
     const ALL_VERBOSITIES: &[Option<Verbosity>] = &[
         None,

@@ -1,8 +1,8 @@
 use std::{borrow::Cow, collections::HashSet, env, ffi::OsString, path::Path};
 
 use clap::{
-    builder::PossibleValue, crate_authors, crate_description, crate_name, crate_version,
-    parser::ValueSource, value_parser, Arg, ArgAction, ArgMatches, Command, ValueHint,
+    Arg, ArgAction, ArgMatches, Command, ValueHint, builder::PossibleValue, crate_authors,
+    crate_description, crate_name, crate_version, parser::ValueSource, value_parser,
 };
 use git_version::git_version;
 use renderer::Renderer;
@@ -108,7 +108,7 @@ fn maybe_apply_default(arg: Arg, optional_default: Option<String>) -> Arg {
 
 #[cfg(test)]
 mod test_maybe_apply_default {
-    use clap::{builder::OsStr, Arg};
+    use clap::{Arg, builder::OsStr};
 
     use super::maybe_apply_default;
 
@@ -686,17 +686,16 @@ mod test_e2e {
 mod test_cli {
     use std::{collections::HashSet, iter::FromIterator};
 
-    use clap::{error::ErrorKind, ArgMatches};
+    use clap::{ArgMatches, error::ErrorKind};
 
     use crate::{
-        cli,
+        CONFIG_HOST, CONFIG_USER, DEFAULT_REMOTE, cli,
         git_testing::GitRemote,
         renderer::test::NoRenderer,
         specified_git, specified_verbosity, specified_workflow,
         types::{Branch, Host, Remote, User},
         verbosity::Verbosity,
         workflow::{Filter, LsPrinter, Workflow},
-        CONFIG_HOST, CONFIG_USER, DEFAULT_REMOTE,
     };
 
     struct CliTest {
@@ -705,7 +704,7 @@ mod test_cli {
     }
 
     impl CliTest {
-        fn default_host_filter(&self) -> Filter<Host> {
+        fn default_host_filter(&self) -> Filter<Host<'_>> {
             Filter::Deny([self.default_host.always_borrow()].into())
         }
 

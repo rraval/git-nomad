@@ -5,15 +5,15 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use tempfile::{tempdir, TempDir};
+use tempfile::{TempDir, tempdir};
 
 use crate::{
-    git_binary::{git_command, GitBinary, LineArity},
+    git_binary::{GitBinary, LineArity, git_command},
     git_ref::GitRef,
     renderer::test::NoRenderer,
     snapshot::PruneFrom,
     types::{Branch, Host, NomadRef, Remote, User},
-    verbosity::{output_stdout, run_notable, Verbosity},
+    verbosity::{Verbosity, output_stdout, run_notable},
 };
 
 const GIT: &str = "git";
@@ -141,7 +141,7 @@ impl GitRemote {
     }
 
     /// List all nomad managed refs in the remote.
-    pub fn nomad_refs(&self) -> HashSet<NomadRef<GitCommitId>> {
+    pub fn nomad_refs(&self) -> HashSet<NomadRef<'_, GitCommitId>> {
         self.git
             .list_refs(&mut NoRenderer, "")
             .unwrap()
@@ -197,10 +197,13 @@ impl<'a> GitClone<'a> {
     }
 
     /// List all nomad managed refs in the current clone.
-    pub fn list(&self) -> impl Iterator<Item = NomadRef<GitRef>> {
+    pub fn list(&self) -> Vec<NomadRef<'_, GitRef>> {
         self.git
             .list_nomad_refs(&mut NoRenderer, &self.user, &self.remote)
             .unwrap()
+            // Limitations of Rust RPIT prevent returning impl Iterator directly, since the borrow
+            // checker conservatively assumes that the `NoRenderer` is borrowed inside the iterator.
+            .collect()
     }
 
     /// Delete the nomad managed refs backed by `branch_names` from both the local and remote.
@@ -244,7 +247,7 @@ impl<'a> GitClone<'a> {
     }
 
     /// Get all nomad managed refs in the local clone.
-    pub fn nomad_refs(&self) -> HashSet<NomadRef<GitCommitId>> {
+    pub fn nomad_refs(&self) -> HashSet<NomadRef<'_, GitCommitId>> {
         self.git
             .list_refs(&mut NoRenderer, &self.host.0)
             .unwrap()

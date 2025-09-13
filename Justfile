@@ -27,6 +27,6 @@ record-demo:
 upload-demo:
     demo/upload.sh
 
-# Bump the version and git commit (does not publish a GitHub release yet)
-release:
-    scripts/release.sh
+# Bump the version and git commit
+release_commit:
+    ./release_commit.sh

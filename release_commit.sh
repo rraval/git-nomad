@@ -40,4 +40,3 @@ cargo check
 # Get it into git
 git add Cargo.toml Cargo.lock CHANGELOG.md README.md
 git commit -m "Release v${next_version}"
-git tag v"${next_version}"

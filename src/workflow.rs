@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use crate::{
     git_binary::GitBinary,
     git_ref::GitRef,
-    renderer::{add_newline_if_spinners_are_visible, Renderer},
+    renderer::{Renderer, add_newline_if_spinners_are_visible},
     types::{Branch, Host, NomadRef, Remote, User},
 };
 
@@ -205,12 +205,12 @@ fn purge(
 /// Use [`clap_complete`] to emit shell syntax for tab-completions
 fn print_completions(
     renderer: &mut impl Renderer,
-    gen: impl clap_complete::Generator,
+    generator: impl clap_complete::Generator,
 ) -> Result<()> {
     let mut cmd = crate::build_cli(None, None);
     let bin_name = cmd.get_name().to_string();
     renderer.writer(|writer| {
-        clap_complete::generate(gen, &mut cmd, bin_name, writer);
+        clap_complete::generate(generator, &mut cmd, bin_name, writer);
         Ok(())
     })
 }

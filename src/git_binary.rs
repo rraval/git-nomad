@@ -1,6 +1,6 @@
 //! See [`GitBinary`] for the primary entry point.
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use std::{borrow::Cow, collections::HashSet, ffi::OsStr, path::Path, process::Command};
 
 use crate::{
@@ -8,7 +8,7 @@ use crate::{
     renderer::Renderer,
     snapshot::{PruneFrom, Snapshot},
     types::{Branch, Host, NomadRef, Remote, User},
-    verbosity::{is_output_allowed, output_stdout, run_notable, run_trivial, Verbosity},
+    verbosity::{Verbosity, is_output_allowed, output_stdout, run_notable, run_trivial},
 };
 
 /// Run the git binary inheriting the same environment that this git-nomad
@@ -188,7 +188,7 @@ mod namespace {
         #[test]
         fn test_from_local_ref_with_slashes() {
             for segment_count in 1..3 {
-                let segments: Vec<_> = std::iter::repeat(BRANCH).take(segment_count).collect();
+                let segments: Vec<_> = std::iter::repeat_n(BRANCH, segment_count).collect();
                 let branch = segments.join("/");
 
                 let local_ref_name = NomadRef {
@@ -625,7 +625,7 @@ impl GitBinary<'_> {
         renderer: &mut impl Renderer,
         user: &User,
         remote: &Remote,
-    ) -> Result<impl Iterator<Item = NomadRef<GitRef>>> {
+    ) -> Result<impl Iterator<Item = NomadRef<'_, GitRef>>> {
         // In an ideal world, we would be able to get the list of refs fetched directly from `git`.
         //
         // However, `git fetch` is a porcelain command and we don't want to get into parsing its
@@ -818,15 +818,15 @@ mod test_line_arity {
 mod test_impl {
     use std::{borrow::Cow, fs};
 
-    use tempfile::{tempdir, TempDir};
+    use tempfile::{TempDir, tempdir};
 
     use crate::{
         renderer::test::NoRenderer,
         types::Branch,
-        verbosity::{run_notable, Verbosity},
+        verbosity::{Verbosity, run_notable},
     };
 
-    use super::{git_command, GitBinary};
+    use super::{GitBinary, git_command};
     use anyhow::Result;
 
     const INITIAL_BRANCH: &str = "branch0";
@@ -911,7 +911,7 @@ mod test_impl {
         use std::{fs, path::Path};
 
         use anyhow::Result;
-        use tempfile::{tempdir, TempDir};
+        use tempfile::{TempDir, tempdir};
 
         use crate::git_binary::namespace;
 
@@ -1057,6 +1057,7 @@ mod test_backend {
         host1.fetch();
         let nomad_refs = host1
             .list()
+            .into_iter()
             .map(Into::into)
             .collect::<HashSet<NomadRef<GitCommitId>>>();
         assert_eq!(

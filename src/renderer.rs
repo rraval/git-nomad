@@ -114,7 +114,7 @@ pub mod test {
 
     use anyhow::{Context, Result};
 
-    use super::{add_newline_if_spinners_are_visible, Renderer};
+    use super::{Renderer, add_newline_if_spinners_are_visible};
 
     pub struct MemoryRenderer(Vec<u8>);
 

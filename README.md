@@ -177,4 +177,4 @@ There are a few ways to make this project better:
 [git-cafs]: https://git-scm.com/book/en/v2/Git-Internals-Git-Objects
 [git-refs]: https://git-scm.com/book/en/v2/Git-Internals-Git-References
 [new-issue]: https://github.com/rraval/git-nomad/issues/new
-[nixpkg]: https://github.com/NixOS/nixpkgs/blob/master/pkgs/applications/version-management/git-nomad/default.nix
+[nixpkg]: https://github.com/NixOS/nixpkgs/blob/master/pkgs/by-name/gi/git-nomad/package.nix

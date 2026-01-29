@@ -17,7 +17,7 @@ tempfile = "^3.24.0"
 whoami = "^1.6.0"
 
 [dependencies.clap]
-version = "^4.5.55"
+version = "^4.5.56"
 default-features = false
 features = [
     "std",

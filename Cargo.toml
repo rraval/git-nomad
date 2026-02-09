@@ -13,7 +13,7 @@ clap_complete = "4.5.65"
 console = "^0.16.2"
 git-version = "^0.3.9"
 indicatif = "^0.18.3"
-tempfile = "^3.24.0"
+tempfile = "^3.25.0"
 whoami = "^1.6.0"
 
 [dependencies.clap]

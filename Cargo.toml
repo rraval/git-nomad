@@ -14,7 +14,7 @@ console = "^0.16.2"
 git-version = "^0.3.9"
 indicatif = "^0.18.4"
 tempfile = "^3.26.0"
-whoami = "^1.6.0"
+whoami = "^2.1.1"
 
 [dependencies.clap]
 version = "^4.5.60"
